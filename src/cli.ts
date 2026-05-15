@@ -59,6 +59,15 @@ const RED = '\x1b[31m'
 const GRAY = '\x1b[90m'
 const BOLD = '\x1b[1m'
 
+async function wait(ms: number): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function pause(label = 'Suite'): Promise<void> {
+  console.log(`\n${GRAY}⟳ ${label}...${RESET}`)
+  await wait(500)
+}
+
 const DEFAULT_AGENT: AgentDefinition = {
   id: 'alice',
   displayName: 'Alice',
@@ -122,7 +131,7 @@ function showMenu(): void {
   const engine = currentEngine!
   const agent = engine.agent
   console.log(`\n${BOLD}${CYAN}╔══════════════════════════════════════╗${RESET}`)
-  console.log(`${BOLD}${CYAN}║     Hermes Agent Engine — CLI        ║${RESET}`)
+  console.log(`${BOLD}${CYAN}║     MINAUTOR Agent Service — CLI     ║${RESET}`)
   console.log(`${BOLD}${CYAN}╚══════════════════════════════════════╝${RESET}`)
   console.log(`${GRAY}Agent: ${agent.displayName}  |  Session: ${engine.getCurrentSession()?.id.slice(0, 8) || '—'}${RESET}\n`)
   console.log(`${BOLD}Menu principal :${RESET}`)
@@ -534,6 +543,9 @@ async function handleCreate(rl: ReturnType<typeof createInterface>): Promise<voi
     }
   }
 
+  // Pause pour stabiliser entre les étapes
+  await pause('Provider validé → Sélection du modèle')
+
   // --- 2. Choix du modèle ---
   let effectiveApiKey = apiKey || ''
   let effectiveBaseUrl = configured?.baseUrl || ONLINE_URLS[providerType] || 'https://api.openai.com/v1'
@@ -586,46 +598,135 @@ async function handleCreate(rl: ReturnType<typeof createInterface>): Promise<voi
     console.log(`${YELLOW}Annulé.${RESET}`); return
   }
 
-  // --- Étape : Identification de l'agent ---
-  console.log(`\n${BOLD}Étape : Identification de l'agent${RESET}\n`)
-  
-  const id = (await rl.question(`${CYAN}ID de l'agent${RESET} (ex: mon-agent) ${GRAY}>${RESET} `)).trim()
-  if (!id) { console.log(`${YELLOW}Annulé.${RESET}`); return }
-  
-  // Validation stricte de l'ID (kebab-case, au moins un tiret, pas de tiret au début ou à la fin)
-  const idRegex = /^[a-z0-9]+(-[a-z0-9]+)+$/
-  if (!idRegex.test(id)) {
-    console.log(`${RED}L'ID doit être en kebab-case (ex: mon-agent) et contenir au moins un tiret.${RESET}`)
-    return
-  }
+  // Pause pour stabiliser entre les étapes
+  await pause('Connexion validée → Identification de l\'agent')
 
-  let name = ''
-  while (!name) {
-    name = (await rl.question(`${CYAN}Nom affiché${RESET} (ex: Mon Agent) ${GRAY}>${RESET} `)).trim()
-    if (!name) console.log(`${RED}Le nom ne peut pas être vide.${RESET}`)
-  }
-
+  // --- Étape : Description de l'agent ---
+  console.log(`\n${BOLD}Étape : Description de l'agent${RESET}`)
+  
   let description = ''
-  while (true) {
-    description = (await rl.question(`${CYAN}Description de l'agent${RESET} (min. 10 mots) ${GRAY}>${RESET} `)).trim()
-    if (!description) {
-      console.log(`${RED}La description est obligatoire.${RESET}`)
-      continue
+  const LLM_PATTERNS = [
+    /^{/,  // starts with placeholder
+    /\{[^}]+\}/,  // contains placeholders
+    /## Mission/i,
+    /## Comportement/i,
+    /## Compétences/i,
+    /## Règles/i,
+    /^tu es /i,
+    /^voici /i,
+    /^génère/i,
+    /^réponds/i,
+  ]
+
+  async function readMultiline(promptLabel: string, minWords: number): Promise<string> {
+    console.log(`\n${CYAN}${promptLabel}${RESET}`)
+    console.log(`${GRAY}(Tape une ligne vide pour terminer)${RESET}\n`)
+    const lines: string[] = []
+    
+    while (true) {
+      const line = await rl.question(`${GRAY}|${RESET} `)
+      
+      if (line.trim() === '') {
+        const fullText = lines.join(' ').trim()
+        const wordCount = fullText.split(/\s+/).filter(Boolean).length
+        
+        if (wordCount < minWords) {
+          console.log(`${RED}La description est trop courte (${wordCount}/${minWords} mots minimum).${RESET}`)
+          console.log(`${GRAY}Continue ta saisie ou tape une ligne vide quand tu as fini.${RESET}\n`)
+          continue
+        }
+        
+        const hasSuspiciousPattern = LLM_PATTERNS.some(pattern => pattern.test(fullText))
+        if (hasSuspiciousPattern) {
+          console.log(`${RED}La description semble contenir du texte généré par l'IA (placeholders ou headers).${RESET}`)
+          console.log(`${YELLOW}Merci de saisir uniquement ta description en tant qu'utilisateur.${RESET}`)
+          console.log(`${GRAY}Recommence ou continue ta saisie.${RESET}\n`)
+          lines.length = 0
+          continue
+        }
+        
+        return fullText
+      }
+      
+      lines.push(line.trim())
     }
-    const wordCount = description.split(/\s+/).filter(Boolean).length
-    if (wordCount < 10) {
-      console.log(`${RED}La description est trop courte (${wordCount}/10 mots minimum).${RESET}`)
-      continue
-    }
-    break
   }
+  
+  description = await readMultiline('Description de l\'agent (min. 10 mots)', 10)
+
+  // --- Sélection du template ---
+  console.log(`\n${BOLD}Template de l'agent :${RESET}`)
+  console.log(`  ${CYAN}1${RESET}. Agent Standard (défaut)`)
+  console.log(`  ${CYAN}2${RESET}. Bot Rapide & Intelligent`)
+  console.log(`  ${CYAN}3${RESET}. Agent Daemon (background)`)
+
+  let templateChoice = (await rl.question(`${CYAN}Choix du template${RESET} (1, 2 ou 3) ${GRAY}>${RESET} `)).trim()
+  if (!templateChoice) templateChoice = '1'
+  let isFastIntelligent = false
+  let isDaemon = false
+  if (templateChoice === '2') {
+    isFastIntelligent = true
+    console.log(`${GREEN}✓ Template : Bot Rapide & Intelligent${RESET}`)
+  } else if (templateChoice === '3') {
+    isDaemon = true
+    console.log(`${GREEN}✓ Template : Agent Daemon (background)${RESET}`)
+  }
+
+  // --- Attribution automatique du nom via matching Greek Gods ---
+  console.log(`\n${YELLOW}⟳ Analyse de la description et attribution d'un nom...${RESET}`)
+  
+  let assignedName = 'Athena' // Default fallback
+  let assignedId = 'agent-athena'
+  
+  try {
+    const greekGodsPath = join(process.cwd(), 'data', 'agent-name', 'greek-gods.json')
+    if (existsSync(greekGodsPath)) {
+      const godsData = JSON.parse(readFileSync(greekGodsPath, 'utf-8'))
+      const gods = godsData.dieux || {}
+      
+      // Build a prompt for the LLM to match description with a god
+      const godsList = Object.entries(gods).map(([name, desc]) => `- ${name}: ${desc}`).join('\n')
+      
+      const matchPrompt = `Voici une liste de dieux grecs et leurs descriptions :
+${godsList}
+
+L'utilisateur décrit un agent ainsi :
+"${description}"
+
+Analyse cette description et retourne UNIQUEMENT le nom du dieu grec qui correspond le mieux (sans explication).
+Si aucun dieu ne correspond bien, retourne "Athena" par défaut.`
+
+      const llmMatchProvider = { provider: providerType, apiKey: effectiveApiKey, baseUrl: effectiveBaseUrl, model }
+      const matchEngine = createEngine({
+        agent: { id: 'matcher', displayName: 'Matcher', model, instructionsPrompt: 'Tu匹配 descriptions.', toolNames: [] },
+      })
+      
+      const matchResponse = await matchEngine.callLLM(matchPrompt, llmMatchProvider, matchEngine.agent.instructionsPrompt)
+      const godName = matchResponse.trim().replace(/[^a-zA-Zàâäéèêëïîôùûüÿœæç]/g, '').split('\n')[0]
+      
+      if (godName && godName.length > 1 && godName.length < 30) {
+        assignedName = godName
+      }
+    }
+  } catch (err) {
+    console.log(`${YELLOW}⚠ Impossible de matcher avec les dieux grecs : ${(err as Error).message}${RESET}`)
+  }
+  
+  // Generate ID from name (kebab-case)
+  assignedId = `agent-${assignedName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`
+  
+  console.log(`${GREEN}✓ Nom attribué : ${assignedName}${RESET}`)
+  console.log(`${GRAY}  ID généré : ${assignedId}${RESET}\n`)
+
+  // Pause pour stabiliser entre les étapes
+  await pause('Nom attribué → Création et certification')
 
   // --- 3. Création, Skill, Scripts, Validation, Certification ---
   console.log(`${BOLD}${CYAN}┌─ Phase de création et certification ──────┐${RESET}`)
-  console.log(`${GRAY}Utilisation du model ${model} pour créer l'agent ${name}...${RESET}`)
+  console.log(`${GRAY}Utilisation du model ${model} pour créer l'agent ${assignedName}...${RESET}`)
   
   const tools = ['run_terminal_command', 'add_message', 'set_output', 'skill']
-  const skillId = `skill-${id}`
+  const skillId = `skill-${assignedId}`
   let skillContent = ''
   let agentPath = ''
 
@@ -636,7 +737,7 @@ async function handleCreate(rl: ReturnType<typeof createInterface>): Promise<voi
     
     // A. Génération de la Skill
     try {
-      const skill = await generateSkill(id, name, description, llmProvider)
+      const skill = await generateSkill(assignedId, assignedName, description, llmProvider)
       skillContent = skill.content
       process.stdout.write(`\r${GREEN}✓ Skill "${skillId}" générée${RESET}\n`)
     } catch (err) {
@@ -649,7 +750,7 @@ async function handleCreate(rl: ReturnType<typeof createInterface>): Promise<voi
       instructions = skillContent.replace(/^---[\s\S]*?---\n/, '').trim()
     }
     try {
-      agentPath = scaffoldAgent(id, name, model, tools, instructions, true)
+      agentPath = scaffoldAgent(assignedId, assignedName, model, tools, instructions, true, isDaemon ? 'daemon' : (isFastIntelligent ? 'fast' : 'standard'))
       console.log(`  ${GREEN}✓ Agent enregistré${RESET} ${GRAY}${agentPath}${RESET}`)
     } catch (err) {
       console.log(`  ${RED}✗ Échec enregistrement agent : ${(err as Error).message}${RESET}`)
@@ -658,8 +759,8 @@ async function handleCreate(rl: ReturnType<typeof createInterface>): Promise<voi
     // C. Validation via Scripts et Golden Rules
     console.log(`  ${YELLOW}⟳ Validation via scripts et golden-rules...${RESET}`)
     const vSkill = await validateSkill(skillId)
-    const vAgent = await validateAgentIntegration(id)
-    const vInt = await validateIntegration(id, skillId)
+    const vAgent = await validateAgentIntegration(assignedId)
+    const vInt = await validateIntegration(assignedId, skillId)
 
     return {
       ok: vSkill.ok && vAgent.ok && vInt.ok,
@@ -669,21 +770,107 @@ async function handleCreate(rl: ReturnType<typeof createInterface>): Promise<voi
     }
   }
 
+  async function callAgentReviewer(agentId: string, skillId: string): Promise<{ suggestions: string[]; urgentCount: number; importantCount: number }> {
+    try {
+      const agentPath = join(process.cwd(), '.agents', `${agentId}.ts`)
+      const skillPath = join(process.cwd(), 'skills', skillId, 'SKILL.md')
+
+      const agentContent = existsSync(agentPath) ? readFileSync(agentPath, 'utf-8') : 'Fichier agent introuvable'
+      const skillContent = existsSync(skillPath) ? readFileSync(skillPath, 'utf-8') : 'Fichier skill introuvable'
+
+      const reviewPrompt = `Analyse les fichiers suivants et fournis un diagnostic avec classification par gravité.
+
+## Fichier Agent (.agents/${agentId}.ts)
+\`\`\`typescript
+${agentContent}
+\`\`\`
+
+## Fichier Skill (skills/${skillId}/SKILL.md)
+\`\`\`markdown
+${skillContent}
+\`\`\`
+
+Fournis ta réponse dans ce format :
+### 📊 Résumé
+{nombre} problème(s)
+
+### 🔴 Urgent (bloquant)
+- {problème}
+
+### 🟠 Important (à corriger)
+- {problème}
+
+### 🟡 Obligatoire
+- {problème}
+
+### 🔵 À voir
+- {suggestion}
+
+### ✅ Points positifs
+- {ce qui est bien}`
+
+      const llmProvider = { provider: providerType, apiKey: effectiveApiKey, baseUrl: effectiveBaseUrl, model: model }
+      const reviewerEngine = createEngine({
+        agent: {
+          id: 'agent-reviewer',
+          displayName: 'Reviewer',
+          model: model,
+          instructionsPrompt: `Tu es un expert en revue de code et analyse de qualité pour agents AI. Analyse les fichiers .ts et .md et fournis un diagnostic structuré.`,
+          toolNames: ['run_terminal_command', 'add_message', 'set_output', 'skill'],
+        },
+      })
+
+      const response = await reviewerEngine.callLLM(reviewPrompt, llmProvider, reviewerEngine.agent.instructionsPrompt)
+
+      const suggestions: string[] = []
+      const urgentCount = (response.match(/🔴 Urgent/gi) || []).length
+      const importantCount = (response.match(/🟠 Important/gi) || []).length
+
+      console.log(`\n${BOLD}${CYAN}┌─ Rapport du Reviewer ─────────────────────┐${RESET}`)
+      console.log(response)
+      console.log(`${CYAN}└────────────────────────────────────────────┘${RESET}\n`)
+
+      return { suggestions, urgentCount, importantCount }
+    } catch (err) {
+      console.log(`  ${YELLOW}⚠ Impossible de appeler le reviewer : ${(err as Error).message}${RESET}`)
+      return { suggestions: [], urgentCount: 0, importantCount: 0 }
+    }
+  }
+
   let finalStatus = { ok: false, vSkill: {ok:false, errors:[] as string[]}, vAgent: {ok:false, errors:[] as string[]}, vInt: {ok:false, errors:[] as string[]} }
-  
+
   for (let attempt = 1; attempt <= 3; attempt++) {
     finalStatus = await performCreationCycle(attempt === 1 ? 'Création initiale' : `Tentative d'auto-correction ${attempt}/3`)
-    
+
     console.log(`  ${finalStatus.vSkill.ok ? `${GREEN}✓` : `${RED}✗`}${RESET} Skill`)
     if (!finalStatus.vSkill.ok) finalStatus.vSkill.errors.forEach(e => console.log(`     ${RED}→ ${e}${RESET}`))
-    
+
     console.log(`  ${finalStatus.vAgent.ok ? `${GREEN}✓` : `${RED}✗`}${RESET} Agent`)
     if (!finalStatus.vAgent.ok) finalStatus.vAgent.errors.forEach(e => console.log(`     ${RED}→ ${e}${RESET}`))
-    
+
     console.log(`  ${finalStatus.vInt.ok ? `${GREEN}✓` : `${RED}✗`}${RESET} Intégration`)
     if (!finalStatus.vInt.ok) finalStatus.vInt.errors.forEach(e => console.log(`     ${RED}→ ${e}${RESET}`))
 
-    if (finalStatus.ok) break
+    if (finalStatus.ok) {
+      // --- Phase Reviewer ---
+      console.log(`\n${YELLOW}⟳ Phase de review par agent-reviewer...${RESET}`)
+      const review = await callAgentReviewer(assignedId, skillId)
+
+      if (review.urgentCount > 0 || review.importantCount > 0) {
+        console.log(`${YELLOW}⚠ Le reviewer a identifié des problèmes importants.${RESET}`)
+        console.log(`${GRAY}Auto-correction en cours...${RESET}`)
+
+        if (attempt < 3) {
+          continue // Va à la prochaine itération pour auto-correction
+        } else {
+          console.log(`${RED}⚠ Nombre maximum de tentatives atteint. Certification refusée.${RESET}`)
+          finalStatus.ok = false
+        }
+      } else {
+        // Pas de problème urgent/important, on peut certifier
+        break
+      }
+    }
   }
 
   // --- Résultat final et Certification ---
@@ -691,13 +878,13 @@ async function handleCreate(rl: ReturnType<typeof createInterface>): Promise<voi
     console.log(`\n${GREEN}${BOLD}╔══════════════════════════════════════════╗${RESET}`)
     console.log(`${GREEN}${BOLD}║   AGENT VALIDÉ & CERTIFIÉ ✓              ║${RESET}`)
     console.log(`${GREEN}${BOLD}╚══════════════════════════════════════════╝${RESET}`)
-    console.log(`  ${BOLD}Agent${RESET}    : ${name} (${id})`)
+    console.log(`  ${BOLD}Agent${RESET}    : ${assignedName} (${assignedId})`)
     console.log(`  ${BOLD}Fichier${RESET}  : ${agentPath}`)
     console.log(`  ${BOLD}Skill${RESET}    : skills/${skillId}/SKILL.md`)
     console.log(`  ${BOLD}Model${RESET}    : ${model}`)
     console.log(`  ${BOLD}Provider${RESET} : ${providerType}`)
     console.log(`  ${BOLD}Status${RESET}   : ${GREEN}CERTIFIÉ${RESET}\n`)
-    console.log(`${YELLOW}Utilise /use ${id} pour charger ce nouvel agent.${RESET}\n`)
+    console.log(`${YELLOW}Utilise /use ${assignedId} pour charger ce nouvel agent.${RESET}\n`)
   } else {
     console.log(`\n${RED}${BOLD}╔══════════════════════════════════════════╗${RESET}`)
     console.log(`${RED}${BOLD}║   ÉCHEC — Certification impossible       ║${RESET}`)

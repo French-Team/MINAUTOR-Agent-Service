@@ -1,0 +1,44 @@
+{
+  "rules": [
+    {
+      "id": "skill-has-frontmatter",
+      "description": "La skill doit avoir un frontmatter YAML valide.",
+      "check": "lambda content: content.startswith('---')"
+    },
+    {
+      "id": "skill-frontmatter-name",
+      "description": "Le frontmatter doit contenir 'name: skill-{id}'.",
+      "check": "lambda content: 'name:' in content and 'skill-' in content"
+    },
+    {
+      "id": "skill-frontmatter-description",
+      "description": "Le frontmatter doit contenir 'description:' avec au moins 5 caractères.",
+      "check": "lambda content: 'description:' in content and len(content.split('description:')[1].split('\\n')[0].strip()) > 5"
+    },
+    {
+      "id": "skill-no-placeholder",
+      "description": "La skill ne doit pas contenir de placeholders {texte} non résolus.",
+      "check": "lambda content: not bool(__import__('re').search(r'\\{[^}]{3,}\\}', content))"
+    },
+    {
+      "id": "skill-section-mission",
+      "description": "La skill doit avoir une section ## Mission non vide (min 20 caractères).",
+      "check": "lambda content: '## Mission' in content and len(content.split('## Mission')[1].split('##')[0].strip()) >= 20"
+    },
+    {
+      "id": "skill-section-comportement",
+      "description": "La skill doit avoir une section ## Comportement non vide (min 20 caractères).",
+      "check": "lambda content: '## Comportement' in content and len(content.split('## Comportement')[1].split('##')[0].strip()) >= 20"
+    },
+    {
+      "id": "skill-section-competences",
+      "description": "La skill doit avoir une section ## Compétences avec au moins 3 compétences listées.",
+      "check": "lambda content: '## Compétences' in content and content.split('## Compétences')[1].split('##')[0].count('-') >= 3"
+    },
+    {
+      "id": "skill-section-regles",
+      "description": "La skill doit avoir une section ## Règles avec au moins 2 règles listées.",
+      "check": "lambda content: '## Règles' in content and content.split('## Règles')[1].split('##')[0].count('-') >= 2"
+    }
+  ]
+}

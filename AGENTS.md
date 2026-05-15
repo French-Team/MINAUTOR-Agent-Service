@@ -1,4 +1,4 @@
-# Hermes Agent Engine - Agent Instructions
+# Minautor Agent Service - Agent Instructions
 
 ## Essential Commands
 - **Build**: `npm run build` (TypeScript compilation)
@@ -8,7 +8,7 @@
 - **Spawn Agent**: `node dist/spawn-agent.js <agent-id> "<instruction>"`
 
 ## CLI Usage
-- Interactive menu: start with `npm start`
+- Interactive menu: start with `npm run final`
 - Menu shortcuts: 1-9 correspond to main menu options
 - Commands: 
   - `!cmd` - execute shell command

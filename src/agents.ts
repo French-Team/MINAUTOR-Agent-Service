@@ -75,6 +75,76 @@ const definition: AgentDefinition = {
 export default definition
 `
 
+const FAST_BOT_TEMPLATE = `import type { AgentDefinition } from './types/agent-definition'
+
+const definition: AgentDefinition = {
+  id: '{{id}}',
+  displayName: '{{displayName}}',
+  model: '{{model}}',
+  toolNames: [{{tools}}],
+  instructionsPrompt: \`Tu es {{displayName}}.
+
+## Mission
+{{mission}}
+
+## Comportement
+- Réponds rapidement et de manière concise
+- Utilise les outils disponibles quand nécessaire
+- Reste concentré sur ta mission principale
+- Si tu ne sais pas, dis-le plutôt que d'inventer
+
+## Outils disponibles
+- run_terminal_command : exécuter des commandes shell
+- add_message : envoyer des notifications
+- set_output : produire un résultat structuré
+- skill : invoquer une autre skill
+
+## Contraintes
+- Ne fais rien en dehors de ta mission
+- Respecte les formats de sortie attendus
+- Log tes actions importantes via add_message\`,
+}
+
+export default definition
+`
+
+const DAEMON_TEMPLATE = `import type { AgentDefinition } from './types/agent-definition'
+
+declare function pushNotification(from: string, message: string): void
+
+const definition: AgentDefinition = {
+  id: '{{id}}',
+  displayName: '{{displayName}}',
+  model: '{{model}}',
+  toolNames: ['run_terminal_command', 'add_message', 'set_output'],
+  instructionsPrompt: \`Daemon background agent. Mission: {{mission}}\`,
+}
+
+export default definition
+
+export const daemonConfig = {
+  defaultIntervalMs: 60000,
+  defaultNotificationMessage: "{{notification_message}}",
+}
+
+export async function initializeAgent() {
+  console.log(\`[\${definition.displayName}] Daemon initialization...\`);
+  return Promise.resolve();
+}
+
+export async function runAgentTask(instruction?: string) {
+  const interval = instruction ? parseInterval(instruction) : daemonConfig.defaultIntervalMs;
+  console.log(\`[\${definition.displayName}] Running task every \${interval}ms\`);
+  pushNotification(definition.displayName, daemonConfig.defaultNotificationMessage);
+}
+
+function parseInterval(input: string): number {
+  if (input.endsWith('m')) return parseInt(input.slice(0, -1)) * 60000;
+  if (input.endsWith('h')) return parseInt(input.slice(0, -1)) * 3600000;
+  return daemonConfig.defaultIntervalMs;
+}
+`
+
 export function scaffoldAgent(
   id: string,
   name: string,
@@ -82,6 +152,7 @@ export function scaffoldAgent(
   tools: string[],
   instructions: string,
   force = false,
+  template: 'standard' | 'fast' | 'daemon' = 'standard',
 ): string {
   ensureAgentsDir()
   const filename = `${id}.ts`
@@ -92,12 +163,24 @@ export function scaffoldAgent(
   }
 
   const toolsStr = tools.map(t => `'${t}'`).join(', ')
-  const content = AGENT_TEMPLATE
+  let templateContent = AGENT_TEMPLATE
+  if (template === 'fast') templateContent = FAST_BOT_TEMPLATE
+  if (template === 'daemon') templateContent = DAEMON_TEMPLATE
+
+  let content = templateContent
     .replace(/\{\{id\}\}/g, id)
     .replace(/\{\{displayName\}\}/g, name)
     .replace(/\{\{model\}\}/g, model)
     .replace(/\{\{tools\}\}/g, toolsStr)
     .replace(/\{\{instructions\}\}/g, instructions)
+
+  if (template === 'fast') {
+    content = content.replace(/\{\{mission\}\}/g, instructions.split('\n')[0] || instructions)
+  }
+  if (template === 'daemon') {
+    content = content.replace(/\{\{mission\}\}/g, instructions.split('\n')[0] || instructions)
+    content = content.replace(/\{\{notification_message\}\}/g, instructions.split('\n')[0] || 'Reminder notification')
+  }
 
   writeFileSync(filePath, content, 'utf-8')
   return filePath

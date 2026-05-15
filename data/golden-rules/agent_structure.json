@@ -1,20 +1,40 @@
 {
   "rules": [
     {
-      "id": "agent-name-kebab-case",
-      "description": "Le nom de l'agent doit être en kebab-case (minuscules, mots séparés par des tirets).",
-      "check": "lambda name: name.lower() == name and '-' in name and name.replace('-', '').isalnum() and not name.startswith('-') and not name.endswith('-')"
+      "id": "agent-id-kebab-case",
+      "description": "L'ID de l'agent doit être en kebab-case (minuscules, mots séparés par des tirets, au moins un tiret, pas de tiret au début/fin).",
+      "check": "lambda id: id.lower() == id and '-' in id and id.replace('-', '').isalnum() and not id.startswith('-') and not id.endswith('-') and len(id.split('-')) >= 2"
+    },
+    {
+      "id": "agent-displayname-exists",
+      "description": "L'agent doit avoir un displayName (nom d'affichage).",
+      "check": "lambda agentContent: 'displayName:' in agentContent"
+    },
+    {
+      "id": "agent-no-old-name-field",
+      "description": "L'agent ne doit plus utiliser le ancien champ 'name:' (remplacé par displayName).",
+      "check": "lambda agentContent: not ('\\n  name:' in agentContent and 'displayName:' not in agentContent)"
     },
     {
       "id": "agent-description-length",
-      "description": "La description de l'agent doit contenir au moins 10 mots.",
-      "check": "lambda desc: len(desc.split()) >= 10"
+      "description": "La description de l'agent (instructionsPrompt) doit contenir au moins 20 mots.",
+      "check": "lambda content: len(content.split()) >= 20 if len(content) > 0 else False"
     },
     {
       "id": "agent-provider-supported",
       "description": "Le provider choisi doit être dans la liste des providers supportés.",
-      "supported_providers": ["kilo", "google", "openrouter", "opencode-zen", "ollama", "lmstudio", "custom"],
+      "supported_providers": ["kilo", "google", "openrouter", "opencode-zen", "ollama", "lmstudio", "lm-studio", "custom"],
       "check": "lambda provider: provider.lower() in supported_providers"
+    },
+    {
+      "id": "agent-model-not-empty",
+      "description": "Le modèle de l'agent ne doit pas être vide.",
+      "check": "lambda model: len(model.strip()) > 0"
+    },
+    {
+      "id": "agent-toolnames-valid",
+      "description": "L'agent doit avoir au moins un toolNames défini.",
+      "check": "lambda content: 'toolNames:' in content and '[]' != content.split('toolNames:')[1].split('\\n')[0].strip()"
     }
   ]
 }

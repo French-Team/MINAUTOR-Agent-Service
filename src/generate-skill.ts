@@ -13,31 +13,33 @@ L'utilisateur veut créer un agent avec :
 
 Génère une skill complète au format SKILL.md pour cet agent.
 
+IMPORTANT : Tu dois remplir TOUTES les sections avec du contenu concret et détaillé. NE PAS utiliser de placeholders comme {texte}. Chaque section doit contenir une description complète et utile.
+
 Format attendu :
 ---
-name: skill-{id-du-agent}
-description: {description courte de la skill}
+name: skill-${name}
+description: ${description}
 ---
 
-# Skill: {Nom de l'agent}
+# Skill: ${name}
 
 ## Mission
 
-{mission principale de l'agent}
+Rédige ici la mission principale de l'agent en détail. Sois précis et concret.
 
 ## Comportement
 
-{comportement attendu}
+Rédige ici le comportement attendu de l'agent en détail. Donne des exemples si nécessaire.
 
 ## Compétences
 
-{liste des compétences}
+Liste les compétences de l'agent (utilise des "-" pour chaque compétence). Sois exhaustif.
 
 ## Règles
 
-{règles de l'agent}
+Liste les règles que l'agent doit suivre. Utilise des "-" pour chaque règle.
 
-Réponds UNIQUEMENT avec le contenu complet du SKILL.md, sans commentaires supplémentaires.`
+Réponds UNIQUEMENT avec le contenu complet du SKILL.md, sans commentaires supplémentaires. Ne laisse aucun placeholder vide.`
 
 export interface GenerateSkillResult {
   skillId: string
@@ -130,6 +132,29 @@ export async function validateSkill(skillId: string): Promise<{ ok: boolean; err
   if (!skill.content.includes('## Comportement')) errors.push('La skill doit avoir une section "## Comportement"')
   if (!skill.content.includes('## Compétences')) errors.push('La skill doit avoir une section "## Compétences"')
   if (!skill.content.includes('## Règles')) errors.push('La skill doit avoir une section "## Règles"')
+
+  // Vérification de qualité : placeholders non résolus
+  const placeholderRegex = /\{[^}]{3,}\}/g
+  const placeholders = skill.content.match(placeholderRegex)
+  if (placeholders && placeholders.length > 0) {
+    errors.push(`Placeholders non résolus détectés : ${placeholders.slice(0, 3).join(', ')}${placeholders.length > 3 ? '...' : ''}`)
+  }
+
+  // Vérification : sections trop courtes (moins de 10 caractères après le header)
+  const sectionMinLength = 10
+  const sections = ['## Mission', '## Comportement', '## Compétences', '## Règles']
+  for (const section of sections) {
+    if (skill.content.includes(section)) {
+      const sectionIndex = skill.content.indexOf(section)
+      const nextSectionIndex = sections.slice(sections.indexOf(section) + 1).find(s => skill.content.includes(s))
+      const sectionEnd = nextSectionIndex ? skill.content.indexOf(nextSectionIndex) : skill.content.length
+      const sectionContent = skill.content.slice(sectionIndex + section.length, sectionEnd).trim()
+      
+      if (sectionContent.length < sectionMinLength) {
+        errors.push(`Section "${section}" trop courte ou vide`)
+      }
+    }
+  }
 
   return { ok: errors.length === 0, errors }
 }

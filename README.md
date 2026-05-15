@@ -1,6 +1,6 @@
-# Hermes Agent Engine
+# Minautor Agent Service
 
-A lightweight agent engine inspired by Codebuff, designed to work with the Hermes control system. Provides a TypeScript framework for defining and running AI agents with terminal command execution, session management, and tmux integration.
+A System Agentic inspired by Codebuff, designed to work with the Hermes control system. Provides a TypeScript framework for defining and running AI agents with terminal command execution, session management, and tmux integration.
 
 ## Features
 
