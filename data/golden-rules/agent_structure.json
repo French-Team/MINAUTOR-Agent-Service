@@ -1,0 +1,20 @@
+{
+  "rules": [
+    {
+      "id": "agent-name-kebab-case",
+      "description": "Le nom de l'agent doit être en kebab-case (minuscules, mots séparés par des tirets).",
+      "check": "lambda name: name.lower() == name and '-' in name and name.replace('-', '').isalnum() and not name.startswith('-') and not name.endswith('-')"
+    },
+    {
+      "id": "agent-description-length",
+      "description": "La description de l'agent doit contenir au moins 10 mots.",
+      "check": "lambda desc: len(desc.split()) >= 10"
+    },
+    {
+      "id": "agent-provider-supported",
+      "description": "Le provider choisi doit être dans la liste des providers supportés.",
+      "supported_providers": ["kilo", "google", "openrouter", "opencode-zen", "ollama", "lmstudio", "custom"],
+      "check": "lambda provider: provider.lower() in supported_providers"
+    }
+  ]
+}

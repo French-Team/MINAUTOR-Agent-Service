@@ -1,0 +1,17 @@
+﻿{
+    "name": "hermes-agent-engine",
+    "version": "0.1.0",
+    "description": "Lightweight agent engine inspired by Codebuff",
+    "type": "module",
+    "main": "dist/engine.js",
+    "scripts": {
+        "build": "tsc",
+        "start": "node dist/cli.js",
+        "cli": "node dist/cli.js",
+        "final": "cls && npm run build && npm start"
+    },
+    "devDependencies": {
+        "typescript": "^5.5.0",
+        "@types/node": "^22.0.0"
+    }
+}

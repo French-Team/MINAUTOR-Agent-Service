@@ -1,0 +1,14 @@
+{
+  "rules": [
+    {
+      "id": "daemon-uses-pushNotification",
+      "description": "Les scripts de type daemon doivent utiliser pushNotification pour communiquer.",
+      "check": "lambda scriptContent: 'pushNotification' in scriptContent"
+    },
+    {
+      "id": "daemon-has-interval",
+      "description": "Le script daemon doit avoir une configuration d'intervalle (ex: defaultIntervalMs).",
+      "check": "lambda scriptContent: 'defaultIntervalMs' in scriptContent"
+    }
+  ]
+}

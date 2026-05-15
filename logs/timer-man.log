@@ -1,0 +1,25 @@
+Timer Agent démarré (intervalle: 2m, PID: 16872)
+Écrit dans Q:\hermes-controls\my-agent-engine\agent-logbook.md
+Pour arrêter : kill 16872 ou supprimer Q:\hermes-controls\my-agent-engine\.timer-agent.pid
+[2026-05-15 07:22:59] Alerte #1 → notification envoyée à Alice
+[2026-05-15 07:24:59] Alerte #2 → notification envoyée à Alice
+[2026-05-15 07:26:59] Alerte #3 → notification envoyée à Alice
+[2026-05-15 07:28:59] Alerte #4 → notification envoyée à Alice
+[2026-05-15 07:30:59] Alerte #5 → notification envoyée à Alice
+[2026-05-15 07:32:59] Alerte #6 → notification envoyée à Alice
+[2026-05-15 07:34:59] Alerte #7 → notification envoyée à Alice
+Timer Agent démarré (intervalle: 1m, PID: 20340)
+Écrit dans Q:\hermes-controls\my-agent-engine\agent-logbook.md
+Pour arrêter : kill 20340 ou supprimer Q:\hermes-controls\my-agent-engine\.timer-agent.pid
+[2026-05-15 08:20:14] Alerte #1 → notification envoyée à Alice
+[2026-05-15 08:21:14] Alerte #2 → notification envoyée à Alice
+[2026-05-15 08:22:14] Alerte #3 → notification envoyée à Alice
+[2026-05-15 08:23:14] Alerte #4 → notification envoyée à Alice
+[2026-05-15 08:24:14] Alerte #5 → notification envoyée à Alice
+Timer Agent démarré (intervalle: 1m, PID: 15824)
+Écrit dans Q:\hermes-controls\my-agent-engine\agent-logbook.md
+Pour arrêter : kill 15824 ou supprimer Q:\hermes-controls\my-agent-engine\.timer-agent.pid
+[2026-05-15 11:56:43] Alerte #1 → notification envoyée à Alice
+[2026-05-15 11:57:43] Alerte #2 → notification envoyée à Alice
+[2026-05-15 11:58:43] Alerte #3 → notification envoyée à Alice
+[2026-05-15 11:59:43] Alerte #4 → notification envoyée à Alice
