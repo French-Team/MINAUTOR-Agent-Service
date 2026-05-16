@@ -1,8 +1,40 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs'
 import { join } from 'path'
-import type { AgentDefinition } from './types/agent-definition.js'
+import type { AgentDefinition, SelfCorrection, Guardian, DaemonHealth, Streaming, RateLimit, ToolConfig } from './types/agent-definition.js'
 
 const AGENTS_DIR = join(process.cwd(), '.agents')
+const PROFILES_DIR = join(process.cwd(), 'data', 'profiles')
+
+export interface AgentProfile {
+  profileName: string
+  description: string
+  instructionsPrefix: string
+  constraints: string[]
+  config?: {
+    selfCorrection?: SelfCorrection
+    guardian?: Guardian
+    healthCheck?: DaemonHealth
+    streaming?: Streaming
+    rateLimit?: RateLimit
+    toolConfig?: ToolConfig
+  }
+}
+
+export function listProfiles(type: 'agents' | 'daemons' | 'bots'): string[] {
+  const dir = join(PROFILES_DIR, type)
+  if (!existsSync(dir)) return []
+  return readdirSync(dir).filter(f => f.endsWith('.json')).map(f => f.replace('.json', ''))
+}
+
+export function loadProfile(type: 'agents' | 'daemons' | 'bots', profileName: string): AgentProfile | null {
+  const filePath = join(PROFILES_DIR, type, `${profileName}.json`)
+  if (!existsSync(filePath)) return null
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf-8')) as AgentProfile
+  } catch {
+    return null
+  }
+}
 
 function ensureAgentsDir(): void {
   if (!existsSync(AGENTS_DIR)) {
@@ -59,7 +91,44 @@ export function readLocalAgent(filename: string): AgentDefinition | null {
   const instructionsMatch = content.match(/instructionsPrompt:\s*`([^`]*)`/)
   const instructionsPrompt = instructionsMatch?.[1] || ''
 
-  return { id, displayName, model, toolNames, instructionsPrompt }
+  // Helper to parse simple config objects from TS file
+  const parseConfig = (key: string) => {
+    const regex = new RegExp(`${key}:\\s*({[^{}]*({[^{}]*}[^{}]*)*})`, 's')
+    const match = content.match(regex)
+    if (!match) return undefined
+    try {
+      // Very basic "JS object string to JSON" conversion
+      let jsonStr = match[1]
+        .replace(/(\w+):/g, '"$1":') // Quote keys
+        .replace(/'/g, '"') // Replace single quotes with double quotes
+        .replace(/,\s*([\]}])/g, '$1') // Remove trailing commas
+        .replace(/\/\/.*$/gm, '') // Remove comments
+      return JSON.parse(jsonStr)
+    } catch {
+      return undefined
+    }
+  }
+
+  const selfCorrection = parseConfig('selfCorrection')
+  const guardian = parseConfig('guardian')
+  const healthCheck = parseConfig('healthCheck')
+  const streaming = parseConfig('streaming')
+  const rateLimit = parseConfig('rateLimit')
+  const toolConfig = parseConfig('toolConfig')
+
+  return { 
+    id, 
+    displayName, 
+    model, 
+    toolNames, 
+    instructionsPrompt,
+    selfCorrection,
+    guardian,
+    healthCheck,
+    streaming,
+    rateLimit,
+    toolConfig
+  }
 }
 
 const AGENT_TEMPLATE = `import type { AgentDefinition } from './types/agent-definition'
@@ -70,6 +139,20 @@ const definition: AgentDefinition = {
   model: '{{model}}',
   toolNames: [{{tools}}],
   instructionsPrompt: \`{{instructions}}\`,
+
+  // New configurations
+  selfCorrection: {
+    enabled: false,
+    retryOnFailure: true,
+    maxRetries: 2,
+    validateOutput: false,
+  },
+  guardian: {
+    enabled: true,
+    blockHarmful: true,
+    requireConfirmation: false,
+    auditTrail: true,
+  },
 }
 
 export default definition
@@ -103,6 +186,36 @@ const definition: AgentDefinition = {
 - Ne fais rien en dehors de ta mission
 - Respecte les formats de sortie attendus
 - Log tes actions importantes via add_message\`,
+
+  // New configurations
+  selfCorrection: {
+    enabled: true,
+    retryOnFailure: true,
+    maxRetries: 3,
+    validateOutput: true,
+  },
+  guardian: {
+    enabled: true,
+    blockHarmful: true,
+    requireConfirmation: false,
+    auditTrail: true,
+  },
+  streaming: {
+    enabled: true,
+    chunkSize: 50,
+    showThinking: true,
+  },
+  toolConfig: {
+    parallelTools: true,
+    toolTimeoutMs: 30000,
+    maxParallel: 5,
+  },
+  rateLimit: {
+    enabled: true,
+    requestsPerMinute: 60,
+    burst: 10,
+    backoffMultiplier: 1.5,
+  },
 }
 
 export default definition
@@ -118,6 +231,21 @@ const definition: AgentDefinition = {
   model: '{{model}}',
   toolNames: ['run_terminal_command', 'add_message', 'set_output'],
   instructionsPrompt: \`Daemon background agent. Mission: {{mission}}\`,
+
+  // New configurations
+  healthCheck: {
+    enabled: true,
+    checkIntervalMs: 30000,
+    maxConsecutiveFailures: 3,
+    autoRestart: true,
+    maxRestarts: 5,
+  },
+  guardian: {
+    enabled: true,
+    blockHarmful: true,
+    requireConfirmation: true,
+    auditTrail: true,
+  },
 }
 
 export default definition
@@ -153,6 +281,7 @@ export function scaffoldAgent(
   instructions: string,
   force = false,
   template: 'standard' | 'fast' | 'daemon' = 'standard',
+  profile?: AgentProfile,
 ): string {
   ensureAgentsDir()
   const filename = `${id}.ts`
@@ -167,12 +296,19 @@ export function scaffoldAgent(
   if (template === 'fast') templateContent = FAST_BOT_TEMPLATE
   if (template === 'daemon') templateContent = DAEMON_TEMPLATE
 
+  // Merge profile if provided
+  let finalInstructions = instructions
+  if (profile) {
+    const constraintsStr = profile.constraints.map(c => `- ${c}`).join('\n')
+    finalInstructions = `${profile.instructionsPrefix}\n\n## Mission\n${instructions}\n\n## Contraintes\n${constraintsStr}`
+  }
+
   let content = templateContent
     .replace(/\{\{id\}\}/g, id)
     .replace(/\{\{displayName\}\}/g, name)
     .replace(/\{\{model\}\}/g, model)
     .replace(/\{\{tools\}\}/g, toolsStr)
-    .replace(/\{\{instructions\}\}/g, instructions)
+    .replace(/\{\{instructions\}\}/g, finalInstructions)
 
   if (template === 'fast') {
     content = content.replace(/\{\{mission\}\}/g, instructions.split('\n')[0] || instructions)
@@ -180,6 +316,24 @@ export function scaffoldAgent(
   if (template === 'daemon') {
     content = content.replace(/\{\{mission\}\}/g, instructions.split('\n')[0] || instructions)
     content = content.replace(/\{\{notification_message\}\}/g, instructions.split('\n')[0] || 'Reminder notification')
+  }
+
+  // Inject profile config if available
+  if (profile?.config) {
+    const configLines: string[] = []
+    if (profile.config.selfCorrection) configLines.push(`  selfCorrection: ${JSON.stringify(profile.config.selfCorrection, null, 2).replace(/\n/g, '\n  ')},`)
+    if (profile.config.guardian) configLines.push(`  guardian: ${JSON.stringify(profile.config.guardian, null, 2).replace(/\n/g, '\n  ')},`)
+    if (profile.config.healthCheck) configLines.push(`  healthCheck: ${JSON.stringify(profile.config.healthCheck, null, 2).replace(/\n/g, '\n  ')},`)
+    if (profile.config.streaming) configLines.push(`  streaming: ${JSON.stringify(profile.config.streaming, null, 2).replace(/\n/g, '\n  ')},`)
+    if (profile.config.rateLimit) configLines.push(`  rateLimit: ${JSON.stringify(profile.config.rateLimit, null, 2).replace(/\n/g, '\n  ')},`)
+    if (profile.config.toolConfig) configLines.push(`  toolConfig: ${JSON.stringify(profile.config.toolConfig, null, 2).replace(/\n/g, '\n  ')},`)
+
+    if (configLines.length > 0) {
+      // Replace the default config in the template with the profile config
+      // This is a bit tricky with simple string replace, let's find the closing brace of the definition object
+      const lastBraceIndex = content.lastIndexOf('}')
+      content = content.slice(0, lastBraceIndex) + '\n  // Profile Config\n' + configLines.join('\n') + '\n}' + content.slice(lastBraceIndex + 1)
+    }
   }
 
   writeFileSync(filePath, content, 'utf-8')

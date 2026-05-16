@@ -29,6 +29,21 @@ export const agent = {
   /** Mission principale de l'agent */
   mission: "Envoyer une notification périodique pour rappeler une pause.",
 
+  // Nouvelles config daemon
+  healthCheck: {
+    enabled: true,
+    checkIntervalMs: 30000,
+    maxConsecutiveFailures: 3,
+    autoRestart: true,
+    maxRestarts: 5,
+  },
+  guardian: {
+    enabled: true,
+    blockHarmful: true,
+    requireConfirmation: true,  // Plus prudent pour daemon
+    auditTrail: true,
+  },
+
   /** Configuration du script daemon */
   scriptFile: "{{agent_name}}-script.js",
   logFileName: "{{agent_name}}.log",

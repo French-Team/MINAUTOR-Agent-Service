@@ -1,0 +1,104 @@
+# Registre de Mots-Clés — Protocole PACO
+# Chaque tâche entrante est parsée contre ce registre.
+# Si un match est trouvé, l'orchestrateur DOIT déléguer à l'agent listé.
+# Format: <domaine>.<role>: keywords=[...] → agent=<id>
+
+orchestration:
+  coordonner:
+    keywords: [orchestrer, coordonner, assigner, distribuer, superviser, planifier, workflow]
+    agent: orchestrateur
+
+recherche:
+  retro:
+    keywords: [analyser le code, retro-ingénierie, structure, dépendances, patterns, comprendre le code]
+    agent: agent-retro
+  web:
+    keywords: [rechercher sur le web, documentation en ligne, chercher, google, recherche internet]
+    agent: RESEARCH-web-01
+  code:
+    keywords: [analyser librairie, code open-source, bibliothèque, dépendance externe, npm, package, crates]
+    agent: RESEARCH-code-01
+
+planification:
+  strategy:
+    keywords: [stratégie, feuille de route, roadmap, vision, plan global, objectifs]
+    agent: PLAN-strategy-01
+  architecture:
+    keywords: [architecture, schéma, flux de données, choix technologique, stack, design system]
+    agent: PLAN-architecture-01
+  tasks:
+    keywords: [découper en tâches, tâches atomiques, priorité, sprint, backlog, user stories]
+    agent: PLAN-task-01
+
+developpement:
+supervision:
+  daemon_superviseur:
+    keywords: [superviser orchestrateur, surveillance paco, vérifier délégation, scruter orchestrateur, alerte violation, suspendre orchestrateur]
+    agent: DAEMON-superviseur-01
+
+general:
+    keywords: [implémenter, coder, développer, écrire du code, fonction, algorithme]
+    agent: agent-novice
+  python_async:
+    keywords: [asyncio, async, await, coroutine, boucle d'événements, event loop, gather, create_task]
+    agent: PYTHON-async-01
+  python_test:
+    keywords: [test unitaire, pytest, unittest, test coverage, TDD, écrire des tests]
+    agent: PYTHON-unittest-01
+  python_helper:
+    keywords: [script python, manipulation données, csv, json, chemin fichier, pathlib, regex, argparse, cli python, bibliothèque standard]
+    agent: PYTHON-helper-01
+  css_flex:
+    keywords: [flexbox, align-items, justify-content, flex-grow, flex-shrink, flex-wrap, align-content]
+    agent: CSS-flex-01
+  css_grid:
+    keywords: [css grid, grid-template, grid-area, grid-column, grid-row, grid-auto, gap]
+    agent: CSS-grid-01
+  css_layout:
+    keywords: [position, z-index, overflow, display block, display inline, box model, margin collapsing, float, clear]
+    agent: CSS-layout-01
+  css_colors:
+    keywords: [couleur, palette, thème, --c-, hsl, var(, couleur primaire, couleur secondaire, sombre, clair, prefers-color-scheme]
+    agent: CSS-colors-01
+  css_responsive:
+    keywords: [responsive, media query, breakpoint, mobile-first, desktop-first, adaptable, mobile, tablette]
+    agent: CSS-responsive-01
+  css_animations:
+    keywords: [animation, transition, keyframes, transform, micro-interaction, fade-in, slide-up, hover, will-change]
+    agent: CSS-animations-01
+  react_hooks:
+    keywords: [react hook, useState, useEffect, useReducer, useMemo, useCallback, custom hook, useRef, useContext]
+    agent: REACT-hooks-01
+  nextjs_routing:
+    keywords: [app router, layout, page.tsx, loading.tsx, error.tsx, next.js routing, route group, dynamic route]
+    agent: NEXTJS-routing-01
+  rust_ownership:
+    keywords: [rust ownership, borrow checker, lifetime, &mut, Rc, Arc, RefCell, Mutex, clone, emprunt]
+    agent: RUST-ownership-01
+
+documentation:
+  markdown:
+    keywords: [documentation, README, markdown, JSDoc, TSDoc, guide, manuel, fichier doc, doc technique]
+    agent: agent-markdown
+  mermaid:
+    keywords: [diagramme, mermaid, flowchart, sequence diagram, graphique, schéma, architecture diagram, flux visuel]
+    agent: agent-mermaid
+
+validation:
+  validateur:
+    keywords: [validation, vérifier conformité, intégration, non-régression, qualité, revue finale, valider livrable]
+    agent: agent-validateur
+  review_code:
+    keywords: [revue de code, review, audit sécurité, convention, edge case, performance code, inspection]
+    agent: REVIEWER-code-01
+  review_css:
+    keywords: [audit CSS, performance CSS, design system, spécificité, sélecteur, !important, redondance CSS]
+    agent: REVIEWER-css-01
+  review_logic:
+    keywords: [cohérence logique, cas d'erreur, branche conditionnelle, try catch, chemin d'exécution, logique métier]
+    agent: REVIEWER-logic-01
+
+general:
+  assistant:
+    keywords: [assistance générale, aide quotidienne, question simple, polyvalent]
+    agent: assistant-general

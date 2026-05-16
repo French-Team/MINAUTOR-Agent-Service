@@ -8,6 +8,62 @@ export interface AgentDefinition {
   spawnerPrompt?: string
   spawnableAgents?: string[]
   handleSteps?: (context: AgentStepContext) => Generator<ToolCall | 'STEP' | 'STEP_ALL', void, unknown>
+  
+  // New configurations
+  selfCorrection?: SelfCorrection
+  guardian?: Guardian
+  healthCheck?: DaemonHealth
+  streaming?: Streaming
+  rateLimit?: RateLimit
+  toolConfig?: ToolConfig
+  
+  // Backward compatibility for daemon
+  daemonConfig?: {
+    defaultIntervalMs: number
+    defaultNotificationMessage: string
+  }
+}
+
+export interface SelfCorrection {
+  enabled: boolean
+  retryOnFailure: boolean
+  maxRetries: number
+  validateOutput: boolean
+}
+
+export interface Guardian {
+  enabled: boolean
+  blockHarmful: boolean
+  requireConfirmation: boolean
+  auditTrail: boolean
+  blockedPatterns?: string[]
+}
+
+export interface DaemonHealth {
+  enabled: boolean
+  checkIntervalMs: number
+  maxConsecutiveFailures: number
+  autoRestart: boolean
+  maxRestarts: number
+}
+
+export interface Streaming {
+  enabled: boolean
+  chunkSize: number
+  showThinking: boolean
+}
+
+export interface RateLimit {
+  enabled: boolean
+  requestsPerMinute: number
+  burst: number
+  backoffMultiplier: number
+}
+
+export interface ToolConfig {
+  parallelTools: boolean
+  toolTimeoutMs: number
+  maxParallel: number
 }
 
 export interface AgentState {

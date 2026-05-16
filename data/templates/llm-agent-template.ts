@@ -18,4 +18,18 @@ export const agent = {
   toolNames: ["run_terminal_command", "add_message", "set_output", "skill"],
   /** Instructions système pour guider le LLM (Prompting) */
   instructionsPrompt: `{{instructions}}`,
+
+  // Nouvelles config
+  selfCorrection: {
+    enabled: false,  // Opt-in pour standard
+    retryOnFailure: true,
+    maxRetries: 2,
+    validateOutput: false,
+  },
+  guardian: {
+    enabled: true,  // Actif par défaut pour la sécurité
+    blockHarmful: true,
+    requireConfirmation: false,
+    auditTrail: true,
+  },
 }

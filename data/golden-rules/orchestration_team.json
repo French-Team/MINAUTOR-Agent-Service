@@ -1,0 +1,46 @@
+{
+  "rules": [
+    {
+      "id": "orchestration-orchestrateur-profile",
+      "description": "Le profil orchestrateur doit exister dans data/profiles/agents/orchestrateur.json.",
+      "check": "lambda: __import__('os').path.exists('data/profiles/agents/orchestrateur.json')",
+      "severity": "critical"
+    },
+    {
+      "id": "orchestration-superviseur-profile",
+      "description": "Le profil agent-superviseur doit exister dans data/profiles/agents/agent-superviseur.json.",
+      "check": "lambda: __import__('os').path.exists('data/profiles/agents/agent-superviseur.json')",
+      "severity": "critical"
+    },
+    {
+      "id": "orchestration-keyword-registry",
+      "description": "Le registre de mots-clés PACO doit exister dans data/protocols/keyword-registry.yaml.",
+      "check": "lambda: __import__('os').path.exists('data/protocols/keyword-registry.yaml')",
+      "severity": "critical"
+    },
+    {
+      "id": "orchestration-paco-protocol",
+      "description": "La documentation du protocole PACO doit exister dans data/protocols/paco-protocol.md.",
+      "check": "lambda: __import__('os').path.exists('data/protocols/paco-protocol.md')",
+      "severity": "critical"
+    },
+    {
+      "id": "orchestration-orchestrateur-instructions",
+      "description": "Le profil orchestrateur doit contenir la règle 'NE PRODUIS JAMAIS de code' (PACO compliance).",
+      "check": "lambda: 'NE PRODUIS JAMAIS' in __import__('json').load(__import__('builtins').open('data/profiles/agents/orchestrateur.json'))['instructionsPrefix'] if __import__('os').path.exists('data/profiles/agents/orchestrateur.json') else False",
+      "severity": "critical"
+    },
+    {
+      "id": "orchestration-superviseur-readonly",
+      "description": "Le profil agent-superviseur doit être en readonly (ne modifie jamais les fichiers).",
+      "check": "lambda: __import__('json').load(__import__('builtins').open('data/profiles/agents/agent-superviseur.json'))['config']['guardian'].get('readonly', False) if __import__('os').path.exists('data/profiles/agents/agent-superviseur.json') else False",
+      "severity": "critical"
+    },
+    {
+      "id": "orchestration-daemon-superviseur",
+      "description": "Le daemon superviseur PACO doit exister dans data/profiles/daemons/DAEMON-superviseur-01.json.",
+      "check": "lambda: __import__('os').path.exists('data/profiles/daemons/DAEMON-superviseur-01.json')",
+      "severity": "critical"
+    }
+  ]
+}

@@ -46,7 +46,23 @@ async function main() {
     if (missing > 0) exitCode = 1
   }
 
-  // 4. Provider
+  // 4. Équipe d'orchestration PACO
+  const orchFiles = [
+    ['data/profiles/agents/orchestrateur.json', 'Profil orchestrateur'],
+    ['data/profiles/agents/agent-superviseur.json', 'Profil superviseur'],
+    ['data/profiles/daemons/DAEMON-superviseur-01.json', 'Daemon superviseur'],
+    ['data/protocols/keyword-registry.yaml', 'Registre mots-clés'],
+    ['data/protocols/paco-protocol.md', 'Protocole PACO'],
+  ]
+  let orchOk = true
+  for (const [p, name] of orchFiles) {
+    const ok = existsSync(join(cwd, p))
+    console.log(`  ${ok ? '✓' : '✗'} PACO : ${name}`)
+    if (!ok) { orchOk = false; exitCode = 1; console.log(`     → Composant orchestration manquant : ${p}`) }
+  }
+  if (orchOk) console.log(`  ✓ PACO : Équipe d'orchestration complète`)
+
+  // 5. Provider
   const provPath = join(cwd, 'providers.json')
   if (existsSync(provPath)) {
     const prov = JSON.parse(readFileSync(provPath, 'utf-8'))

@@ -64,6 +64,36 @@ export const agent = {
 - Respecte les formats de sortie attendus
 - Log tes actions importantes via add_message`,
 
+  // Nouvelles config - toutes actives pour ce template
+  selfCorrection: {
+    enabled: true,
+    retryOnFailure: true,
+    maxRetries: 3,
+    validateOutput: true,
+  },
+  guardian: {
+    enabled: true,
+    blockHarmful: true,
+    requireConfirmation: false,
+    auditTrail: true,
+  },
+  streaming: {
+    enabled: true,
+    chunkSize: 50,
+    showThinking: true,
+  },
+  toolConfig: {
+    parallelTools: true,
+    toolTimeoutMs: 30000,
+    maxParallel: 5,
+  },
+  rateLimit: {
+    enabled: true,
+    requestsPerMinute: 60,
+    burst: 10,
+    backoffMultiplier: 1.5,
+  },
+
   /**
    * Configuration de performance (optionnel).
    * Ces paramètres influencent le comportement du bot.

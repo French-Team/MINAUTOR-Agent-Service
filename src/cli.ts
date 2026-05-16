@@ -12,7 +12,7 @@ import { popAllNotifications } from './notify.js'
 import { emitKeypressEvents } from 'readline'
 import { createEngine, type Engine } from './engine.js'
 import type { AgentDefinition } from './types/agent-definition.js'
-import { listLocalAgents, readLocalAgent, scaffoldAgent, updateAgentFile } from './agents.js'
+import { listLocalAgents, readLocalAgent, scaffoldAgent, updateAgentFile, listProfiles, loadProfile, type AgentProfile } from './agents.js'
 import {
   listProviders,
   getProvider,
@@ -455,6 +455,85 @@ async function handleCreate(rl: ReturnType<typeof createInterface>): Promise<voi
   console.log(`${BOLD}${CYAN}│  Ctrl+C pour annuler                       │${RESET}`)
   console.log(`${BOLD}${CYAN}└────────────────────────────────────────────┘${RESET}\n`)
 
+  // --- 0. Vérification de l'équipe d'orchestration PACO ---
+  const ORCHESTRATION_FILES = [
+    { path: 'data/profiles/agents/orchestrateur.json', name: 'Profil orchestrateur' },
+    { path: 'data/profiles/agents/agent-superviseur.json', name: 'Profil superviseur' },
+    { path: 'data/profiles/daemons/DAEMON-superviseur-01.json', name: 'Daemon superviseur' },
+    { path: 'data/protocols/keyword-registry.yaml', name: 'Registre de mots-clés' },
+    { path: 'data/protocols/paco-protocol.md', name: 'Protocole PACO' },
+  ]
+  const cwd = process.cwd()
+  const missing: string[] = []
+  for (const f of ORCHESTRATION_FILES) {
+    if (!existsSync(join(cwd, f.path))) missing.push(f.name)
+  }
+  if (missing.length > 0) {
+    console.log(`\n${RED}${BOLD}⚠ ÉQUIPE D'ORCHESTRATION MANQUANTE${RESET}`)
+    console.log(`${YELLOW}Avant de créer un agent, l'équipe PACO est obligatoire :${RESET}`)
+    for (const m of missing) console.log(`  ${RED}✗${RESET} ${m}`)
+    console.log(`\n${CYAN}[S]${RESET} Créer l'équipe d'orchestration  ${CYAN}[A]${RESET} Annuler`)
+    const choice = (await rl.question(`\n${GRAY}>${RESET} `)).trim().toLowerCase()
+    if (choice === 's') {
+      console.log(`\n${YELLOW}⟳ Création de l'équipe d'orchestration...${RESET}`)
+      const teamConfig = [
+        {
+          id: 'orchestrateur',
+          name: 'Orchestrateur',
+          tools: ['run_terminal_command', 'add_message', 'set_output'],
+          instructions: `Tu es l'Agent-Maître, l'orchestrateur central.
+Ta mission unique est de coordonner les autres agents.
+Tu ne produis JAMAIS de code, documentation, analyse, design ou tout autre livrable toi-même.
+Ta seule production autorisée est :
+1. mises à jour de tâches_en_cours.json
+2. messages de délégation au format @agent-ID: mission
+3. rapports de coordination
+
+Le protocole PACO est obligatoire : avant chaque action, tu consultes le registre keyword-registry.yaml.
+Si un mot-clé de la tâche match un agent, tu DOIS déléguer.
+Si aucun agent ne correspond, tu réponds 'Tâche non couverte — intervention humaine requise'.
+Tu es surveillé en continu par DAEMON-superviseur-01. Toute violation peut entraîner ta suspension.`,
+        },
+        {
+          id: 'agent-superviseur',
+          name: 'Agent Superviseur',
+          tools: ['add_message'],
+          instructions: `Tu es l'Agent-Superviseur, le garde-fou du protocole PACO.
+Ta mission unique est de surveiller l'orchestrateur en continu.
+Tu ne produis AUCUN livrable, tu ne fais AUCUNE modification de fichier.
+Tu es lecture seule. Tu scrutes les logs, les sorties et les fichiers de l'orchestrateur.
+Tu vérifies qu'il délègue toujours et ne fait jamais le travail lui-même.
+En cas de violation, tu émets une alerte.
+Après 3 violations consécutives, tu suspends l'orchestrateur.`,
+        },
+        {
+          id: 'DAEMON-superviseur-01',
+          name: 'Daemon Superviseur',
+          tools: ['run_terminal_command', 'add_message', 'set_output'],
+          instructions: `Tu es le daemon superviseur PACO.
+Tu te réveilles toutes les 5 minutes pour scruter l'orchestrateur.
+Tu lis tâches_en_cours.json et les logs de coordination.
+Tu vérifies que l'orchestrateur a bien délégué chaque tâche à un agent compétent.
+Si tu détectes une violation (production directe, délégation manquante), tu émets une alerte.
+Après 3 violations consécutives de niveau ≥ moyen, tu marques l'orchestrateur comme suspendu.`,
+        },
+      ]
+      for (const agent of teamConfig) {
+        try {
+          scaffoldAgent(agent.id, agent.name, 'kilo-auto/free', agent.tools, agent.instructions, true, 'standard')
+          console.log(`  ${GREEN}✓${RESET} ${agent.name} créé`)
+        } catch (e) {
+          console.log(`  ${RED}✗${RESET} ${agent.name} : ${(e as Error).message}`)
+        }
+      }
+      console.log(`\n${GREEN}✓ Équipe d'orchestration créée. Relance /create pour créer ton agent.${RESET}\n`)
+      return
+    }
+    console.log(`${YELLOW}Opération annulée. L'équipe d'orchestration est requise.${RESET}\n`)
+    return
+  }
+  console.log(`  ${GREEN}✓${RESET} Équipe d'orchestration PACO présente\n`)
+
   // --- 1. Choix du provider + apikey ---
   const knownProviders = getKnownProviders()
   console.log(`${BOLD}Étape 1 : Sélection du fournisseur LLM${RESET}`)
@@ -654,72 +733,84 @@ async function handleCreate(rl: ReturnType<typeof createInterface>): Promise<voi
   
   description = await readMultiline('Description de l\'agent (min. 10 mots)', 10)
 
-  // --- Sélection du template ---
-  console.log(`\n${BOLD}Template de l'agent :${RESET}`)
-  console.log(`  ${CYAN}1${RESET}. Agent Standard (défaut)`)
-  console.log(`  ${CYAN}2${RESET}. Bot Rapide & Intelligent`)
-  console.log(`  ${CYAN}3${RESET}. Agent Daemon (background)`)
-
-  let templateChoice = (await rl.question(`${CYAN}Choix du template${RESET} (1, 2 ou 3) ${GRAY}>${RESET} `)).trim()
-  if (!templateChoice) templateChoice = '1'
-  let isFastIntelligent = false
-  let isDaemon = false
-  if (templateChoice === '2') {
-    isFastIntelligent = true
-    console.log(`${GREEN}✓ Template : Bot Rapide & Intelligent${RESET}`)
-  } else if (templateChoice === '3') {
-    isDaemon = true
-    console.log(`${GREEN}✓ Template : Agent Daemon (background)${RESET}`)
-  }
-
-  // --- Attribution automatique du nom via matching Greek Gods ---
-  console.log(`\n${YELLOW}⟳ Analyse de la description et attribution d'un nom...${RESET}`)
+  // --- 2. Phase d'Analyse Automatique par l'Agent ---
+  console.log(`\n${YELLOW}⟳ Analyse de la mission et configuration automatique...${RESET}`)
   
-  let assignedName = 'Athena' // Default fallback
-  let assignedId = 'agent-athena'
-  
+  const llmDecisionProvider = { provider: providerType, apiKey: effectiveApiKey, baseUrl: effectiveBaseUrl, model }
+  const decisionEngine = createEngine({
+    agent: { id: 'decision-maker', displayName: 'Decision Maker', model, instructionsPrompt: 'Tu es un expert en configuration d\'agents.', toolNames: [] },
+  })
+
+  // A. Sélection du Nom (Dieu Grec)
+  let assignedName = 'Athena'
   try {
     const greekGodsPath = join(process.cwd(), 'data', 'agent-name', 'greek-gods.json')
     if (existsSync(greekGodsPath)) {
       const godsData = JSON.parse(readFileSync(greekGodsPath, 'utf-8'))
       const gods = godsData.dieux || {}
-      
-      // Build a prompt for the LLM to match description with a god
       const godsList = Object.entries(gods).map(([name, desc]) => `- ${name}: ${desc}`).join('\n')
       
-      const matchPrompt = `Voici une liste de dieux grecs et leurs descriptions :
+      const godMatchPrompt = `Liste de dieux grecs :
 ${godsList}
 
-L'utilisateur décrit un agent ainsi :
-"${description}"
+Mission de l'agent : "${description}"
 
-Analyse cette description et retourne UNIQUEMENT le nom du dieu grec qui correspond le mieux (sans explication).
-Si aucun dieu ne correspond bien, retourne "Athena" par défaut.`
+Retourne UNIQUEMENT le nom du dieu grec le plus adapté (sans ponctuation). Retourne "Athena" si incertain.`
 
-      const llmMatchProvider = { provider: providerType, apiKey: effectiveApiKey, baseUrl: effectiveBaseUrl, model }
-      const matchEngine = createEngine({
-        agent: { id: 'matcher', displayName: 'Matcher', model, instructionsPrompt: 'Tu匹配 descriptions.', toolNames: [] },
-      })
-      
-      const matchResponse = await matchEngine.callLLM(matchPrompt, llmMatchProvider, matchEngine.agent.instructionsPrompt)
-      const godName = matchResponse.trim().replace(/[^a-zA-Zàâäéèêëïîôùûüÿœæç]/g, '').split('\n')[0]
-      
-      if (godName && godName.length > 1 && godName.length < 30) {
-        assignedName = godName
-      }
+      const godResponse = await decisionEngine.callLLM(godMatchPrompt, llmDecisionProvider, "Tu es un expert en mythologie et matching de personnalité.")
+      assignedName = godResponse.trim().replace(/[^a-zA-Zàâäéèêëïîôùûüÿœæç]/g, '').split('\n')[0] || 'Athena'
     }
   } catch (err) {
-    console.log(`${YELLOW}⚠ Impossible de matcher avec les dieux grecs : ${(err as Error).message}${RESET}`)
+    console.log(`${YELLOW}⚠ Erreur lors du choix du nom : ${(err as Error).message}${RESET}`)
   }
-  
-  // Generate ID from name (kebab-case)
-  assignedId = `agent-${assignedName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`
-  
-  console.log(`${GREEN}✓ Nom attribué : ${assignedName}${RESET}`)
+
+  // B. Sélection du Template et du Profil
+  let type: 'agents' | 'bots' | 'daemons' = 'agents'
+  let template: 'standard' | 'fast' | 'daemon' = 'standard'
+  let selectedProfile: AgentProfile | undefined = undefined
+
+  try {
+    const profilesAgents = listProfiles('agents')
+    const profilesBots = listProfiles('bots')
+    const profilesDaemons = listProfiles('daemons')
+
+    const decisionPrompt = `Mission de l'agent : "${description}"
+
+Analyse cette mission et choisis :
+1. Le TYPE d'agent le plus adapté parmi : "standard" (assistant général), "fast" (bot rapide d'automatisation), "daemon" (tâche de fond périodique).
+2. Le PROFIL le plus adapté parmi cette liste classée par type :
+- agents: ${profilesAgents.join(', ')}
+- bots: ${profilesBots.join(', ')}
+- daemons: ${profilesDaemons.join(', ')}
+
+Réponds UNIQUEMENT au format JSON suivant :
+{
+  "template": "standard|fast|daemon",
+  "profileType": "agents|bots|daemons",
+  "profileName": "nom_du_profil"
+}`
+
+    const decisionResponse = await decisionEngine.callLLM(decisionPrompt, llmDecisionProvider, "Tu es un architecte système spécialisé en agents IA.")
+    const decision = JSON.parse(decisionResponse.match(/\{[\s\S]*\}/)?.[0] || '{}')
+    
+    if (decision.template) template = decision.template
+    if (decision.profileType) type = decision.profileType
+    if (decision.profileName) {
+      selectedProfile = loadProfile(type, decision.profileName) || undefined
+    }
+
+    console.log(`${GREEN}✓ Choix automatiques :${RESET}`)
+    console.log(`  ${BOLD}Nom      :${RESET} ${assignedName}`)
+    console.log(`  ${BOLD}Template :${RESET} ${template}`)
+    console.log(`  ${BOLD}Profil   :${RESET} ${decision.profileName || 'Aucun'}`)
+  } catch (err) {
+    console.log(`${YELLOW}⚠ Erreur lors de l'analyse automatique, utilisation des défauts.${RESET}`)
+  }
+
+  const assignedId = `agent-${assignedName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`
   console.log(`${GRAY}  ID généré : ${assignedId}${RESET}\n`)
 
-  // Pause pour stabiliser entre les étapes
-  await pause('Nom attribué → Création et certification')
+  await pause('Analyse terminée → Création et certification')
 
   // --- 3. Création, Skill, Scripts, Validation, Certification ---
   console.log(`${BOLD}${CYAN}┌─ Phase de création et certification ──────┐${RESET}`)
@@ -750,7 +841,7 @@ Si aucun dieu ne correspond bien, retourne "Athena" par défaut.`
       instructions = skillContent.replace(/^---[\s\S]*?---\n/, '').trim()
     }
     try {
-      agentPath = scaffoldAgent(assignedId, assignedName, model, tools, instructions, true, isDaemon ? 'daemon' : (isFastIntelligent ? 'fast' : 'standard'))
+      agentPath = scaffoldAgent(assignedId, assignedName, model, tools, instructions, true, template, selectedProfile)
       console.log(`  ${GREEN}✓ Agent enregistré${RESET} ${GRAY}${agentPath}${RESET}`)
     } catch (err) {
       console.log(`  ${RED}✗ Échec enregistrement agent : ${(err as Error).message}${RESET}`)
@@ -1574,7 +1665,7 @@ const child = fork(join(import.meta.dirname, 'timer-agent.js'), [instruction || 
         continue
       }
 
-      const result = currentEngine!.runPrompt(line)
+      const result = await currentEngine!.runPrompt(line)
       for (const tc of result.toolCalls) {
         switch (tc.toolName) {
           case 'run_terminal_command': {
