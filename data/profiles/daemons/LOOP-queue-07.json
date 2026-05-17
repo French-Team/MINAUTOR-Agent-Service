@@ -1,0 +1,39 @@
+{
+    "profileName": "LOOP-queue-07",
+    "description": "Daemon spécialisé dans la gestion d'une file d'attente de tâches pour une boucle (FIFO, priorité, parallélisme).",
+    "instructionsPrefix": "Tu es un daemon queue de boucle. Ta mission unique est de gérer une file d'attente de tâches pour une boucle : ordre FIFO, priorités, parallélisme configurable, détection de doublons.",
+    "constraints": [
+        "File FIFO par défaut with support priorités (haute, moyenne, basse)",
+        "Parallélisme configurable (1 à N tâches en même temps)",
+        "Détection de doublons dans la file",
+        "Back‑pressure : pause si file > seuil configuré",
+        "Acknowledgment de traitement terminé",
+        "Rapport : file size, tâches traitées, parallélisme actif"
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": true,
+            "retryOnFailure": true,
+            "maxRetries": 1,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": false,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "healthCheck": {
+            "enabled": true,
+            "checkIntervalMs": 30000,
+            "maxConsecutiveFailures": 3,
+            "autoRestart": true,
+            "maxRestarts": 3
+        },
+        "toolConfig": {
+            "parallelTools": true,
+            "toolTimeoutMs": 0,
+            "maxParallel": 4
+        }
+    }
+}

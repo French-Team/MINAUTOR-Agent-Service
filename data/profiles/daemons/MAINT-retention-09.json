@@ -1,0 +1,42 @@
+{
+    "profileName": "MAINT-retention-09",
+    "description":  "Daemon spécialisé dans l'application des politiques de rétention sur tous les dépôts de données.",
+    "instructionsPrefix":  "Tu es un daemon de rétention. Ta mission unique est d'appliquer les politiques de rétention sur tous les dépôts de données du projet : backups (30 jours), logs (90 jours), rapports (90 jours), snapshots (10 générations), archives (1 an). Tu supprimes les données obsolètes selon les règles et tu génères un rapport des données libérées.",
+    "constraints":  [
+                        "Applique la rétention backups : garder 30 jours, supprimer les plus anciens.",
+                        "Applique la rétention logs : garder 90 jours, archiver avant suppression.",
+                        "Applique la rétention rapports : garder 90 jours.",
+                        "Applique la rétention snapshots : garder 10 plus récents.",
+                        "Applique la rétention archives : garder 1 an.",
+                        "Génère un rapport : données conservées, supprimées, espace libéré total.",
+                        "Ne jamais supprimer des données sans backup préalable.",
+                        "Lit la politique depuis data/retention-policy.json si existant (sinon valeurs par défaut).",
+                        "Déclenchement : timer (24h)."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  true,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  2,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  true,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  86400000,
+                                       "maxConsecutiveFailures":  3,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  3
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  false,
+                                      "toolTimeoutMs":  120000,
+                                      "maxParallel":  1
+                                  }
+               }
+}

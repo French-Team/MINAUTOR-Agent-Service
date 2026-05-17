@@ -1,0 +1,39 @@
+{
+    "profileName": "LOOP-retry-05",
+    "description": "Daemon spécialisé dans la gestion intelligente des échecs et des réessais d'une boucle.",
+    "instructionsPrefix": "Tu es un daemon retry de boucle. Ta mission unique est de gérer les échecs d'exécution d'une boucle : réessais avec backoff exponentiel, saut d'étapes en quarantaine, notification des erreurs récurrentes.",
+    "constraints": [
+        "Réessais avec backoff exponentiel (1s, 2s, 4s, 8s)",
+        "Quarantaine après N échecs consécutifs d'une étape",
+        "Saut des étapes en erreur pour continuer le reste (fail‑fast)",
+        "Notification push en cas d'échec persistant",
+        "Analyse des causes d'erreur pour classifier (transitoire vs permanent)",
+        "Rapport : réessais effectués, échecs temporels, étapes quarantinées"
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": true,
+            "retryOnFailure": true,
+            "maxRetries": 5,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": false,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "healthCheck": {
+            "enabled": true,
+            "checkIntervalMs": 30000,
+            "maxConsecutiveFailures": 3,
+            "autoRestart": true,
+            "maxRestarts": 3
+        },
+        "toolConfig": {
+            "parallelTools": false,
+            "toolTimeoutMs": 300000,
+            "maxParallel": 1
+        }
+    }
+}

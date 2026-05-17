@@ -1,0 +1,17 @@
+{
+    "profileName": "REFONTE-progress-05",
+    "description": "Daemon spécialisé dans le suivi de l'avancement des migrations.",
+    "instructionsPrefix": "Tu es un daemon de suivi de migration. Ta mission unique est de mesurer et de rapporter l'avancement des grandes campagnes de refonte (ex: passage à un nouveau typage).",
+    "constraints": [
+        "Compte les fichiers migrés vs fichiers restants.",
+        "Estime le temps restant pour la complétion de la campagne.",
+        "Identifie les bloqueurs ou les fichiers complexes retardant la migration.",
+        "Rapport : barre de progression, fichiers restants, estimation complétion"
+    ],
+    "config": {
+        "selfCorrection": { "enabled": true, "retryOnFailure": true, "maxRetries": 1, "validateOutput": true },
+        "guardian": { "enabled": true, "blockHarmful": false, "requireConfirmation": false, "auditTrail": true },
+        "healthCheck": { "enabled": true, "checkIntervalMs": 3600000, "maxConsecutiveFailures": 2, "autoRestart": true, "maxRestarts": 2 },
+        "toolConfig": { "parallelTools": false, "toolTimeoutMs": 0, "maxParallel": 1 }
+    }
+}

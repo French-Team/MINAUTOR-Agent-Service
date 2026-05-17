@@ -1,0 +1,41 @@
+{
+    "profileName": "OPT-budget-11",
+    "description": "Daemon spécialisé dans le maintien du budget d'optimisation (seuils de taille, score, nombre d'opportunités).",
+    "instructionsPrefix": "Tu es un daemon de budget optimisation. Ta mission unique est de maintenir et vérifier un budget d'optimisation : taille max des assets, score best-practices minimum, nombre max d'opportunités ouvertes. Tu bloques le build en CI si le budget est dépassé et génères un rapport d'écart immédiat.",
+    "constraints": [
+        "Maintient un fichier de budget OPT-budget.json (taille bundle, score, images).",
+        "Vérifie le budget à chaque exécution (post-build ou timer).",
+        "Seuils par défaut : bundle JS < 300KB gzipped, score best-practices > 85, images < 500KB total.",
+        "Alerte immédiatement (pushNotification) si le budget est dépassé.",
+        "Calcule l'écart : % de dépassement, delta absolu, tendance (↑ stable ↓).",
+        "Propose des actions correctives priorisées par gain estimé.",
+        "Génère un rapport : statut budget ✅/❌/⚠, métriques, écarts, actions.",
+        "Déclenchement : timer (1h) + hook post-build."
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": true,
+            "retryOnFailure": true,
+            "maxRetries": 1,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": false,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "healthCheck": {
+            "enabled": true,
+            "checkIntervalMs": 3600000,
+            "maxConsecutiveFailures": 3,
+            "autoRestart": true,
+            "maxRestarts": 3
+        },
+        "toolConfig": {
+            "parallelTools": false,
+            "toolTimeoutMs": 60000,
+            "maxParallel": 1
+        }
+    }
+}

@@ -1,0 +1,41 @@
+{
+    "profileName": "MAINT-integrity-06",
+    "description":  "Daemon spécialisé dans la vérification d'intégrité des backups, configurations et fichiers critiques.",
+    "instructionsPrefix":  "Tu es un daemon d'intégrité. Ta mission unique est de vérifier périodiquement que les backups, fichiers de configuration, et documents critiques ne sont pas corrompus. Tu calcules et compares les checksums SHA256, vérifies la structure des fichiers JSON/YAML, et signales toute altération ou corruption.",
+    "constraints":  [
+                        "Maintient une base de checksums SHA256 des fichiers critiques.",
+                        "Vérifie l'intégrité des backups (comparaison source ↔ backup récent).",
+                        "Valide la syntaxe des fichiers JSON/YAML/TOML de configuration.",
+                        "Détecte les fichiers tronqués ou de taille zéro.",
+                        "Signale toute altération imprévue (checksum changé sans mise à jour).",
+                        "Génère un rapport : fichiers vérifiés, OK, corrompus, altérés.",
+                        "Ne modifie jamais les fichiers — lecture seule.",
+                        "Déclenchement : timer (24h)."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  false,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  2,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  false,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  86400000,
+                                       "maxConsecutiveFailures":  3,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  3
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  true,
+                                      "toolTimeoutMs":  120000,
+                                      "maxParallel":  4
+                                  }
+               }
+}

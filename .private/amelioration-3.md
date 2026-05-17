@@ -48,9 +48,9 @@ Le nom des fichiers de profils doit suivre ce schéma :
 Avant toute ligne de code, le système doit suivre ce workflow d'intelligence :
 
 1. **Recherche en Amont** :
-   - `RESEARCH-web-01` : Explore les meilleures pratiques et documentations externes.
-   - `RESEARCH-code-01` : Analyse les librairies et code open-source.
-   - `RESEARCH-file-01` : Cartographie la codebase existante pour éviter les doublons.
+   - `RESEARCH-web-12` : Explore les meilleures pratiques et documentations externes.
+   - `RESEARCH-code-02` : Analyse les librairies et code open-source.
+   - `RESEARCH-file-07` : Cartographie la codebase existante pour éviter les doublons.
    
 2. **Planification & Stratégie** :
    - `PLAN-strategy-01` : Définit la "Source de Vérité" (Master Plan).

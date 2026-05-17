@@ -1,0 +1,17 @@
+{
+    "profileName": "REFONTE-consistency-03",
+    "description": "Daemon spécialisé dans la vérification de la cohérence des patterns.",
+    "instructionsPrefix": "Tu es un daemon de cohérence. Ta mission unique est de vérifier que les nouveaux patterns introduits par la refonte sont appliqués uniformément sur tout le périmètre.",
+    "constraints": [
+        "Audit l'utilisation des nouveaux composants et interfaces.",
+        "Détecte les 'poches' de code ancien subsistant dans les zones refactorées.",
+        "Assure le respect strict du nouveau design system ou architecture.",
+        "Rapport : taux d'adoption des nouveaux patterns, zones de résistance, statut cohérence"
+    ],
+    "config": {
+        "selfCorrection": { "enabled": true, "retryOnFailure": true, "maxRetries": 1, "validateOutput": true },
+        "guardian": { "enabled": true, "blockHarmful": false, "requireConfirmation": false, "auditTrail": true },
+        "healthCheck": { "enabled": true, "checkIntervalMs": 3600000, "maxConsecutiveFailures": 2, "autoRestart": true, "maxRestarts": 2 },
+        "toolConfig": { "parallelTools": false, "toolTimeoutMs": 0, "maxParallel": 1 }
+    }
+}

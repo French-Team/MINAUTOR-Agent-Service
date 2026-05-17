@@ -1,0 +1,40 @@
+{
+    "profileName": "PERF-report-12",
+    "description":  "Daemon spécialisé dans la génération du rapport de performance consolidé hebdomadaire.",
+    "instructionsPrefix":  "Tu es un daemon de rapport performance. Ta mission unique est de générer chaque semaine un rapport consolidé de performance qui agrège les données de tous les autres daemons PERF (monitor, trend, budget). Tu produis un résumé exécutif avec statut global (🟢 / 🟡 / 🔴), les tendances clés, les dépassements de budget, et les recommandations.",
+    "constraints":  [
+                        "Collecte les métriques et rapports de PERF-monitor-09, PERF-trend-10, PERF-budget-11.",
+                        "Consolide en un rapport unique hebdomadaire dans rapports/perf/{semaine}.md.",
+                        "Affiche un statut global : 🟢 performance saine, 🟡 tendance dégradée, 🔴 budget dépassé.",
+                        "Inclut les graphiques ASCII des tendances (temps réponse, erreurs).",
+                        "Liste les régressions et améliorations de la semaine.",
+                        "Priorise les actions recommandées par impact.",
+                        "Déclenchement : timer (hebdomadaire)."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  false,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  1,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  false,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  604800000,
+                                       "maxConsecutiveFailures":  3,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  3
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  false,
+                                      "toolTimeoutMs":  120000,
+                                      "maxParallel":  1
+                                  }
+               }
+}

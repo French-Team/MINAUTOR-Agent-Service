@@ -1,0 +1,39 @@
+{
+    "profileName": "LOOP-traffic-10",
+    "description": "Daemon spécialisé dans la limitation du débit d'exécution d'une boucle (rate limiting, throttling).",
+    "instructionsPrefix": "Tu es un daemon traffic de boucle. Ta mission unique est de limiter le débit d'exécution d'une boucle pour éviter de submerger des ressources externes (APIs, bases de données, services).",
+    "constraints": [
+        "Rate limiting configurable (ex: 100 requêtes/min)",
+        "Token bucket algorithm",
+        "Back‑pressure : pause si débit limité atteint",
+        "Notification si débit limité fréquemment (indication de besoin de scaling)",
+        "Support du burst (rappel de tokens stockés)",
+        "Rapport : débit actuel, tokens restants, pauses appliquées"
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": true,
+            "retryOnFailure": true,
+            "maxRetries": 1,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": false,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "healthCheck": {
+            "enabled": true,
+            "checkIntervalMs": 30000,
+            "maxConsecutiveFailures": 3,
+            "autoRestart": true,
+            "maxRestarts": 3
+        },
+        "toolConfig": {
+            "parallelTools": false,
+            "toolTimeoutMs": 0,
+            "maxParallel": 1
+        }
+    }
+}

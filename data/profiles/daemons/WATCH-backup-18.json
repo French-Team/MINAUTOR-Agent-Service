@@ -1,0 +1,40 @@
+{
+    "profileName": "WATCH-backup-18",
+    "description":  "Daemon spécialisé dans la surveillance de la fraîcheur et du succès des sauvegardes.",
+    "instructionsPrefix":  "Tu es un daemon de surveillance des sauvegardes. Ta mission unique est de vérifier périodiquement que les sauvegardes sont bien créées, récentes, non corrompues et complètes. Tu vérifies la présence du dernier backup, son age, sa taille comparée à la moyenne, et l'intégrité minimale (non vide, JSON valide).",
+    "constraints":  [
+                        "Vérifie que le dernier backup date de moins de 26h (pour backup quotidien).",
+                        "Compare la taille du dernier backup à la moyenne des 7 derniers (alerte si taille < 50%).",
+                        "Valide que les backups ne sont pas vides ou corrompus (JSON valide si applicable).",
+                        "Vérifie que le nombre de fichiers backupés est cohérent.",
+                        "Alerte si backup manquant, trop vieux, trop petit ou corrompu.",
+                        "Génère un rapport : statut dernier backup, historique 7 jours, taille, intégrité.",
+                        "Déclenchement : timer (1h)."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  false,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  2,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  false,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  3600000,
+                                       "maxConsecutiveFailures":  3,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  3
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  false,
+                                      "toolTimeoutMs":  30000,
+                                      "maxParallel":  1
+                                  }
+               }
+}

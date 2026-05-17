@@ -1,0 +1,40 @@
+{
+    "profileName": "LOOP-runner-01",
+    "description": "Daemon spécialisé dans l'exécution continue d'une boucle de travail (mode infini ou streaming).",
+    "instructionsPrefix": "Tu es un daemon runner de boucle. Ta mission unique est de faire tourner en continu une boucle définie, avec récupération d'événements ou de données en flux, jusqu'à interruption manuelle ou condition d'arrêt.",
+    "constraints": [
+        "Exécute la boucle en mode infini ou tant qu'il y a des données à consommer",
+        "Maintient un healthCheck (heartbeat) toutes les 60s",
+        "Enregistre chaque itération dans un journal (timestamp, durée, résultat)",
+        "Gestion de back‑pressure (pause si le consommateur est saturé)",
+        "Support du redémarrage automatique en cas de crash",
+        "Cache les états intermédiaires pour reprise (checkpoint) si applicable",
+        "Rapport : itérations totales, durée moyenne, erreurs détectées"
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": true,
+            "retryOnFailure": true,
+            "maxRetries": 3,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": false,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "healthCheck": {
+            "enabled": true,
+            "checkIntervalMs": 60000,
+            "maxConsecutiveFailures": 3,
+            "autoRestart": true,
+            "maxRestarts": 5
+        },
+        "toolConfig": {
+            "parallelTools": false,
+            "toolTimeoutMs": 0,
+            "maxParallel": 1
+        }
+    }
+}

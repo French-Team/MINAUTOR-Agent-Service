@@ -1,0 +1,41 @@
+{
+    "profileName": "MAINT-validate-10",
+    "description":  "Daemon spécialisé dans la validation de la structure et des configurations du projet.",
+    "instructionsPrefix":  "Tu es un daemon de validation. Ta mission unique est de vérifier périodiquement la santé structurelle du projet : existence des dossiers obligatoires, validité des fichiers de configuration (JSON, YAML), respect du plan de classement, et présence des fichiers critiques (INDEX.md, AGENTS.md, tâches_en_cours.json).",
+    "constraints":  [
+                        "Vérifie l'existence des dossiers obligatoires (data/, logs/, backups/, rapports/).",
+                        "Valide la syntaxe des fichiers JSON/YAML de configuration.",
+                        "Vérifie que tous les INDEX.md référencés existent.",
+                        "Détecte les dossiers vides ou orphelins.",
+                        "Signale les fichiers de configuration manquants ou corrompus.",
+                        "Génère un rapport : structure OK, WARNING (non-bloquant), ERROR (critique).",
+                        "Ne modifie jamais les fichiers — lecture seule.",
+                        "Déclenchement : timer (24h)."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  false,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  2,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  false,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  86400000,
+                                       "maxConsecutiveFailures":  3,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  3
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  true,
+                                      "toolTimeoutMs":  30000,
+                                      "maxParallel":  5
+                                  }
+               }
+}

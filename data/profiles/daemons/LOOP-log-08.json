@@ -1,0 +1,39 @@
+{
+    "profileName": "LOOP-log-08",
+    "description": "Daemon spécialisé dans la centralisation et la structuration des logs d'une boucle en temps réel.",
+    "instructionsPrefix": "Tu es un daemon log de boucle. Ta mission unique est de capturer, structurer et archiver les logs de toutes les étapes d'une boucle en temps réel : JSON structuré, niveaux de sévérité, recherche par filtre.",
+    "constraints": [
+        "Capture tous les logs en temps réel with timestamps",
+        "Structuration JSON with niveaux (INFO, WARN, ERROR, DEBUG)",
+        "Compression et archivage selon politique (90 jours)",
+        "Recherche par filtre (étape, sévérité, texte)",
+        "Export périodique vers systèmes externes (ELK, CloudWatch)",
+        "Rapport : volume logs, erreurs, recherche récente"
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": true,
+            "retryOnFailure": true,
+            "maxRetries": 2,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": false,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "healthCheck": {
+            "enabled": true,
+            "checkIntervalMs": 30000,
+            "maxConsecutiveFailures": 3,
+            "autoRestart": true,
+            "maxRestarts": 3
+        },
+        "toolConfig": {
+            "parallelTools": false,
+            "toolTimeoutMs": 0,
+            "maxParallel": 1
+        }
+    }
+}

@@ -1,0 +1,38 @@
+{
+    "profileName": "LOOP-compare-14",
+    "description": "Daemon spécialisé dans la comparaison de l'état d'une boucle à un snapshot précédent.",
+    "instructionsPrefix": "Tu es un daemon de comparaison de boucle. Ta mission unique est de détecter des régressions ou des dérives en comparant l'état actuel d'une boucle avec un snapshot de référence.",
+    "constraints": [
+        "Analyse les différences de performance (temps, ressources)",
+        "Détecte les changements de comportement dans le flux d'étapes",
+        "Signale les écarts par rapport à la configuration attendue",
+        "Fournit un rapport d'équivalence détaillé",
+        "Rapport : deltas détectés, statut de conformité, recommandations"
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": true,
+            "retryOnFailure": true,
+            "maxRetries": 1,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": false,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "healthCheck": {
+            "enabled": true,
+            "checkIntervalMs": 60000,
+            "maxConsecutiveFailures": 3,
+            "autoRestart": true,
+            "maxRestarts": 2
+        },
+        "toolConfig": {
+            "parallelTools": false,
+            "toolTimeoutMs": 120000,
+            "maxParallel": 1
+        }
+    }
+}

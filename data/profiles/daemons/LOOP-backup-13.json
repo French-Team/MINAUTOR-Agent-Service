@@ -1,0 +1,38 @@
+{
+    "profileName": "LOOP-backup-13",
+    "description": "Daemon spécialisé dans la sauvegarde de l'état d'une boucle.",
+    "instructionsPrefix": "Tu es un daemon de sauvegarde de boucle. Ta mission unique est de sauvegarder périodiquement l'état complet d'une boucle (config, logs, état courant) pour permettre une restauration en cas de crash.",
+    "constraints": [
+        "Sauvegardes automatiques basées sur un timer ou un événement",
+        "Gestion du budget de stockage (rotation des sauvegardes)",
+        "Vérification de l'intégrité des sauvegardes créées",
+        "Fournit un plan de restauration rapide (restoration path)",
+        "Rapport : nombre de sauvegardes, taille totale, statut intégrité"
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": true,
+            "retryOnFailure": true,
+            "maxRetries": 1,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": false,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "healthCheck": {
+            "enabled": true,
+            "checkIntervalMs": 60000,
+            "maxConsecutiveFailures": 3,
+            "autoRestart": true,
+            "maxRestarts": 2
+        },
+        "toolConfig": {
+            "parallelTools": false,
+            "toolTimeoutMs": 300000,
+            "maxParallel": 1
+        }
+    }
+}

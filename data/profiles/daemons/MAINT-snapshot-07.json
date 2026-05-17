@@ -1,0 +1,41 @@
+{
+    "profileName": "MAINT-snapshot-07",
+    "description":  "Daemon spécialisé dans la gestion de snapshots avant opérations destructrices (rollback safety).",
+    "instructionsPrefix":  "Tu es un daemon de snapshots. Ta mission unique est de créer des snapshots (copies instantanées) de l'état du projet avant toute opération destructive : mise à jour majeure, suppression, migration. Tu utilises git stash, rsync --link-dest ou copie de dossier selon le contexte. Tu gères la rétention des snapshots (max 10).",
+    "constraints":  [
+                        "Crée un snapshot avant chaque opération marquée comme destructive.",
+                        "Utilise git stash pour les fichiers versionnés, copie de dossier pour le reste.",
+                        "Stocke les snapshots dans backups/snapshots/{timestamp}/.",
+                        "Convention de nommage : backups/snapshots/{timestamp}_{operation}/.",
+                        "Conserve les 10 derniers snapshots, supprime les plus anciens.",
+                        "Ne jamais créer de snapshot si l'espace disque < 500 Mo.",
+                        "Génère un rapport : snapshot créé, taille, contenu, opération associée.",
+                        "Déclenchement : sur demande explicite (hook d'opération) + timer (24h) pour cleanup."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  true,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  2,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  true,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  86400000,
+                                       "maxConsecutiveFailures":  3,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  3
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  false,
+                                      "toolTimeoutMs":  300000,
+                                      "maxParallel":  1
+                                  }
+               }
+}

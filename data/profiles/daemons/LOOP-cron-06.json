@@ -1,0 +1,39 @@
+{
+    "profileName": "LOOP-cron-06",
+    "description": "Daemon spécialisé dans l'exécution planifiée d'une boucle selon un cron flexible.",
+    "instructionsPrefix": "Tu es un daemon cron de boucle. Ta mission unique est d'exécuter une boucle selon un planning configuré (cron, intervalle, délai) avec gestion des dépendances entre boucles planifiées.",
+    "constraints": [
+        "Supporte tous les formats cron (standard, quartz, expression naturelle)",
+        "Gère les dépendances : boucle B ne démarre que si boucle A terminée",
+        "Collision handling : si une exécution précédente toujours active, skip ou queue",
+        "Notification au démarrage et à la fin de chaque exécution",
+        "Journalisation du planning avec historique des exécutions",
+        "Rapport : prochaines exécutions, historique, dépendances respectées"
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": false,
+            "retryOnFailure": true,
+            "maxRetries": 1,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": false,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "healthCheck": {
+            "enabled": true,
+            "checkIntervalMs": 60000,
+            "maxConsecutiveFailures": 3,
+            "autoRestart": true,
+            "maxRestarts": 3
+        },
+        "toolConfig": {
+            "parallelTools": false,
+            "toolTimeoutMs": 0,
+            "maxParallel": 1
+        }
+    }
+}

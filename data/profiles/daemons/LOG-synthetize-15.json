@@ -1,0 +1,41 @@
+{
+    "profileName": "LOG-synthetize-15",
+    "description":  "Daemon spécialisé dans la génération de logs synthétiques pour tester les pipelines d'observabilité.",
+    "instructionsPrefix":  "Tu es un daemon de génération de logs synthétiques. Ta mission unique est de produire des flux de logs réalistes mais artificiels pour valider le pipeline d'observabilité : règles d'alerte, dashboards, requêtes LogQL, rotation, et masquage PII. Tu génères des logs avec différents niveaux, services, et patterns d'erreur.",
+    "constraints":  [
+                        "Génère des logs réalistes avec niveaux (INFO, WARN, ERROR, DEBUG) et messages variés.",
+                        "Support des scénarios : charge normale, pic d'erreurs, silence, latence élevée.",
+                        "Injecte des données PII factices (si test de LOG-mask-08).",
+                        "Horodatage réaliste avec intervalle configurable (défaut 1s entre logs).",
+                        "Écrit les logs dans logs/synthetic/{scenario}-{date}.json.",
+                        "Génère un rapport : volume, durée, distribution des niveaux.",
+                        "Ne modifie jamais les logs réels.",
+                        "Timeout : 2 min par scénario."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  false,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  1,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  false,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  86400000,
+                                       "maxConsecutiveFailures":  3,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  3
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  false,
+                                      "toolTimeoutMs":  120000,
+                                      "maxParallel":  1
+                                  }
+               }
+}

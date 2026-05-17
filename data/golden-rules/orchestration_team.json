@@ -2,14 +2,14 @@
   "rules": [
     {
       "id": "orchestration-orchestrateur-profile",
-      "description": "Le profil orchestrateur doit exister dans data/profiles/agents/orchestrateur.json.",
-      "check": "lambda: __import__('os').path.exists('data/profiles/agents/orchestrateur.json')",
+      "description": "Le profil orchestrateur doit exister dans data/profiles/agents/AGENT-orchestrateur-04.json.",
+      "check": "lambda: __import__('os').path.exists('data/profiles/agents/AGENT-orchestrateur-04.json')",
       "severity": "critical"
     },
     {
       "id": "orchestration-superviseur-profile",
-      "description": "Le profil agent-superviseur doit exister dans data/profiles/agents/agent-superviseur.json.",
-      "check": "lambda: __import__('os').path.exists('data/profiles/agents/agent-superviseur.json')",
+      "description": "Le profil agent-superviseur doit exister dans data/profiles/agents/AGENT-superviseur-06.json.",
+      "check": "lambda: __import__('os').path.exists('data/profiles/agents/AGENT-superviseur-06.json')",
       "severity": "critical"
     },
     {
@@ -27,13 +27,13 @@
     {
       "id": "orchestration-orchestrateur-instructions",
       "description": "Le profil orchestrateur doit contenir la règle 'NE PRODUIS JAMAIS de code' (PACO compliance).",
-      "check": "lambda: 'NE PRODUIS JAMAIS' in __import__('json').load(__import__('builtins').open('data/profiles/agents/orchestrateur.json'))['instructionsPrefix'] if __import__('os').path.exists('data/profiles/agents/orchestrateur.json') else False",
+      "check": "lambda: 'NE PRODUIS JAMAIS' in __import__('json').load(__import__('builtins').open('data/profiles/agents/AGENT-orchestrateur-04.json'))['instructionsPrefix'] if __import__('os').path.exists('data/profiles/agents/AGENT-orchestrateur-04.json') else False",
       "severity": "critical"
     },
     {
       "id": "orchestration-superviseur-readonly",
       "description": "Le profil agent-superviseur doit être en readonly (ne modifie jamais les fichiers).",
-      "check": "lambda: __import__('json').load(__import__('builtins').open('data/profiles/agents/agent-superviseur.json'))['config']['guardian'].get('readonly', False) if __import__('os').path.exists('data/profiles/agents/agent-superviseur.json') else False",
+      "check": "lambda: __import__('json').load(__import__('builtins').open('data/profiles/agents/AGENT-superviseur-06.json'))['config']['guardian'].get('readonly', False) if __import__('os').path.exists('data/profiles/agents/AGENT-superviseur-06.json') else False",
       "severity": "critical"
     },
     {

@@ -1,0 +1,40 @@
+{
+    "profileName": "WATCH-config-16",
+    "description":  "Daemon spécialisé dans la détection de dérive de configuration (config drift monitoring).",
+    "instructionsPrefix":  "Tu es un daemon de surveillance de configuration. Ta mission unique est de surveiller les fichiers de configuration critiques et de détecter toute dérive par rapport à la baseline (état de référence enregistré). Tu compares les valeurs actuelles aux valeurs attendues et signales les écarts. Tu ne modifies jamais les configurations.",
+    "constraints":  [
+                        "Maintient une baseline des fichiers de configuration surveillés (hash + valeurs clés).",
+                        "Compare périodiquement les configurations actuelles à la baseline.",
+                        "Détecte les écarts : valeur modifiée, clé ajoutée/supprimée, permission changée.",
+                        "Ignore les changements attendus (mise à jour planifiée, seed reset).",
+                        "Alerte en cas de dérive non planifiée (pushNotification).",
+                        "Génère un rapport : fichiers surveillés, dérives détectées, diff.",
+                        "Déclenchement : timer (5min)."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  false,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  2,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  true,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  300000,
+                                       "maxConsecutiveFailures":  3,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  3
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  true,
+                                      "toolTimeoutMs":  15000,
+                                      "maxParallel":  5
+                                  }
+               }
+}

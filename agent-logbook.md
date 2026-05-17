@@ -13,11 +13,26 @@
 | 3 | **Self-Correction** | ✅ | Boucles de validation et auto-correction des sorties LLM |
 | 4 | **Parallel Tools** | ✅ | Exécution d'outils en parallèle pour la performance |
 | 5 | **Scaffold Agent** | ✅ | Création automatisée d'agents (nom, template, profil) |
-| 6 | **Banque de Profils** | ✅ | 64 profils (28 agents, 20 bots, 16 daemons) — 0 stub |
-| 7 | **Protocole PACO** | ✅ | Keyword registry, délégation obligatoire, zéro production directe |
-| 8 | **Équipe Orchestration** | ✅ | orchestrateur + agent-superviseur + DAEMON-superviseur-01 |
-| 9 | **Golden Rules** | ✅ | Règles de validation : agent, skill, orchestration PACO |
-| 10 | **Templates** | ✅ | standard, fast, daemon, orchestration-team |
+| 6 | **Streaming UI** | ✅ | Affichage progressif des réponses dans le terminal |
+| 7 | **Intelligence Amont** | ✅ | Profils dédiés à la Recherche Web, Code et Planification |
+| 8 | **Banque de Profils** | ✅ | 64 profils (28 agents, 20 bots, 16 daemons) — 0 stub |
+| 9 | **Orchestration PACO** | ✅ | Équipe (Orchestrateur, Superviseur) pilotant la certification |
+| 10 | **Golden Rules** | ✅ | Règles de validation : agent, skill, orchestration PACO |
+| 11 | **Templates** | ✅ | standard, fast, daemon, orchestration-team |
+
+---
+
+## ✅ Étapes Terminées
+
+| Phase | Description | Points clés |
+|-------|-------------|-------------|
+| 🛡️ **Sécurité** | Implémentation du Guardian | Filtrage Regex, Audit Trail, confirmation forcée. |
+| 🔄 **Fiabilité** | Self-Correction | Retry technique + validation métier par LLM. |
+| ⚡ **Performance** | Parallel Tools | `Promise.all` sur les outils, `execAsync`, throttling. |
+| 🔄 **Certification** | Auto-correction++ | Augmentation à 5 tentatives, détection de stagnation, injection du feedback reviewer et calibration du Reviewer (Golden Rules). |
+| 🧪 **Analyse Workflow**| Correction Échec | Identification de l'instabilité des petits modèles (1.2B) et réduction de la sévérité du Reviewer pour éviter les blocages sur des points subjectifs. |
+| 🗺️ **Cartographie**| Profil Pisteur & Boucle Tools | Implémentation de la boucle d'exécution des outils dans le moteur pour permettre l'autonomie réelle. |
+| 🤖 **Autonomie** | Scaffold Automatisé | Choix autonome du nom (Mythologie), Template et Profil. Amélioration du matching des dieux grecs (extraction intelligente). |
 
 ---
 

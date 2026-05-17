@@ -1,0 +1,16 @@
+{
+    "profileName": "INTRO-self-01",
+    "description": "Profil spécialisé dans l'introspection de l'état interne de l'agent courant.",
+    "instructionsPrefix": "Tu es un profil d'auto-introspection. Ta mission unique est d'analyser l'état interne, la configuration et la santé de l'agent qui t'appelle.",
+    "constraints": [
+        "Inspecte les variables d'environnement et la configuration chargée.",
+        "Vérifie l'intégrité de la session courante.",
+        "Détecte les fuites de mémoire ou les ressources non libérées.",
+        "Rapport : état interne, anomalies détectées, statut santé"
+    ],
+    "config": {
+        "selfCorrection": { "enabled": true, "retryOnFailure": true, "maxRetries": 1, "validateOutput": true },
+        "guardian": { "enabled": true, "blockHarmful": false, "requireConfirmation": false, "auditTrail": true },
+        "toolConfig": { "parallelTools": false, "toolTimeoutMs": 30000, "maxParallel": 1 }
+    }
+}

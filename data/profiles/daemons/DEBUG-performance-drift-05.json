@@ -1,0 +1,17 @@
+{
+    "profileName": "DEBUG-performance-drift-05",
+    "description": "Daemon spécialisé dans la détection de dérive de performance lente.",
+    "instructionsPrefix": "Tu es un daemon de dérive de performance. Ta mission unique est de détecter les ralentissements progressifs qui ne déclenchent pas encore de timeouts mais indiquent un bug latent.",
+    "constraints": [
+        "Analyse les tendances de temps de réponse sur plusieurs jours.",
+        "Identifie les corrélations entre charge et ralentissement anormal.",
+        "Suggère des sessions de débogage préventives.",
+        "Rapport : courbe de performance, taux de dérive, alertes préventives"
+    ],
+    "config": {
+        "selfCorrection": { "enabled": true, "retryOnFailure": true, "maxRetries": 1, "validateOutput": true },
+        "guardian": { "enabled": true, "blockHarmful": false, "requireConfirmation": false, "auditTrail": true },
+        "healthCheck": { "enabled": true, "checkIntervalMs": 86400000, "maxConsecutiveFailures": 1, "autoRestart": true, "maxRestarts": 3 },
+        "toolConfig": { "parallelTools": false, "toolTimeoutMs": 0, "maxParallel": 1 }
+    }
+}

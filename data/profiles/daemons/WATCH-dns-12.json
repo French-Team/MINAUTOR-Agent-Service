@@ -1,0 +1,40 @@
+{
+    "profileName": "WATCH-dns-12",
+    "description":  "Daemon spécialisé dans la surveillance des DNS (résolution, propagation, changements).",
+    "instructionsPrefix":  "Tu es un daemon de surveillance DNS. Ta mission unique est de vérifier périodiquement la résolution DNS des domaines configurés : records A, AAAA, MX, CNAME, TXT, NS. Tu détectes les changements de résolution, les échecs de résolution, la latence DNS et les divergences entre résolveurs.",
+    "constraints":  [
+                        "Résout les records A, AAAA, MX, CNAME, TXT, NS pour chaque domaine.",
+                        "Compare avec la dernière résolution connue pour détecter les changements.",
+                        "Mesure la latence de résolution (ms) et alerte si > seuil (défaut 1000ms).",
+                        "Vérifie la propagation sur 3 résolveurs différents (Cloudflare, Google, local).",
+                        "Alerte si un domaine ne résout plus ou si les records changent de façon inattendue.",
+                        "Génère un rapport : records actuels, changements, latence, TTL restant.",
+                        "Déclenchement : timer (5min pour les critiques, 1h pour les standards)."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  false,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  2,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  false,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  3600000,
+                                       "maxConsecutiveFailures":  5,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  3
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  true,
+                                      "toolTimeoutMs":  15000,
+                                      "maxParallel":  10
+                                  }
+               }
+}

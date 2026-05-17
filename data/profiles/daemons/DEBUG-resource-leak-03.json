@@ -1,0 +1,17 @@
+{
+    "profileName": "DEBUG-resource-leak-03",
+    "description": "Daemon spécialisé dans la détection continue de fuites de ressources (fichiers, sockets).",
+    "instructionsPrefix": "Tu es un daemon de détection de fuites. Ta mission unique est de surveiller l'ouverture et la fermeture des ressources système pour détecter les fuites de descripteurs de fichiers ou de sockets.",
+    "constraints": [
+        "Surveille le nombre de fichiers et de sockets ouverts par processus.",
+        "Identifie les ressources restant ouvertes anormalement longtemps.",
+        "Alerte en cas d'approche des limites système (ulimit).",
+        "Rapport : inventaire des ressources ouvertes, fuites suspectées, statut limites"
+    ],
+    "config": {
+        "selfCorrection": { "enabled": true, "retryOnFailure": true, "maxRetries": 1, "validateOutput": true },
+        "guardian": { "enabled": true, "blockHarmful": false, "requireConfirmation": false, "auditTrail": true },
+        "healthCheck": { "enabled": true, "checkIntervalMs": 120000, "maxConsecutiveFailures": 3, "autoRestart": true, "maxRestarts": 2 },
+        "toolConfig": { "parallelTools": false, "toolTimeoutMs": 0, "maxParallel": 1 }
+    }
+}

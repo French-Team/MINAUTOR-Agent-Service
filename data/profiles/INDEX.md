@@ -1,6 +1,6 @@
 # Lexique Global des Profils d'Agents
 
-Banque de profils pré-définis pour le moteur Hermes. Chaque profil exécute **une mission atomique unique** dans son domaine strict. **64 profils — 0 stub restant.**
+Banque de profils pré-définis pour le moteur Hermes. Chaque profil exécute **une mission atomique unique** dans son domaine strict. **541 profils — 0 stub restant.**
 
 **Principe fondamental** : *"Mieux vaut savoir faire une chose parfaitement que mal faire plusieurs choses à la fois."*
 
@@ -9,22 +9,22 @@ Banque de profils pré-définis pour le moteur Hermes. Chaque profil exécute **
 ## 👥 Agents — Assistants Conversationnels
 Profils destinés aux interactions directes avec l'utilisateur. Ils reçoivent une mission, l'exécutent avec TDD, documentent et passent la validation.
 
-**Domaines** : Orchestration, Recherche, Rétro-ingénierie, Planification, Développement, Documentation, Validation
-- **Total profils** : 28 (28 complétés ✅)
+**Domaines** : Analyse projet, Orchestration générale, Orchestration spécialisée, Supervision, Documentation, Ingénierie, Diagrammes, Intérim, Validation, Recherche, Planification, Développement (CSS, Next.js, Python, React, Rust, Vanilla, Vite), Revue
+- **Total profils** : 214 (214 complétés ✅)
 - [Index des Agents](./agents/INDEX.md)
 
 ## 🤖 Bots — Automatisation Technique
 Profils spécialisés dans l'exécution rapide et atomique de tâches techniques, sans interaction utilisateur.
 
-**Domaines** : Automatisation, Recherche, Planification, Git, Docker, Fichiers, Scripts
-- **Total profils** : 20 (20 complétés ✅)
+**Domaines** : Sauvegarde, Docker, Exécution, Fichiers, Formatage, Git, Optimisation (8 profils), Paquets (10 profils), Performance (8 profils), Planification (20 profils), Recherche (20 profils), Réseau (10 profils), Scripts (20 profils), Synchronisation (10 profils), Tests (19 profils), Boucles de travail (21 profils), Signaux (10 profils), Rétro-actions (8 profils), Introspection (10 profils), Débogage (10 profils), Refonte (10 profils)
+- **Total profils** : 269 (269 complétés ✅)
 - [Index des Bots](./bots/INDEX.md)
 
 ## ⚙️ Daemons — Tâches de Fond
 Profils pour les agents autonomes qui tournent en arrière-plan (surveillance, veille, logs, maintenance).
 
-**Domaines** : Surveillance système, Veille amont, Logs, Maintenance
-- **Total profils** : 16 (16 complétés ✅)
+**Domaines** : Logs (15 profils), Maintenance (12 profils), Performance (5 profils), Surveillance système (19 profils), Supervision PACO, Veille amont, Boucles autonomes (15 profils), Coordination signaux (10 profils), Analyse rétro-active (8 profils), Surveillance système (5 profils), Surveillance erreurs (5 profils), Surveillance structurelle (5 profils)
+- **Total profils** : 103 (103 complétés ✅)
 - [Index des Daemons](./daemons/INDEX.md)
 
 ---
@@ -33,10 +33,10 @@ Profils pour les agents autonomes qui tournent en arrière-plan (surveillance, v
 
 | Type | Complété | Stub vide | **Total** |
 |------|----------|-----------|-----------|
-| Agents | 28 | 0 | **28** |
-| Bots | 20 | 0 | **20** |
-| Daemons | 16 | 0 | **16** |
-| **Total** | **64** | **0** | **64** |
+| Agents | 226 | 0 | **226** |
+| Bots | 269 | 0 | **269** |
+| Daemons | 103 | 0 | **103** |
+| **Total** : **598** | **0** : **598** |
 
 ---
 
@@ -50,4 +50,4 @@ Tous les profils suivent le cadre défini dans `data/questions-importantes/` :
 - [Protocole PACO](../protocols/paco-protocol.md) — Délégation obligatoire par mots-clés, zéro production directe, supervision continue
 
 ---
-*Dernière mise à jour : 2026-05-16 — Source de vérité des profils agents*
+*Dernière mise à jour : 2026-05-17 — Source de vérité des profils agents*

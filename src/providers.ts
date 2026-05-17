@@ -9,6 +9,7 @@ export interface ProviderConfig {
   defaultModel: string
   enabled: boolean
   currentKeyIndex: number
+  maxParallel: number
   /** legacy single-key — migrated to apiKeys on load */
   apiKey?: string
 }
@@ -29,6 +30,7 @@ const DEFAULT_PROVIDERS: ProvidersFile = {
       defaultModel: 'kilo/kilo-auto/free',
       enabled: true,
       currentKeyIndex: 0,
+      maxParallel: 1,
     },
     {
       name: 'Google Gemini',
@@ -38,6 +40,7 @@ const DEFAULT_PROVIDERS: ProvidersFile = {
       defaultModel: 'gemini-2.5-flash',
       enabled: false,
       currentKeyIndex: 0,
+      maxParallel: 1,
     },
     {
       name: 'OpenRouter',
@@ -47,6 +50,7 @@ const DEFAULT_PROVIDERS: ProvidersFile = {
       defaultModel: 'openrouter/free',
       enabled: false,
       currentKeyIndex: 0,
+      maxParallel: 1,
     },
     {
       name: 'Opencode Zen',
@@ -56,6 +60,7 @@ const DEFAULT_PROVIDERS: ProvidersFile = {
       defaultModel: 'opencode-zen/default',
       enabled: false,
       currentKeyIndex: 0,
+      maxParallel: 1,
     },
     {
       name: 'Ollama',
@@ -65,6 +70,7 @@ const DEFAULT_PROVIDERS: ProvidersFile = {
       defaultModel: 'llama3.2',
       enabled: false,
       currentKeyIndex: 0,
+      maxParallel: 1,
     },
     {
       name: 'LM Studio',
@@ -74,6 +80,7 @@ const DEFAULT_PROVIDERS: ProvidersFile = {
       defaultModel: 'local-model',
       enabled: false,
       currentKeyIndex: 0,
+      maxParallel: 4,
     },
   ],
 }
@@ -95,6 +102,7 @@ function loadProviders(): ProvidersFile {
         p.apiKeys.unshift(p.apiKey)
       }
       if (p.currentKeyIndex === undefined) p.currentKeyIndex = 0
+      if (p.maxParallel === undefined) p.maxParallel = 1
       delete (p as any).apiKey
     }
     return data
@@ -151,6 +159,7 @@ export function addProvider(config: Partial<ProviderConfig> & { name: string; pr
     defaultModel: config.defaultModel || 'gpt-4',
     enabled: config.enabled ?? true,
     currentKeyIndex: 0,
+    maxParallel: config.maxParallel ?? 1,
   })
   saveProviders(data)
 }

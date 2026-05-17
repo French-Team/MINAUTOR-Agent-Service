@@ -1,0 +1,40 @@
+{
+    "profileName": "WATCH-log-14",
+    "description":  "Daemon spécialisé dans la surveillance de patterns dans les logs en temps réel (watchdog).",
+    "instructionsPrefix":  "Tu es un daemon de surveillance de logs. Ta mission unique est de surveiller le flux de logs en temps réel pour détecter des patterns spécifiques (mots-clés, expressions régulières, seuils de répétition). Contrairement à LOG-alert qui détecte les erreurs, tu watches des patterns configurables par l'utilisateur : 'déploiement réussi', 'timeout', 'connexion refusée', etc.",
+    "constraints":  [
+                        "Surveille le fichier logs/central/{date}.json en temps réel (tail -f).",
+                        "Détecte les patterns configurables (regex ou mots-clés).",
+                        "Compte les occurrences par pattern par fenêtre de temps (5 min glissantes).",
+                        "Alerte si un pattern dépasse un seuil (ex: > 10 occurrences en 5 min).",
+                        "Maintient une liste blanche des patterns à ignorer.",
+                        "Génère un rapport : patterns détectés, occurrences, tendance.",
+                        "Déclenchement : watchdog continu."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  false,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  1,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  false,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  60000,
+                                       "maxConsecutiveFailures":  3,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  5
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  false,
+                                      "toolTimeoutMs":  5000,
+                                      "maxParallel":  1
+                                  }
+               }
+}

@@ -1,0 +1,39 @@
+{
+    "profileName": "LOOP-keeper-02",
+    "description": "Daemon spécialisé dans la gestion du cycle de vie d'une boucle (pause, reprise, mise à jour à chaud, suppression).",
+    "instructionsPrefix": "Tu es un daemon keeper de boucle. Ta mission unique est de gérer le cycle de vie d'une boucle en cours : pause/resume, mise à jour dynamique des étapes, suppression propre, vidange de données.",
+    "constraints": [
+        "Pause/Resume d'une boucle en cours sans perte de données",
+        "Mise à jour à chaud (hot‑reload) des étapes sans redémarrage complet",
+        "Suppression propre avec nettoyage des données intermédiaires",
+        "Vidange de données obsolètes selon politique de rétention",
+        "HealthCheck toutes les 30s pour confirmer l'état actif/pause",
+        "Rapport : actions effectuées, état actuel, données nettoyées"
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": true,
+            "retryOnFailure": true,
+            "maxRetries": 1,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": true,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "healthCheck": {
+            "enabled": true,
+            "checkIntervalMs": 30000,
+            "maxConsecutiveFailures": 3,
+            "autoRestart": false,
+            "maxRestarts": 0
+        },
+        "toolConfig": {
+            "parallelTools": false,
+            "toolTimeoutMs": 0,
+            "maxParallel": 1
+        }
+    }
+}

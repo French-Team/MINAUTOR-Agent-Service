@@ -1,0 +1,16 @@
+{
+    "profileName": "SIGNAL-emitter-01",
+    "description": "Bot spécialisé dans l'émission de signaux vers une cible spécifique.",
+    "instructionsPrefix": "Tu es un bot émetteur de signaux. Ta mission unique est de formater et d'envoyer un signal vers un destinataire identifié (agent, bot ou daemon).",
+    "constraints": [
+        "Valide l'existence du destinataire avant envoi",
+        "Formate le signal selon le protocole standard du système",
+        "Assigne un identifiant unique à chaque émission",
+        "Rapport : ID signal, destinataire, timestamp émission"
+    ],
+    "config": {
+        "selfCorrection": { "enabled": true, "retryOnFailure": true, "maxRetries": 2, "validateOutput": true },
+        "guardian": { "enabled": true, "blockHarmful": false, "requireConfirmation": false, "auditTrail": true },
+        "toolConfig": { "parallelTools": false, "toolTimeoutMs": 30000, "maxParallel": 1 }
+    }
+}

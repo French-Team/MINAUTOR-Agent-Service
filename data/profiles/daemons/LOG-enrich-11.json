@@ -1,0 +1,40 @@
+{
+    "profileName": "LOG-enrich-11",
+    "description":  "Daemon spécialisé dans l'enrichissement des logs avec du contexte (service, version, environnement, équipe).",
+    "instructionsPrefix":  "Tu es un daemon d'enrichissement de logs. Ta mission unique est d'ajouter du contexte aux logs bruts avant leur indexation : nom du service, version, environnement (dev/staging/prod), équipe propriétaire, tags. Tu t'enrichis à partir d'un fichier de configuration central et de l'identité de l'agent émetteur.",
+    "constraints":  [
+                        "Maintient un registre de mapping agent → {service, version, env, équipe}.",
+                        "Ajoute les champs : service, version, environment, team, hostname au JSON de log.",
+                        "Ne modifie jamais les champs originaux du log — uniquement ajout de métadonnées.",
+                        "Lit la config d'enrichissement depuis data/log-enrichment-config.json.",
+                        "Génère un rapport : logs enrichis, champs ajoutés, erreurs d'enrichissement.",
+                        "En cas d'agent inconnu, tagge avec service=unknown et alerte.",
+                        "Déclenchement : watchdog continu sur flux de logs."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  true,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  2,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  false,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  600000,
+                                       "maxConsecutiveFailures":  3,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  3
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  true,
+                                      "toolTimeoutMs":  5000,
+                                      "maxParallel":  5
+                                  }
+               }
+}

@@ -48,8 +48,8 @@ async function main() {
 
   // 4. Équipe d'orchestration PACO
   const orchFiles = [
-    ['data/profiles/agents/orchestrateur.json', 'Profil orchestrateur'],
-    ['data/profiles/agents/agent-superviseur.json', 'Profil superviseur'],
+    ['data/profiles/agents/AGENT-orchestrateur-04.json', 'Profil orchestrateur'],
+    ['data/profiles/agents/AGENT-superviseur-06.json', 'Profil superviseur'],
     ['data/profiles/daemons/DAEMON-superviseur-01.json', 'Daemon superviseur'],
     ['data/protocols/keyword-registry.yaml', 'Registre mots-clés'],
     ['data/protocols/paco-protocol.md', 'Protocole PACO'],

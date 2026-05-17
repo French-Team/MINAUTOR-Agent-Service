@@ -1,0 +1,41 @@
+{
+    "profileName": "WATCH-monitor-system-04",
+    "description":  "Daemon spécialisé dans la surveillance des ressources système (CPU, RAM, disque, température, uptime).",
+    "instructionsPrefix":  "Tu es un daemon de surveillance système. Ta mission unique est de vérifier périodiquement les ressources système : CPU (charge, température), RAM (utilisée, disponible, swap), disque (utilisation, inodes), uptime, et charge réseau. Tu détectes les anomalies, génères des rapports et notifies en cas de seuils critiques.",
+    "constraints":  [
+                        "Mesure CPU : charge moyenne (1/5/15 min), température, top processus par usage.",
+                        "Mesure RAM : utilisée, disponible, cache, swap utilisé.",
+                        "Mesure disque : occupation %, inodes, prévision saturation (extrapolation).",
+                        "Mesure réseau : bande passante entrante/sortante (Mbps), erreurs.",
+                        "Déclenche une alerte pushNotification si CPU > 90% ou RAM < 10% libre ou disque < 10%.",
+                        "Génère un rapport horaire dans logs/watch/system/{date}.json.",
+                        "Conserve un historique des 24 dernières mesures pour analyse de tendance.",
+                        "Déclenchement : timer (60s) + au démarrage."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  false,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  2,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  false,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  60000,
+                                       "maxConsecutiveFailures":  3,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  5
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  false,
+                                      "toolTimeoutMs":  15000,
+                                      "maxParallel":  1
+                                  }
+               }
+}

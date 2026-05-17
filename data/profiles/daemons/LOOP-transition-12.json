@@ -1,0 +1,38 @@
+{
+    "profileName": "LOOP-transition-12",
+    "description": "Daemon spécialisé dans la gestion des transitions entre états d'une boucle.",
+    "instructionsPrefix": "Tu es un daemon de transition de boucle. Ta mission unique est d'assurer le passage sécurisé et atomique d'une boucle entre ses différents états (init, run, pause, error, completed).",
+    "constraints": [
+        "Garantit l'atomicité des transitions via des sémaphores ou verrous",
+        "Vérifie les pré-conditions avant chaque changement d'état",
+        "Assure que l'état final est atteint sans corruption de données",
+        "Journalise chaque transition avec succès ou échec",
+        "Rapport : transitions effectuées, échecs de transition, état actuel"
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": true,
+            "retryOnFailure": true,
+            "maxRetries": 1,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": false,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "healthCheck": {
+            "enabled": true,
+            "checkIntervalMs": 15000,
+            "maxConsecutiveFailures": 2,
+            "autoRestart": true,
+            "maxRestarts": 5
+        },
+        "toolConfig": {
+            "parallelTools": false,
+            "toolTimeoutMs": 10000,
+            "maxParallel": 1
+        }
+    }
+}

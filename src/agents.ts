@@ -131,7 +131,7 @@ export function readLocalAgent(filename: string): AgentDefinition | null {
   }
 }
 
-const AGENT_TEMPLATE = `import type { AgentDefinition } from './types/agent-definition'
+const AGENT_TEMPLATE = `import type { AgentDefinition } from '../src/types/agent-definition.js'
 
 const definition: AgentDefinition = {
   id: '{{id}}',
@@ -158,7 +158,7 @@ const definition: AgentDefinition = {
 export default definition
 `
 
-const FAST_BOT_TEMPLATE = `import type { AgentDefinition } from './types/agent-definition'
+const FAST_BOT_TEMPLATE = `import type { AgentDefinition } from '../src/types/agent-definition.js'
 
 const definition: AgentDefinition = {
   id: '{{id}}',
@@ -221,7 +221,7 @@ const definition: AgentDefinition = {
 export default definition
 `
 
-const DAEMON_TEMPLATE = `import type { AgentDefinition } from './types/agent-definition'
+const DAEMON_TEMPLATE = `import type { AgentDefinition } from '../src/types/agent-definition.js'
 
 declare function pushNotification(from: string, message: string): void
 
@@ -282,6 +282,7 @@ export function scaffoldAgent(
   force = false,
   template: 'standard' | 'fast' | 'daemon' = 'standard',
   profile?: AgentProfile,
+  maxParallel?: number,
 ): string {
   ensureAgentsDir()
   const filename = `${id}.ts`
@@ -318,8 +319,16 @@ export function scaffoldAgent(
     content = content.replace(/\{\{notification_message\}\}/g, instructions.split('\n')[0] || 'Reminder notification')
   }
 
-  // Inject profile config if available
+  // Inject profile config if available (strip template defaults first)
   if (profile?.config) {
+    const configKeys = ['selfCorrection', 'guardian', 'healthCheck', 'streaming', 'rateLimit', 'toolConfig']
+    for (const key of configKeys) {
+      const profileVal = (profile.config as Record<string, unknown>)[key]
+      if (profileVal) {
+        const regex = new RegExp(`  ${key}:\\s*\\{[^}]*\\},?\\s*`, 'g')
+        content = content.replace(regex, '')
+      }
+    }
     const configLines: string[] = []
     if (profile.config.selfCorrection) configLines.push(`  selfCorrection: ${JSON.stringify(profile.config.selfCorrection, null, 2).replace(/\n/g, '\n  ')},`)
     if (profile.config.guardian) configLines.push(`  guardian: ${JSON.stringify(profile.config.guardian, null, 2).replace(/\n/g, '\n  ')},`)
@@ -329,10 +338,38 @@ export function scaffoldAgent(
     if (profile.config.toolConfig) configLines.push(`  toolConfig: ${JSON.stringify(profile.config.toolConfig, null, 2).replace(/\n/g, '\n  ')},`)
 
     if (configLines.length > 0) {
-      // Replace the default config in the template with the profile config
-      // This is a bit tricky with simple string replace, let's find the closing brace of the definition object
       const lastBraceIndex = content.lastIndexOf('}')
       content = content.slice(0, lastBraceIndex) + '\n  // Profile Config\n' + configLines.join('\n') + '\n}' + content.slice(lastBraceIndex + 1)
+    }
+  }
+
+  // Ensure toolConfig has all required fields (parallelTools, toolTimeoutMs, maxParallel)
+  if (maxParallel && maxParallel > 1) {
+    const toolConfigRegex = /toolConfig:\s*\{([^}]*)\}/
+    const match = content.match(toolConfigRegex)
+    const requiredFields = [
+      { key: 'parallelTools', value: 'true' },
+      { key: 'toolTimeoutMs', value: '30000' },
+      { key: 'maxParallel', value: String(maxParallel) },
+    ]
+    if (match) {
+      let existing = match[1]
+      for (const field of requiredFields) {
+        const regex = new RegExp(`${field.key}:\\s*[^,\\}]+`)
+        if (regex.test(existing)) {
+          existing = existing.replace(regex, `${field.key}: ${field.value}`)
+        } else {
+          existing = existing.trimEnd() + (existing.endsWith(',') || existing.trim().endsWith(',') ? '' : ',') + `\n    ${field.key}: ${field.value}`
+        }
+      }
+      content = content.replace(toolConfigRegex, `toolConfig: {${existing}}`)
+    } else {
+      const lastBraceIndex = content.lastIndexOf('}')
+      content = content.slice(0, lastBraceIndex) + `\n  toolConfig: {
+    parallelTools: true,
+    toolTimeoutMs: 30000,
+    maxParallel: ${maxParallel},
+  },\n` + content.slice(lastBraceIndex)
     }
   }
 

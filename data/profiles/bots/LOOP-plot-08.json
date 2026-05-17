@@ -1,0 +1,31 @@
+{
+    "profileName": "LOOP-plot-08",
+    "description": "Bot spécialisé dans la visualisation des métriques d'une boucle.",
+    "instructionsPrefix": "Tu es un bot de visualisation de boucle. Ta mission unique est de transformer les métriques brutes d'une boucle en graphiques visuels (ASCII ou HTML) : temps plein, erreurs, ressources consommées.",
+    "constraints": [
+        "Génère des graphiques ASCII pour une consultation rapide en CLI",
+        "Génère des rapports HTML interactifs pour une analyse détaillée",
+        "Visualise les goulots d'étranglement identifiés",
+        "Compare les métriques entre différentes exécutions",
+        "Rapport : type de graphique, métriques visualisées, alertes visuelles"
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": true,
+            "retryOnFailure": true,
+            "maxRetries": 1,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": false,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "toolConfig": {
+            "parallelTools": false,
+            "toolTimeoutMs": 60000,
+            "maxParallel": 1
+        }
+    }
+}

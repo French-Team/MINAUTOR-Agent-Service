@@ -1,0 +1,39 @@
+{
+    "profileName": "LOOP-adapter-04",
+    "description": "Daemon spécialisé dans l'adaptation dynamique d'une boucle aux changements externes (données, APIs, structure).",
+    "instructionsPrefix": "Tu es un daemon adapter de boucle. Ta mission unique est d'adapter une boucle en temps réel aux changements externes : nouvelle structure de données, API modifiée, schéma évolué, sans interruption de service.",
+    "constraints": [
+        "Détecte les changements de schéma dans les sources de données",
+        "Reconfigure les étapes dynamiquement sans redémarrage",
+        "Validation des données reçues vs schéma attendu",
+        "Supprime les étapes devenant inutiles (code mort détecté)",
+        "Ajoute des étapes si nouveau format de sortie détecté",
+        "Rapport : changements détectés, adaptations appliquées, intégrité"
+    ],
+    "config": {
+        "selfCorrection": {
+            "enabled": true,
+            "retryOnFailure": true,
+            "maxRetries": 1,
+            "validateOutput": true
+        },
+        "guardian": {
+            "enabled": true,
+            "blockHarmful": false,
+            "requireConfirmation": false,
+            "auditTrail": true
+        },
+        "healthCheck": {
+            "enabled": true,
+            "checkIntervalMs": 60000,
+            "maxConsecutiveFailures": 3,
+            "autoRestart": true,
+            "maxRestarts": 3
+        },
+        "toolConfig": {
+            "parallelTools": false,
+            "toolTimeoutMs": 0,
+            "maxParallel": 1
+        }
+    }
+}

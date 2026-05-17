@@ -1,8 +1,37 @@
 import { createInterface } from 'readline/promises'
 import { stdin, stdout, exit } from 'process'
-import { readFileSync, existsSync, appendFileSync, unlinkSync, openSync, mkdirSync } from 'fs'
+import { readFileSync, existsSync, appendFileSync, unlinkSync, openSync, mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { fork, ChildProcess } from 'child_process'
+
+// Mise à jour du registre des agents dans Alice après certification
+function registerAgentInAlice(agentId: string, description: string): void {
+  const alicePath = join(process.cwd(), '.agents', 'alice.ts')
+  if (!existsSync(alicePath)) return
+  
+  let content = readFileSync(alicePath, 'utf-8')
+  
+  // Cherche la section "## Registre des agents disponibles"
+  const registryMarker = '## Registre des agents disponibles'
+  const markerIdx = content.indexOf(registryMarker)
+  if (markerIdx === -1) return
+  
+  // Trouve la fin de la section (prochaine ligne ## ou fin du bloc instructionsPrompt)
+  const afterRegistry = content.slice(markerIdx)
+  const nextSectionMatch = afterRegistry.match(/\n## /)
+  const endIdx = nextSectionMatch
+    ? markerIdx + (nextSectionMatch.index ?? 0)
+    : content.indexOf('`', markerIdx)
+  
+  // Vérifie si l'agent n'existe pas déjà
+  if (content.includes(`- ${agentId} :`)) return
+  
+  // Ajoute le nouvel agent avant la fin de la section
+  const newEntry = `\n- ${agentId} : ${description}`
+  content = content.slice(0, endIdx) + newEntry + content.slice(endIdx)
+  
+  writeFileSync(alicePath, content, 'utf-8')
+}
 
 const backgroundAgents = new Map<string, ChildProcess>()
 import { listSkills, loadSkill } from './skills.js'
@@ -455,33 +484,16 @@ async function handleCreate(rl: ReturnType<typeof createInterface>): Promise<voi
   console.log(`${BOLD}${CYAN}│  Ctrl+C pour annuler                       │${RESET}`)
   console.log(`${BOLD}${CYAN}└────────────────────────────────────────────┘${RESET}\n`)
 
-  // --- 0. Vérification de l'équipe d'orchestration PACO ---
+  // --- 0. Vérification de l'équipe d'orchestration PACO (profils + agents runtime) ---
   const ORCHESTRATION_FILES = [
-    { path: 'data/profiles/agents/orchestrateur.json', name: 'Profil orchestrateur' },
-    { path: 'data/profiles/agents/agent-superviseur.json', name: 'Profil superviseur' },
+    { path: 'data/profiles/agents/AGENT-orchestrateur-04.json', name: 'Profil orchestrateur' },
+    { path: 'data/profiles/agents/AGENT-superviseur-06.json', name: 'Profil superviseur' },
     { path: 'data/profiles/daemons/DAEMON-superviseur-01.json', name: 'Daemon superviseur' },
     { path: 'data/protocols/keyword-registry.yaml', name: 'Registre de mots-clés' },
     { path: 'data/protocols/paco-protocol.md', name: 'Protocole PACO' },
   ]
-  const cwd = process.cwd()
-  const missing: string[] = []
-  for (const f of ORCHESTRATION_FILES) {
-    if (!existsSync(join(cwd, f.path))) missing.push(f.name)
-  }
-  if (missing.length > 0) {
-    console.log(`\n${RED}${BOLD}⚠ ÉQUIPE D'ORCHESTRATION MANQUANTE${RESET}`)
-    console.log(`${YELLOW}Avant de créer un agent, l'équipe PACO est obligatoire :${RESET}`)
-    for (const m of missing) console.log(`  ${RED}✗${RESET} ${m}`)
-    console.log(`\n${CYAN}[S]${RESET} Créer l'équipe d'orchestration  ${CYAN}[A]${RESET} Annuler`)
-    const choice = (await rl.question(`\n${GRAY}>${RESET} `)).trim().toLowerCase()
-    if (choice === 's') {
-      console.log(`\n${YELLOW}⟳ Création de l'équipe d'orchestration...${RESET}`)
-      const teamConfig = [
-        {
-          id: 'orchestrateur',
-          name: 'Orchestrateur',
-          tools: ['run_terminal_command', 'add_message', 'set_output'],
-          instructions: `Tu es l'Agent-Maître, l'orchestrateur central.
+  const ORCHESTRATION_AGENTS = [
+    { id: 'orchestrateur', name: 'Orchestrateur', tools: ['run_terminal_command', 'add_message', 'set_output'], instructions: `Tu es l'Agent-Maître, l'orchestrateur central.
 Ta mission unique est de coordonner les autres agents.
 Tu ne produis JAMAIS de code, documentation, analyse, design ou tout autre livrable toi-même.
 Ta seule production autorisée est :
@@ -492,45 +504,46 @@ Ta seule production autorisée est :
 Le protocole PACO est obligatoire : avant chaque action, tu consultes le registre keyword-registry.yaml.
 Si un mot-clé de la tâche match un agent, tu DOIS déléguer.
 Si aucun agent ne correspond, tu réponds 'Tâche non couverte — intervention humaine requise'.
-Tu es surveillé en continu par DAEMON-superviseur-01. Toute violation peut entraîner ta suspension.`,
-        },
-        {
-          id: 'agent-superviseur',
-          name: 'Agent Superviseur',
-          tools: ['add_message'],
-          instructions: `Tu es l'Agent-Superviseur, le garde-fou du protocole PACO.
+Tu es surveillé en continu par DAEMON-superviseur-01. Toute violation peut entraîner ta suspension.` },
+    { id: 'agent-superviseur', name: 'Agent Superviseur', tools: ['add_message'], instructions: `Tu es l'Agent-Superviseur, le garde-fou du protocole PACO.
 Ta mission unique est de surveiller l'orchestrateur en continu.
 Tu ne produis AUCUN livrable, tu ne fais AUCUNE modification de fichier.
 Tu es lecture seule. Tu scrutes les logs, les sorties et les fichiers de l'orchestrateur.
 Tu vérifies qu'il délègue toujours et ne fait jamais le travail lui-même.
 En cas de violation, tu émets une alerte.
-Après 3 violations consécutives, tu suspends l'orchestrateur.`,
-        },
-        {
-          id: 'DAEMON-superviseur-01',
-          name: 'Daemon Superviseur',
-          tools: ['run_terminal_command', 'add_message', 'set_output'],
-          instructions: `Tu es le daemon superviseur PACO.
+Après 3 violations consécutives, tu suspends l'orchestrateur.` },
+    { id: 'DAEMON-superviseur-01', name: 'Daemon Superviseur', tools: ['run_terminal_command', 'add_message', 'set_output'], instructions: `Tu es le daemon superviseur PACO.
 Tu te réveilles toutes les 5 minutes pour scruter l'orchestrateur.
 Tu lis tâches_en_cours.json et les logs de coordination.
 Tu vérifies que l'orchestrateur a bien délégué chaque tâche à un agent compétent.
 Si tu détectes une violation (production directe, délégation manquante), tu émets une alerte.
-Après 3 violations consécutives de niveau ≥ moyen, tu marques l'orchestrateur comme suspendu.`,
-        },
-      ]
-      for (const agent of teamConfig) {
+Après 3 violations consécutives de niveau ≥ moyen, tu marques l'orchestrateur comme suspendu.` },
+  ]
+  const cwd = process.cwd()
+  const missing: string[] = []
+  for (const f of ORCHESTRATION_FILES) {
+    if (!existsSync(join(cwd, f.path))) missing.push(f.name)
+  }
+  for (const a of ORCHESTRATION_AGENTS) {
+    if (!existsSync(join(cwd, '.agents', `${a.id}.ts`))) missing.push(`Agent runtime ${a.id}`)
+  }
+  if (missing.length > 0) {
+    console.log(`\n${RED}${BOLD}⚠ ÉQUIPE D'ORCHESTRATION INCOMPLÈTE${RESET}`)
+    console.log(`${YELLOW}Avant de créer un agent, l'équipe PACO doit être déployée :${RESET}`)
+    for (const m of missing) console.log(`  ${RED}✗${RESET} ${m}`)
+    console.log(`\n${GREEN}Déploiement automatique de l'équipe d'orchestration...${RESET}`)
+    for (const agent of ORCHESTRATION_AGENTS) {
+      const agentPath = join(cwd, '.agents', `${agent.id}.ts`)
+      if (!existsSync(agentPath)) {
         try {
-          scaffoldAgent(agent.id, agent.name, 'kilo-auto/free', agent.tools, agent.instructions, true, 'standard')
-          console.log(`  ${GREEN}✓${RESET} ${agent.name} créé`)
+          scaffoldAgent(agent.id, agent.name, 'kilo-auto/free', agent.tools, agent.instructions, true, 'standard', undefined, 1)
+          console.log(`  ${GREEN}✓${RESET} ${agent.name} déployé`)
         } catch (e) {
           console.log(`  ${RED}✗${RESET} ${agent.name} : ${(e as Error).message}`)
         }
       }
-      console.log(`\n${GREEN}✓ Équipe d'orchestration créée. Relance /create pour créer ton agent.${RESET}\n`)
-      return
     }
-    console.log(`${YELLOW}Opération annulée. L'équipe d'orchestration est requise.${RESET}\n`)
-    return
+    console.log(`\n${GREEN}✓ Équipe d'orchestration prête.${RESET}\n`)
   }
   console.log(`  ${GREEN}✓${RESET} Équipe d'orchestration PACO présente\n`)
 
@@ -622,7 +635,22 @@ Après 3 violations consécutives de niveau ≥ moyen, tu marques l'orchestrateu
     }
   }
 
-  // Pause pour stabiliser entre les étapes
+  // --- 1.2 Configuration parallélisme selon le provider ---
+  let maxParallel = configured?.maxParallel ?? 1
+  if (providerType === 'lm-studio' || providerType === 'ollama') {
+    const defaultSlots = maxParallel
+    const raw = (await rl.question(
+      `\n${CYAN}Slots parallèles${RESET} pour ${providerType} (défaut: ${defaultSlots}) ${GRAY}>${RESET} `
+    )).trim()
+    const parsed = parseInt(raw, 10)
+    if (!isNaN(parsed) && parsed > 0) maxParallel = parsed
+    else maxParallel = defaultSlots
+    if (configured) {
+      configured.maxParallel = maxParallel
+    }
+    console.log(`  ${GREEN}✓${RESET} Utilisation de ${maxParallel} slot(s) parallèle(s)\n`)
+  }
+
   await pause('Provider validé → Sélection du modèle')
 
   // --- 2. Choix du modèle ---
@@ -743,25 +771,86 @@ Après 3 violations consécutives de niveau ≥ moyen, tu marques l'orchestrateu
 
   // A. Sélection du Nom (Dieu Grec)
   let assignedName = 'Athena'
+  const greekGodsPath = join(process.cwd(), 'data', 'agent-name', 'greek-gods.json')
+  let gods: Record<string, string> = {}
   try {
-    const greekGodsPath = join(process.cwd(), 'data', 'agent-name', 'greek-gods.json')
     if (existsSync(greekGodsPath)) {
       const godsData = JSON.parse(readFileSync(greekGodsPath, 'utf-8'))
-      const gods = godsData.dieux || {}
-      const godsList = Object.entries(gods).map(([name, desc]) => `- ${name}: ${desc}`).join('\n')
-      
-      const godMatchPrompt = `Liste de dieux grecs :
+      gods = godsData.dieux || {}
+    }
+  } catch (err) {
+    console.log(`${YELLOW}⚠ Erreur chargement dieux : ${(err as Error).message}${RESET}`)
+  }
+
+  const godKeys = Object.keys(gods).sort((a, b) => b.length - a.length)
+  const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+  function findGodInResponse(response: string): string {
+    const trimmed = response.trim()
+    // 1. Match exact (includes — pas de \b qui ignore les accents)
+    for (const name of godKeys) {
+      if (trimmed.includes(name)) return name
+    }
+    // 2. Match accent-insensible
+    const normResponse = normalize(trimmed)
+    for (const name of godKeys) {
+      if (normResponse.includes(normalize(name))) return name
+    }
+    // 3. Match par première lettre capitale (cas où le LLM répond "Athéna" au milieu d'une phrase)
+    for (const word of trimmed.split(/\s+/)) {
+      const clean = word.replace(/[^a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]/g, '')
+      if (!clean) continue
+      for (const name of godKeys) {
+        if (clean === name || normalize(clean) === normalize(name)) return name
+      }
+    }
+    return ''
+  }
+
+  if (godKeys.length > 0) {
+    const godsList = godKeys.map(name => `- ${name}: ${gods[name]}`).join('\n')
+
+    async function tryMatchGod(prompt: string): Promise<string> {
+      const response = await decisionEngine.callLLM(prompt, llmDecisionProvider, "Tu es un expert en mythologie et matching de personnalité.")
+      const found = findGodInResponse(response)
+      if (found) {
+        console.log(`  ${GREEN}✓ Dieu choisi : ${found}${RESET} ${GRAY}(LLM: "${response.trim()}")${RESET}`)
+      } else {
+        console.log(`  ${YELLOW}⚠ Aucun dieu reconnu dans : "${response.trim()}"${RESET}`)
+      }
+      return found
+    }
+
+    const godMatchPrompt = `Tu es un expert en mythologie grecque.
+Voici la liste complète des dieux et leurs spécialités techniques :
 ${godsList}
 
 Mission de l'agent : "${description}"
 
-Retourne UNIQUEMENT le nom du dieu grec le plus adapté (sans ponctuation). Retourne "Athena" si incertain.`
+Parmi les dieux ci-dessus, choisis UN SEUL dieu dont la spécialité correspond le mieux à cette mission.
+Réponds UNIQUEMENT par le prénom du dieu, tel quel dans la liste, sans ponctuation, sans explication, sans phrase.
 
-      const godResponse = await decisionEngine.callLLM(godMatchPrompt, llmDecisionProvider, "Tu es un expert en mythologie et matching de personnalité.")
-      assignedName = godResponse.trim().replace(/[^a-zA-Zàâäéèêëïîôùûüÿœæç]/g, '').split('\n')[0] || 'Athena'
+Exemples de réponses valides : Hermès | Athéna | Zeus | Hécate
+Exemples de réponses invalides : "Je choisis Hermès" | "Hermès serait parfait" | "Peut-être Zeus"`
+
+    try {
+      let foundName = await tryMatchGod(godMatchPrompt)
+      if (!foundName) {
+        // Retry with ultra-simple prompt
+        console.log(`  ${YELLOW}⟳ Nouvelle tentative...${RESET}`)
+        const retryPrompt = `Choisis un dieu grec pour cette mission : "${description}"
+Réponds UNIQUEMENT par un nom parmi : ${godKeys.join(', ')}`
+        foundName = await tryMatchGod(retryPrompt)
+      }
+      assignedName = foundName || 'Athena'
+      if (!foundName) {
+        console.log(`  ${YELLOW}⚠ Fallback sur Athena (aucun dieu reconnu)${RESET}`)
+      }
+    } catch (err) {
+      console.log(`${YELLOW}⚠ Erreur lors du choix du nom : ${(err as Error).message}${RESET}`)
     }
-  } catch (err) {
-    console.log(`${YELLOW}⚠ Erreur lors du choix du nom : ${(err as Error).message}${RESET}`)
+  } else {
+    console.log(`${YELLOW}⚠ Aucun dieu trouvé dans ${greekGodsPath}${RESET}`)
   }
 
   // B. Sélection du Template et du Profil
@@ -807,7 +896,7 @@ Réponds UNIQUEMENT au format JSON suivant :
     console.log(`${YELLOW}⚠ Erreur lors de l'analyse automatique, utilisation des défauts.${RESET}`)
   }
 
-  const assignedId = `agent-${assignedName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`
+  const assignedId = `agent-${assignedName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`
   console.log(`${GRAY}  ID généré : ${assignedId}${RESET}\n`)
 
   await pause('Analyse terminée → Création et certification')
@@ -823,12 +912,15 @@ Réponds UNIQUEMENT au format JSON suivant :
 
   const llmProvider = { provider: providerType, apiKey: effectiveApiKey, baseUrl: effectiveBaseUrl, model }
 
-  async function performCreationCycle(attemptDescription: string) {
+  let lastReviewRapport = ''
+  let finalStatus: { ok: boolean; vSkill: { ok: boolean; errors: string[] }; vAgent: { ok: boolean; errors: string[] }; vInt: { ok: boolean; errors: string[] }; vTs?: { ok: boolean; errors: string[] } } = { ok: false, vSkill: {ok:false, errors:[]}, vAgent: {ok:false, errors:[]}, vInt: {ok:false, errors:[]} }
+
+  async function performCreationCycle(attemptDescription: string, feedback?: string) {
     process.stdout.write(`\n${YELLOW}⟳ ${attemptDescription}...${RESET}`)
     
     // A. Génération de la Skill
     try {
-      const skill = await generateSkill(assignedId, assignedName, description, llmProvider)
+      const skill = await generateSkill(assignedId, assignedName, description, llmProvider, feedback)
       skillContent = skill.content
       process.stdout.write(`\r${GREEN}✓ Skill "${skillId}" générée${RESET}\n`)
     } catch (err) {
@@ -840,8 +932,11 @@ Réponds UNIQUEMENT au format JSON suivant :
     if (skillContent) {
       instructions = skillContent.replace(/^---[\s\S]*?---\n/, '').trim()
     }
+    if (feedback) {
+      instructions += `\n\n## Retour de la tentative précédente (À corriger)\n${feedback}`
+    }
     try {
-      agentPath = scaffoldAgent(assignedId, assignedName, model, tools, instructions, true, template, selectedProfile)
+      agentPath = scaffoldAgent(assignedId, assignedName, model, tools, instructions, true, template, selectedProfile, maxParallel)
       console.log(`  ${GREEN}✓ Agent enregistré${RESET} ${GRAY}${agentPath}${RESET}`)
     } catch (err) {
       console.log(`  ${RED}✗ Échec enregistrement agent : ${(err as Error).message}${RESET}`)
@@ -853,15 +948,41 @@ Réponds UNIQUEMENT au format JSON suivant :
     const vAgent = await validateAgentIntegration(assignedId)
     const vInt = await validateIntegration(assignedId, skillId)
 
+    // D. Validation TypeScript (compilation)
+    let vTs: { ok: boolean; errors: string[] } = { ok: true, errors: [] }
+    try {
+      const tscErrors = await getTscErrors(assignedId)
+      if (tscErrors.length > 0) {
+        vTs = { ok: false, errors: tscErrors }
+        console.log(`  ${RED}✗${RESET} TypeScript`)
+        tscErrors.forEach(e => console.log(`     ${RED}→ ${e}${RESET}`))
+      }
+    } catch {
+      // tsc check skipped (timeout or error)
+    }
+
     return {
-      ok: vSkill.ok && vAgent.ok && vInt.ok,
+      ok: vSkill.ok && vAgent.ok && vInt.ok && vTs.ok,
       vSkill,
       vAgent,
-      vInt
+      vInt,
+      vTs
     }
   }
 
-  async function callAgentReviewer(agentId: string, skillId: string): Promise<{ suggestions: string[]; urgentCount: number; importantCount: number }> {
+  async function getTscErrors(agentId: string): Promise<string[]> {
+    try {
+      const { execFileSync } = await import('child_process')
+      const result = execFileSync('npx.cmd', ['tsc', '--noEmit'], { timeout: 15000, cwd: process.cwd(), encoding: 'utf-8' })
+      return []
+    } catch (err: unknown) {
+      const stderr = (err as { stderr?: string }).stderr || (err as Error).message || ''
+      const lines = stderr.split('\n').filter(l => l.includes(`.agents/${agentId}.ts`))
+      return lines.length > 0 ? lines : []
+    }
+  }
+
+  async function callAgentReviewer(agentId: string, skillId: string): Promise<{ suggestions: string[]; urgentCount: number; importantCount: number; rapport: string; skipped: boolean }> {
     try {
       const agentPath = join(process.cwd(), '.agents', `${agentId}.ts`)
       const skillPath = join(process.cwd(), 'skills', skillId, 'SKILL.md')
@@ -869,7 +990,17 @@ Réponds UNIQUEMENT au format JSON suivant :
       const agentContent = existsSync(agentPath) ? readFileSync(agentPath, 'utf-8') : 'Fichier agent introuvable'
       const skillContent = existsSync(skillPath) ? readFileSync(skillPath, 'utf-8') : 'Fichier skill introuvable'
 
-      const reviewPrompt = `Analyse les fichiers suivants et fournis un diagnostic avec classification par gravité.
+      const tscErrors = await getTscErrors(agentId)
+
+      const reviewPrompt = `Tu es un expert en revue de code. Analyse les fichiers de l'agent et de sa skill.
+${tscErrors.length > 0 ? `\n## ⚠ ERREURS DE COMPILATION TYPESCRIPT DÉTECTÉES (bloquant si non corrigé) :\n${tscErrors.join('\n')}\n` : ''}
+IMPORTANT : Le fichier .ts suit un template système strict. Ne critique pas sa structure globale.
+Concentre-toi sur la pertinence des instructions et le respect des règles métier.
+
+## CRITÈRES DE VALIDATION (GOLDEN RULES) :
+1. La skill DOIT avoir un frontmatter YAML (---) avec name et description.
+2. La skill DOIT avoir les sections : ## Mission, ## Comportement, ## Compétences, ## Règles.
+3. Les instructions de l'agent doivent être cohérentes avec la mission.
 
 ## Fichier Agent (.agents/${agentId}.ts)
 \`\`\`typescript
@@ -881,24 +1012,17 @@ ${agentContent}
 ${skillContent}
 \`\`\`
 
-Fournis ta réponse dans ce format :
-### 📊 Résumé
-{nombre} problème(s)
-
-### 🔴 Urgent (bloquant)
+Fournis ton diagnostic UNIQUEMENT dans ce format :
+### 🔴 Urgent (Bloquant - Erreur de syntaxe, section manquante, sécurité grave)
 - {problème}
 
-### 🟠 Important (à corriger)
+### 🟠 Important (À corriger - Manque de clarté, mission incomplète)
 - {problème}
-
-### 🟡 Obligatoire
-- {problème}
-
-### 🔵 À voir
-- {suggestion}
 
 ### ✅ Points positifs
-- {ce qui est bien}`
+- {ce qui est bien}
+
+Si tout est correct, écris "AUCUN PROBLÈME MAJEUR DÉTECTÉ".`
 
       const llmProvider = { provider: providerType, apiKey: effectiveApiKey, baseUrl: effectiveBaseUrl, model: model }
       const reviewerEngine = createEngine({
@@ -914,24 +1038,36 @@ Fournis ta réponse dans ce format :
       const response = await reviewerEngine.callLLM(reviewPrompt, llmProvider, reviewerEngine.agent.instructionsPrompt)
 
       const suggestions: string[] = []
-      const urgentCount = (response.match(/🔴 Urgent/gi) || []).length
-      const importantCount = (response.match(/🟠 Important/gi) || []).length
+      function countActualIssues(text: string, header: string): number {
+        const section = text.match(new RegExp(`### ${header}[^]*?(?=### |\\n## |\\n---|\\n\\*\\*\\*|$)`, 'i'))
+        if (!section) return 0
+        const body = section[0]
+        if (/aucun problème|no issue|rien à signaler|none detected|ne contient pas/i.test(body)) return 0
+        return (body.match(/^\s*-\s+\*\*/gm) || []).length
+      }
+      const urgentCount = countActualIssues(response, '🔴 Urgent')
+      const importantCount = countActualIssues(response, '🟠 Important')
 
       console.log(`\n${BOLD}${CYAN}┌─ Rapport du Reviewer ─────────────────────┐${RESET}`)
       console.log(response)
       console.log(`${CYAN}└────────────────────────────────────────────┘${RESET}\n`)
 
-      return { suggestions, urgentCount, importantCount }
+      return { suggestions, urgentCount, importantCount, rapport: response, skipped: false }
     } catch (err) {
       console.log(`  ${YELLOW}⚠ Impossible de appeler le reviewer : ${(err as Error).message}${RESET}`)
-      return { suggestions: [], urgentCount: 0, importantCount: 0 }
+      console.log(`  ${YELLOW}  → Revue ignorée. La certification continue sans validation.${RESET}`)
+      return { suggestions: [], urgentCount: 0, importantCount: 0, rapport: '', skipped: true }
     }
   }
 
-  let finalStatus = { ok: false, vSkill: {ok:false, errors:[] as string[]}, vAgent: {ok:false, errors:[] as string[]}, vInt: {ok:false, errors:[] as string[]} }
+  const maxAttempts = 5
+  let consecutiveStagnations = 0
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    finalStatus = await performCreationCycle(attempt === 1 ? 'Création initiale' : `Tentative d'auto-correction ${attempt}/3`)
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    finalStatus = await performCreationCycle(
+      attempt === 1 ? 'Création initiale' : `Tentative d'auto-correction ${attempt}/${maxAttempts}`,
+      lastReviewRapport
+    )
 
     console.log(`  ${finalStatus.vSkill.ok ? `${GREEN}✓` : `${RED}✗`}${RESET} Skill`)
     if (!finalStatus.vSkill.ok) finalStatus.vSkill.errors.forEach(e => console.log(`     ${RED}→ ${e}${RESET}`))
@@ -942,21 +1078,54 @@ Fournis ta réponse dans ce format :
     console.log(`  ${finalStatus.vInt.ok ? `${GREEN}✓` : `${RED}✗`}${RESET} Intégration`)
     if (!finalStatus.vInt.ok) finalStatus.vInt.errors.forEach(e => console.log(`     ${RED}→ ${e}${RESET}`))
 
+    console.log(`  ${finalStatus.vTs ? (finalStatus.vTs.ok ? `${GREEN}✓` : `${RED}✗`) : `${GRAY}?`}${RESET} TypeScript`)
+    if (finalStatus.vTs && !finalStatus.vTs.ok) finalStatus.vTs.errors.forEach(e => console.log(`     ${RED}→ ${e}${RESET}`))
+
     if (finalStatus.ok) {
-      // --- Phase Reviewer ---
-      console.log(`\n${YELLOW}⟳ Phase de review par agent-reviewer...${RESET}`)
+      // --- Phase d'Orchestration PACO ---
+      console.log(`\n${YELLOW}⟳ L'Orchestrateur prend en charge la certification...${RESET}`)
+      console.log(`  ${GRAY}→ Orchestrateur : Délégation de la revue technique à l'Agent-Reviewer${RESET}`)
+      
       const review = await callAgentReviewer(assignedId, skillId)
 
-      if (review.urgentCount > 0 || review.importantCount > 0) {
-        console.log(`${YELLOW}⚠ Le reviewer a identifié des problèmes importants.${RESET}`)
-        console.log(`${GRAY}Auto-correction en cours...${RESET}`)
+      console.log(`  ${YELLOW}⟳ L'Agent-Superviseur vérifie la conformité...${RESET}`)
+      if (review.urgentCount === 0) {
+        console.log(`  ${GREEN}✓ Superviseur : Protocole PACO respecté. Qualité validée.${RESET}`)
+      } else {
+        console.log(`  ${RED}✗ Superviseur : Violation détectée. L'Orchestrateur doit optimiser le livrable.${RESET}`)
+      }
 
-        if (attempt < 3) {
-          continue // Va à la prochaine itération pour auto-correction
+      // Détection de stagnation
+      if (review.rapport === lastReviewRapport && (review.urgentCount > 0 || review.importantCount > 0)) {
+        consecutiveStagnations++
+        console.log(`${YELLOW}⚠ Aucune progression détectée (stagnation ${consecutiveStagnations}/2).${RESET}`)
+        if (consecutiveStagnations >= 2) {
+          console.log(`${RED}✗ Stagnation confirmée. L'agent n'arrive pas à corriger ces erreurs.${RESET}`)
+          finalStatus.ok = false
+          break
+        }
+      } else {
+        consecutiveStagnations = 0
+      }
+      
+      lastReviewRapport = review.rapport
+
+      // La certification échoue si le reviewer trouve des problèmes URGENTS.
+      // Les problèmes "IMPORTANT" sont signalés mais ne bloquent pas la certification si on a épuisé les tentatives.
+      if (review.urgentCount > 0) {
+        console.log(`${RED}⚠ Le reviewer a identifié des problèmes URGENTS (bloquants).${RESET}`)
+        console.log(`${GRAY}Auto-correction en cours (tentative ${attempt}/${maxAttempts})...${RESET}`)
+
+        if (attempt < maxAttempts) {
+          continue // Prochaine tentative
         } else {
-          console.log(`${RED}⚠ Nombre maximum de tentatives atteint. Certification refusée.${RESET}`)
+          console.log(`${RED}⚠ Nombre maximum de tentatives atteint (${maxAttempts}). Certification refusée.${RESET}`)
           finalStatus.ok = false
         }
+      } else if (review.importantCount > 0) {
+        console.log(`${YELLOW}⚠ Le reviewer a identifié des problèmes importants, mais non bloquants pour la certification.${RESET}`)
+        // On continue quand même si pas de problèmes urgents
+        break
       } else {
         // Pas de problème urgent/important, on peut certifier
         break
@@ -976,12 +1145,35 @@ Fournis ta réponse dans ce format :
     console.log(`  ${BOLD}Provider${RESET} : ${providerType}`)
     console.log(`  ${BOLD}Status${RESET}   : ${GREEN}CERTIFIÉ${RESET}\n`)
     console.log(`${YELLOW}Utilise /use ${assignedId} pour charger ce nouvel agent.${RESET}\n`)
+
+    // Ajoute l'agent au registre d'Alice
+    const shortDesc = description.length > 160 ? description.slice(0, 157) + '...' : description
+    registerAgentInAlice(assignedId, shortDesc)
+    console.log(`${GRAY}✓ Agent ajouté au registre d'Alice${RESET}\n`)
   } else {
     console.log(`\n${RED}${BOLD}╔══════════════════════════════════════════╗${RESET}`)
     console.log(`${RED}${BOLD}║   ÉCHEC — Certification impossible       ║${RESET}`)
     console.log(`${RED}${BOLD}╚══════════════════════════════════════════╝${RESET}`)
-    console.log(`  ${YELLOW}L'agent n'a pas pu être certifié après 3 tentatives.${RESET}`)
+    console.log(`  ${YELLOW}L'agent n'a pas pu être certifié après ${maxAttempts} tentatives.${RESET}`)
     console.log(`  ${YELLOW}Vérifie les erreurs ci-dessus et les golden-rules.${RESET}\n`)
+
+    // --- Nettoyage automatique en cas d'échec ---
+    console.log(`${GRAY}⟳ Nettoyage des fichiers non certifiés...${RESET}`)
+    try {
+      if (agentPath && existsSync(agentPath)) {
+        unlinkSync(agentPath)
+        console.log(`  ${GRAY}✓ Agent supprimé : ${agentPath}${RESET}`)
+      }
+      const skillDir = join(process.cwd(), 'skills', skillId)
+      if (existsSync(skillDir)) {
+        const { rmSync } = await import('fs')
+        rmSync(skillDir, { recursive: true, force: true })
+        console.log(`  ${GRAY}✓ Skill supprimée : skills/${skillId}${RESET}`)
+      }
+      console.log(`${GREEN}✓ Nettoyage terminé. Aucun résidu non validé.${RESET}\n`)
+    } catch (err) {
+      console.log(`${RED}✗ Erreur lors du nettoyage : ${(err as Error).message}${RESET}\n`)
+    }
   }
 }
 

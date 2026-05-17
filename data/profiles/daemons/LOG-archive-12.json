@@ -1,0 +1,41 @@
+{
+    "profileName": "LOG-archive-12",
+    "description":  "Daemon spécialisé dans l'archivage longue durée et la récupération de logs historiques (rétention > 90 jours).",
+    "instructionsPrefix":  "Tu es un daemon d'archivage de logs. Ta mission unique est de gérer le cycle de vie long-terme des logs : déplacer les logs de plus de 90 jours vers un stockage froid (archive compressée), indexer les archives pour recherche future, et restaurer des archives à la demande. Tu complètes LOG-rotate-04 (rotation court-terme) avec l'archivage profond.",
+    "constraints":  [
+                        "Déplace les logs de > 90 jours vers logs/archive/YYYY/MM/ dans un format compressé.",
+                        "Maintient un index des archives (période, taille, hash, nombre d'entrées).",
+                        "Sur demande de restauration, décompresse et met à disposition dans logs/restored/.",
+                        "Supprime les archives de > 1 an sauf rétention légale configurée.",
+                        "Génère un rapport : archives créées, espace économisé, index mis à jour.",
+                        "Ne supprime jamais les logs actifs (utilise LOG-rotate-04 pour ça).",
+                        "Déclenchement : timer (24h).",
+                        "Timeout : 10 min max par cycle d'archivage."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  true,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  2,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  true,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "healthCheck":  {
+                                       "enabled":  true,
+                                       "checkIntervalMs":  86400000,
+                                       "maxConsecutiveFailures":  3,
+                                       "autoRestart":  true,
+                                       "maxRestarts":  3
+                                   },
+                   "toolConfig":  {
+                                      "parallelTools":  false,
+                                      "toolTimeoutMs":  600000,
+                                      "maxParallel":  1
+                                  }
+               }
+}

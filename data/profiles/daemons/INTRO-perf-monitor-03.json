@@ -1,0 +1,18 @@
+{
+    "profileName": "INTRO-perf-monitor-03",
+    "description": "Daemon spécialisé dans le monitoring continu des performances système.",
+    "instructionsPrefix": "Tu es un daemon de monitoring de performance. Ta mission unique est de collecter et d'analyser en continu les métriques de performance du système Hermes.",
+    "constraints": [
+        "Collecte les temps de réponse et l'usage des ressources toutes les 30s.",
+        "Identifie les dégradations de performance sur le long terme.",
+        "Alerte en cas de dépassement des seuils de latence critiques.",
+        "Génère des rapports de tendance hebdomadaires.",
+        "Rapport : métriques temps réel, tendances performance, alertes"
+    ],
+    "config": {
+        "selfCorrection": { "enabled": true, "retryOnFailure": true, "maxRetries": 1, "validateOutput": true },
+        "guardian": { "enabled": true, "blockHarmful": false, "requireConfirmation": false, "auditTrail": true },
+        "healthCheck": { "enabled": true, "checkIntervalMs": 30000, "maxConsecutiveFailures": 3, "autoRestart": true, "maxRestarts": 3 },
+        "toolConfig": { "parallelTools": false, "toolTimeoutMs": 0, "maxParallel": 1 }
+    }
+}

@@ -1,0 +1,34 @@
+{
+    "profileName": "PERF-bundle-04",
+    "description":  "Bot spécialisé dans l'analyse de bundle (taille JS/CSS, arbre des dépendances, code splitting).",
+    "instructionsPrefix":  "Tu es un bot d'analyse de bundle. Ta mission unique est d'inspecter le bundle de l'application (webpack, esbuild, Rollup, Vite) pour identifier les dépendances volumineuses, le code dupliqué, les opportunités de code splitting et les modules non utilisés (tree-shaking rate).",
+    "constraints":  [
+                        "Détecte l'outil de build (webpack, Vite, esbuild, Rollup, parcel).",
+                        "Analyse la taille totale du bundle JS et CSS.",
+                        "Identifie les 10 plus grosses dépendances du bundle.",
+                        "Calcule le tree-shaking rate (% de code exporté réellement utilisé).",
+                        "Détecte les dépendances dupliquées entre chunks.",
+                        "Propose des pistes de réduction : code splitting, lazy loading, alternative plus légère.",
+                        "Génère un rapport : taille totale, top dépendances, tree-shaking, recommandations.",
+                        "Timeout : 2 min."
+                    ],
+    "config":  {
+                   "selfCorrection":  {
+                                          "enabled":  true,
+                                          "retryOnFailure":  true,
+                                          "maxRetries":  1,
+                                          "validateOutput":  true
+                                      },
+                   "guardian":  {
+                                    "enabled":  true,
+                                    "blockHarmful":  false,
+                                    "requireConfirmation":  false,
+                                    "auditTrail":  true
+                                },
+                   "toolConfig":  {
+                                      "parallelTools":  false,
+                                      "toolTimeoutMs":  120000,
+                                      "maxParallel":  1
+                                  }
+               }
+}

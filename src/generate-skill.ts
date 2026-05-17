@@ -53,6 +53,7 @@ export async function generateSkill(
   agentName: string,
   description: string,
   llm: LLMProvider,
+  feedback?: string,
 ): Promise<GenerateSkillResult> {
   const skillId = `skill-${agentId}`
   const skillDir = join(SKILLS_DIR, skillId)
@@ -72,8 +73,13 @@ export async function generateSkill(
   })
   engine.createSession()
 
+  let prompt = GENERATION_PROMPT(agentName, description)
+  if (feedback) {
+    prompt += `\n\n### FEEDBACK DE LA TENTATIVE PRÉCÉDENTE (À CORRIGER ABSOLUMENT) :\n${feedback}\n\nMerci de régénérer le SKILL.md en corrigeant TOUS les points mentionnés dans le feedback ci-dessus.`
+  }
+
   const response = await engine.callLLM(
-    GENERATION_PROMPT(agentName, description),
+    prompt,
     llm,
     'Tu es un expert en skills. Génère uniquement le contenu SKILL.md.',
   )
@@ -161,14 +167,20 @@ export async function validateSkill(skillId: string): Promise<{ ok: boolean; err
 
 export async function validateAgent(agentId: string): Promise<{ ok: boolean; errors: string[] }> {
   const errors: string[] = []
-  const { listLocalAgents } = await import('./agents.js')
-  const agents = listLocalAgents()
-  const agent = agents.find(a => a.id === agentId)
+  const { readLocalAgent } = await import('./agents.js')
+  const agent = readLocalAgent(`${agentId}.ts`)
   if (!agent) {
-    errors.push(`Agent "${agentId}" introuvable dans .agents/`)
+    errors.push(`Agent "${agentId}" introuvable ou illisible dans .agents/`)
     return { ok: false, errors }
   }
-  return { ok: true, errors: [] }
+  if (!agent.displayName) errors.push('Agent : displayName manquant')
+  if (!agent.model) errors.push('Agent : model manquant')
+  if (!agent.toolNames || agent.toolNames.length === 0) errors.push('Agent : toolNames vide')
+  if (!agent.instructionsPrompt) errors.push('Agent : instructionsPrompt vide')
+  if (agent.selfCorrection && typeof agent.selfCorrection.enabled !== 'boolean') errors.push('Agent : selfCorrection.enabled doit être un booléen')
+  if (agent.guardian && typeof agent.guardian.enabled !== 'boolean') errors.push('Agent : guardian.enabled doit être un booléen')
+  if (agent.toolConfig && typeof agent.toolConfig.maxParallel !== 'number') errors.push('Agent : toolConfig.maxParallel doit être un nombre')
+  return { ok: errors.length === 0, errors }
 }
 
 export async function validateIntegration(agentId: string, skillId: string): Promise<{ ok: boolean; errors: string[] }> {
