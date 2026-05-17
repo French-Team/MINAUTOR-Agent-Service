@@ -200,12 +200,12 @@ async function main() {
     assert('Ollama modèles récupérés', false, `${e}`)
   }
   // LM Studio (local, no key)
-  addProvider({ name: 'LM Studio', provider: 'lmstudio', apiKeys: [], baseUrl: 'http://localhost:1234', defaultModel: 'lmstudio-model' })
+  addProvider({ name: 'LM Studio', provider: 'lm-studio', apiKeys: [], baseUrl: 'http://localhost:1234/v1', defaultModel: 'local-model' })
   try {
-    const models = await fetchModels('lmstudio', '', 'http://localhost:1234')
+    const models = await fetchModels('lm-studio', '', 'http://localhost:1234/v1')
     assert('LM Studio modèles récupérés', models.length > 0)
   } catch (e) {
-assert('LM Studio modèles récupérés', false, `${e}`)
+    assert('LM Studio modèles récupérés', false, `${e}`)
   }
   console.log(`\n${BOLD}── 10. CONT IDS UNIQUE${RESET}`)
   // nettoyage des providers

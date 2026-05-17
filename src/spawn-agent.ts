@@ -56,7 +56,7 @@ async function main() {
   engine.createSession()
   engine.addMessage('user', instruction)
 
-  const resolved = resolveProviderForModel(agentDef.model)
+  const resolved = resolveProviderForModel(agentDef.model, agentDef.provider)
   if (!resolved) {
     appendFileSync(logbookPath, `\n## ${agentDef.name} (${agentDef.id})\n\n**Erreur :** Aucun provider configuré pour le modèle ${agentDef.model}\n\n`, 'utf-8')
     process.exit(0)

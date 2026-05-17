@@ -1,4 +1,4 @@
-# Analyse du workflow `/create` dans Hermes Agent Engine
+# Analyse du workflow `/create` dans Minautor Agent Service
 
 ## Description générale
 La commande `/create` permet de créer un nouvel agent avec un workflow interactif guidé et certifié :

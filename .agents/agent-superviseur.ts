@@ -3,7 +3,13 @@ import type { AgentDefinition } from '../src/types/agent-definition.js'
 const definition: AgentDefinition = {
   id: 'agent-superviseur',
   displayName: 'Agent Superviseur',
-  model: 'kilo-auto/free',
+  model: 'liquid/lfm2.5-1.2b',
+  toolConfig: {
+      "parallelTools": true,
+      "toolTimeoutMs": 30000,
+      "maxParallel": 4
+    },
+  provider: 'lm-studio',
   toolNames: ['add_message'],
   instructionsPrompt: `Tu es l'Agent-Superviseur, le garde-fou du protocole PACO.
 Ta mission unique est de surveiller l'orchestrateur en continu.

@@ -1,9 +1,15 @@
-import type { AgentDefinition } from './types/agent-definition'
+import type { AgentDefinition } from '../src/types/agent-definition'
 
 const definition: AgentDefinition = {
   id: 'agent-reviewer',
   displayName: 'Reviewer',
-  model: 'kilo-auto/free',
+  model: 'liquid/lfm2.5-1.2b',
+  toolConfig: {
+      "parallelTools": true,
+      "toolTimeoutMs": 30000,
+      "maxParallel": 4
+    },
+  provider: 'lm-studio',
   toolNames: ['run_terminal_command', 'add_message', 'set_output', 'skill'],
   instructionsPrompt: `Tu es un expert en revue de code et analyse de qualité pour agents AI.
 

@@ -1,10 +1,16 @@
-import type { AgentDefinition } from './types/agent-definition'
+import type { AgentDefinition } from '../src/types/agent-definition'
 
 const definition: AgentDefinition = {
   id: 'alice',
   displayName: 'Alice',
-  model: 'kilo-auto/free',
+  model: 'liquid/lfm2.5-1.2b',
+  provider: 'lm-studio',
   toolNames: ['run_terminal_command', 'add_message', 'set_output', 'skill'],
+  toolConfig: {
+    parallelTools: true,
+    toolTimeoutMs: 30000,
+    maxParallel: 4,  // LM Studio supports up to 4 parallel slots
+  },
   instructionsPrompt: `Tu es Alice, l'assistante personnelle de l'utilisateur. Tu es son interface unique vers tous les agents spécialisés du système.
 
 ## Ce que tu peux faire

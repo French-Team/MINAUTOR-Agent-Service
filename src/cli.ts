@@ -40,7 +40,7 @@ import { generateSkill, validateSkill, validateAgent as validateAgentIntegration
 import { popAllNotifications } from './notify.js'
 import { emitKeypressEvents } from 'readline'
 import { createEngine, type Engine } from './engine.js'
-import type { AgentDefinition } from './types/agent-definition.js'
+import type { AgentDefinition, ToolConfig } from './types/agent-definition.js'
 import { listLocalAgents, readLocalAgent, scaffoldAgent, updateAgentFile, listProfiles, loadProfile, type AgentProfile } from './agents.js'
 import {
   listProviders,
@@ -180,7 +180,7 @@ function showHelp(): void {
   const engine = currentEngine!
   const agent = engine.agent
   console.log(`\n${BOLD}${CYAN}┌─────────────────────────────────────────────┐${RESET}`)
-  console.log(`${BOLD}${CYAN}│  Hermes Agent Engine — Commandes              │${RESET}`)
+  console.log(`${BOLD}${CYAN}│  Minautor Agent Service — Commandes          │${RESET}`)
   console.log(`${BOLD}${CYAN}└─────────────────────────────────────────────┘${RESET}`)
   console.log(`${GRAY}Agent: ${agent.displayName} (${agent.id})${RESET}`)
   console.log(`${GRAY}Model: ${agent.model}${RESET}`)
@@ -298,7 +298,7 @@ async function handleEditAgent(rl: ReturnType<typeof createInterface>): Promise<
   const newInstructions = (await rl.question(`${CYAN}Nouvelles instructions${RESET} (laisser vide) ${GRAY}>${RESET} `)).trim()
 
   // ── Provider / modèle / clé API ──
-  const providerInfo = resolveProviderForModel(agent.model)
+  const providerInfo = resolveProviderForModel(agent.model, agent.provider)
   console.log(`\n${BOLD}Configuration actuelle :${RESET}`)
   console.log(`  Modèle   : ${CYAN}${agent.model}${RESET}`)
   console.log(`  Provider : ${providerInfo ? `${providerInfo.provider} (${providerInfo.baseUrl})` : `${YELLOW}aucun${RESET}`}`)
@@ -354,35 +354,110 @@ async function handleEditAgent(rl: ReturnType<typeof createInterface>): Promise<
       }
     }
 
-    // fetch models
+    // --- Validation et récupération des modèles (boucle) ---
     const ONLINE_URLS: Record<string, string> = {
       kilo: 'https://api.kilo.ai',
       google: 'https://generativelanguage.googleapis.com',
       openrouter: 'https://openrouter.ai/api/v1',
       'opencode-zen': 'https://zen.opencode.ai/v1',
+      'lm-studio': 'http://localhost:1234/v1',
+      ollama: 'http://localhost:11434',
     }
     const baseUrl = ONLINE_URLS[resolvedProviderType] || 'https://api.openai.com/v1'
-    process.stdout.write(`\n${YELLOW}⟳ Récupération des modèles...${RESET}`)
-    try {
-      const fetched = await fetchModels(resolvedProviderType, newApiKey, baseUrl)
-      const display = top15(fetched)
-      const hidden = fetched.length - display.length
-      process.stdout.write(`\r${GREEN}✓ ${fetched.length} modèles disponibles${RESET}\n\n`)
-      for (let i = 0; i < display.length; i++) {
-        console.log(`  ${CYAN}${i + 1}${RESET}. ${display[i]}`)
+    
+    let validationOk = false
+    while (!validationOk) {
+      // Validation de la clé API si nécessaire
+      if (newApiKey) {
+        process.stdout.write(`\n${YELLOW}⟳ Validation de la clé API pour ${resolvedProviderType}...${RESET}`)
+        try {
+          await fetchModels(resolvedProviderType, newApiKey, baseUrl)
+          process.stdout.write(`\r${GREEN}✓ Clé API valide pour ${resolvedProviderType}        ${RESET}\n`)
+        } catch (err) {
+          process.stdout.write(`\r${RED}✗ Clé API invalide pour ${resolvedProviderType}${RESET}\n`)
+          const guidance = getModelFetchGuidance(resolvedProviderType, err as Error)
+          for (const g of guidance) console.log(`  ${g}`)
+          
+          const choice = (await rl.question(
+            `\n${CYAN}[K]${RESET} Changer clé  ${CYAN}[A]${RESET} Annuler  ${GRAY}>${RESET} `
+          )).trim().toLowerCase()
+          
+          if (choice === 'k') {
+            newApiKey = ''
+            newModel = ''
+            continue
+          }
+          console.log(`${YELLOW}Annulé.${RESET}`); return
+        }
       }
-      if (hidden > 0) console.log(`  ${GRAY}... et ${hidden} autres${RESET}`)
-      const choice = (await rl.question(`\n${CYAN}Choix du modèle${RESET} (numéro ou nom) ${GRAY}>${RESET} `)).trim()
-      const idx = parseInt(choice, 10)
-      if (!isNaN(idx) && idx >= 1 && idx <= display.length) {
-        newModel = display[idx - 1]
-      } else if (choice) {
-        newModel = choice
+
+      // --- Récupération des modèles ---
+      process.stdout.write(`\n${YELLOW}⟳ Récupération des modèles...${RESET}`)
+      let fetched: string[] = []
+      try {
+        fetched = await fetchModels(resolvedProviderType, newApiKey, baseUrl)
+        const display = top15(fetched)
+        const hidden = fetched.length - display.length
+        process.stdout.write(`\r${GREEN}✓ ${fetched.length} modèles disponibles${RESET}\n\n`)
+        for (let i = 0; i < display.length; i++) {
+          console.log(`  ${CYAN}${i + 1}${RESET}. ${display[i]}`)
+        }
+        if (hidden > 0) console.log(`  ${GRAY}... et ${hidden} autres${RESET}`)
+        const choice = (await rl.question(`\n${CYAN}Choix du modèle${RESET} (numéro ou nom) ${GRAY}>${RESET} `)).trim()
+        const idx = parseInt(choice, 10)
+        if (!isNaN(idx) && idx >= 1 && idx <= display.length) {
+          newModel = display[idx - 1]
+        } else if (choice) {
+          newModel = choice
+        }
+        if (!newModel) { const fallback = existingProv?.defaultModel || display[0]; console.log(`${YELLOW}Utilisation de ${fallback}${RESET}`); newModel = fallback }
+      } catch (err) {
+        process.stdout.write(`\r${RED}✗ Récupération impossible${RESET}\n`)
+        const guidance = getModelFetchGuidance(resolvedProviderType, err as Error)
+        for (const g of guidance) console.log(`  ${g}`)
+        
+        const choice = (await rl.question(
+          `\n${CYAN}[M]${RESET} Saisie manuelle  ${CYAN}[A]${RESET} Annuler  ${GRAY}>${RESET} `
+        )).trim().toLowerCase()
+        
+        if (choice === 'm') {
+          newModel = (await rl.question(`${CYAN}Modèle${RESET} ${GRAY}>${RESET} `)).trim() || agent.model
+        } else {
+          console.log(`${YELLOW}Annulé.${RESET}`); return
+        }
       }
-      if (!newModel) { const fallback = existingProv?.defaultModel || display[0]; console.log(`${YELLOW}Utilisation de ${fallback}${RESET}`); newModel = fallback }
-    } catch {
-      process.stdout.write(`\r${YELLOW}⚠ Récupération impossible — saisie manuelle${RESET}\n`)
-      newModel = (await rl.question(`${CYAN}Modèle${RESET} ${GRAY}>${RESET} `)).trim() || agent.model
+
+      // --- Test de connexion complet ---
+      if (newModel) {
+        console.log(`\n${BOLD}${CYAN}┌─ Test de connexion ──────────────────────┐${RESET}`)
+        let connectionOk = false
+        while (!connectionOk) {
+          process.stdout.write(`\n${YELLOW}⟳ Test de connexion à ${resolvedProviderType} / ${newModel}...${RESET}`)
+          const result = await testConnection(resolvedProviderType, newApiKey, baseUrl, newModel)
+          if (result.ok) {
+            process.stdout.write(`\r${GREEN}✓ Connexion réussie !${RESET}\n\n`)
+            connectionOk = true
+            validationOk = true
+            break
+          }
+          process.stdout.write(`\r${RED}✗ Échec de connexion${RESET}\n\n`)
+          for (const d of result.diagnostics) console.log(`  ${d}`)
+          console.log()
+          const choice = (await rl.question(
+            `${CYAN}[R]${RESET} Réessayer  ${CYAN}[M]${RESET} Changer modèle  ${CYAN}[A]${RESET} Annuler  ${GRAY}>${RESET} `
+          )).trim().toLowerCase()
+          if (choice === 'r') continue
+          if (choice === 'm') {
+            newModel = (await rl.question(`${CYAN}Nouveau modèle${RESET} ${GRAY}>${RESET} `)).trim()
+            if (!newModel) continue
+            break // Sortir de la boucle de connexion pour relancer la récupération des modèles
+          }
+          console.log(`${YELLOW}Annulé.${RESET}`); return
+        }
+        console.log(`${BOLD}${CYAN}└────────────────────────────────────────────┘${RESET}\n`)
+      } else {
+        validationOk = true
+      }
     }
 
     // sauvegarder la clé API si nouvelle
@@ -393,10 +468,30 @@ async function handleEditAgent(rl: ReturnType<typeof createInterface>): Promise<
   }
 
   // ── Appliquer ──
-  const updates: { name?: string; instructionsPrompt?: string; model?: string } = {}
+  const updates: { name?: string; instructionsPrompt?: string; model?: string; provider?: string; toolConfig?: ToolConfig } = {}
   if (newName) updates.name = newName
   if (newInstructions) updates.instructionsPrompt = newInstructions
-  if (newModel) updates.model = newModel
+  if (newModel) {
+    updates.model = newModel
+    // Also save the provider if we changed the model
+    if (resolvedProviderType) updates.provider = resolvedProviderType
+    
+    // Update toolConfig based on provider
+    if (resolvedProviderType === 'lm-studio') {
+      updates.toolConfig = {
+        parallelTools: true,
+        toolTimeoutMs: 30000,
+        maxParallel: 4,  // LM Studio supports up to 4 parallel slots
+      }
+    } else {
+      // Default config for other providers
+      updates.toolConfig = {
+        parallelTools: true,
+        toolTimeoutMs: 30000,
+        maxParallel: 2,
+      }
+    }
+  }
 
   if (Object.keys(updates).length === 0) {
     console.log(`${YELLOW}Aucune modification.${RESET}\n`)
@@ -575,6 +670,8 @@ Après 3 violations consécutives de niveau ≥ moyen, tu marques l'orchestrateu
     google: 'https://generativelanguage.googleapis.com',
     openrouter: 'https://openrouter.ai/api/v1',
     'opencode-zen': 'https://zen.opencode.ai/v1',
+    'lm-studio': 'http://localhost:1234/v1',
+    ollama: 'http://localhost:11434',
   }
   const KEY_REQUIRED = ['google', 'openrouter', 'opencode-zen', 'custom']
   let configured = listProviders().find(p => p.provider === providerType)
@@ -1297,7 +1394,7 @@ async function handleProviders(rl: ReturnType<typeof createInterface>, args: str
         const existing = getProvidersByType(type)
         if (existing.length === 0) {
           const name = type === 'ollama' ? 'Ollama' : 'LM Studio'
-          const baseUrl = type === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234'
+          const baseUrl = type === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234/v1'
           addProvider({ name, provider: type, apiKeys: [], baseUrl, defaultModel: type === 'ollama' ? 'llama3.2' : 'local-model' })
           console.log(`  ${GREEN}✓ ${name} ajouté à la configuration${RESET}`)
         } else {
@@ -1317,7 +1414,7 @@ async function handleProviders(rl: ReturnType<typeof createInterface>, args: str
 
     // Détection : l'agent courant n'a pas de provider configuré ?
     const eng = currentEngine!
-    const needsProvider = !resolveProviderForModel(eng.agent.model)
+    const needsProvider = !resolveProviderForModel(eng.agent.model, eng.agent.provider)
     const agentName = eng.agent.displayName
 
     console.log(`\n${BOLD}Types de providers disponibles :${RESET}`)
@@ -1359,6 +1456,8 @@ async function handleProviders(rl: ReturnType<typeof createInterface>, args: str
       google: 'https://generativelanguage.googleapis.com',
       openrouter: 'https://openrouter.ai/api/v1',
       'opencode-zen': 'https://zen.opencode.ai/v1',
+      'lm-studio': 'http://localhost:1234/v1',
+      ollama: 'http://localhost:11434',
     }
 
     // Clé API (obligatoire pour google, openrouter, opencode-zen, custom)
@@ -1878,7 +1977,7 @@ const child = fork(join(import.meta.dirname, 'timer-agent.js'), [instruction || 
 
     // plain text → call the LLM
     const eng = currentEngine!
-    const resolved = resolveProviderForModel(eng.agent.model)
+    const resolved = resolveProviderForModel(eng.agent.model, eng.agent.provider)
     if (!resolved) {
       console.log(`\n${YELLOW}⚠ Alice n'est pas encore connectée à un fournisseur LLM.${RESET}`)
       console.log(`   ${CYAN}1.${RESET} Configure un provider avec ${GREEN}/providers add${RESET} ou ${GREEN}/providers scan${RESET}`)

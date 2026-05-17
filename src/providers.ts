@@ -56,7 +56,7 @@ const DEFAULT_PROVIDERS: ProvidersFile = {
       name: 'Opencode Zen',
       provider: 'opencode-zen',
       apiKeys: [],
-      baseUrl: 'https://zen.opencode.ai/v1',
+      baseUrl: 'https://api.opencode.ai/v1',
       defaultModel: 'opencode-zen/default',
       enabled: false,
       currentKeyIndex: 0,
@@ -445,7 +445,8 @@ export function getModelFetchGuidance(providerType: string, err: Error): string[
   const httpStatus = (err as any).httpStatus as number | undefined
   const lines: string[] = []
 
-  if (msg.includes('fetch') || msg.includes('ENOTFOUND') || msg.includes('ECONNREFUSED')) {
+  // Priorité 1 : Erreurs de connexion (avant les erreurs d'authentification)
+  if (msg.includes('fetch') || msg.includes('ENOTFOUND') || msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT') || msg.includes('timeout')) {
     if (isLocalProvider(providerType)) {
       lines.push(`🖥️  ${providerType === 'ollama' ? 'Ollama' : 'LM Studio'} n'est pas démarré`)
       lines.push(`   → Démarre le service localement`)
@@ -456,27 +457,27 @@ export function getModelFetchGuidance(providerType: string, err: Error): string[
     }
     const urlMatch = err.message.match(/https?:\/\/[^\s,)\]]+/)
     if (urlMatch) lines.push(`   URL testée : ${urlMatch[0]}`)
-  } else if (httpStatus === 400 || httpStatus === 401 || httpStatus === 403 || msg.toLowerCase().includes('unauthorized') || msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('not valid') || msg.toLowerCase().includes('invalid')) {
+  }
+  // Priorité 2 : Erreurs d'authentification (seulement pour les providers qui nécessitent une clé)
+  else if ((httpStatus === 400 || httpStatus === 401 || httpStatus === 403 || msg.toLowerCase().includes('unauthorized') || msg.toLowerCase().includes('forbidden')) && !isLocalProvider(providerType)) {
     lines.push('🔑 La clé API est invalide ou n\'a pas les permissions nécessaires')
     if (providerType === 'google') lines.push('   → Crée une clé sur https://aistudio.google.com/apikey')
     if (providerType === 'google') lines.push('   → Active l\'API "Generative Language" dans Google Cloud Console')
     if (providerType === 'openrouter') lines.push('   → Vérifie ta clé sur https://openrouter.ai/keys')
     if (providerType === 'opencode-zen') lines.push('   → Vérifie ta clé Opencode Zen')
     if (providerType === 'custom') lines.push('   → Vérifie que ta clé API est correcte pour ce provider')
-  } else if (httpStatus === 429) {
+  }
+  // Priorité 3 : Autres erreurs HTTP
+  else if (httpStatus === 429) {
     lines.push('⏳ Quota épuisé (429) — l\'alternateur va basculer sur la clé suivante')
   } else if (httpStatus && httpStatus >= 500) {
     lines.push('⚠️ Le serveur du provider est indisponible — réessaye plus tard')
-  } else if (msg.includes('timeout') || msg.includes('ETIMEDOUT') || msg.includes('ECONNREFUSED')) {
-    lines.push('⏱️ Le serveur ne répond pas — vérifie l\'URL de base')
   } else if (msg.includes('Unexpected') || msg.includes('inattendu')) {
     lines.push(`🔄 Le format de réponse est inattendu — l'URL "${providerType}" est peut-être incorrecte`)
+  } else if (msg.includes('HTTP 404')) {
+    lines.push('📭 URL introuvable — vérifie le endpoint /models ou /api/gateway/models')
   } else {
     lines.push(`❌ Erreur : ${msg.slice(0, 120)}`)
-  }
-
-  if (msg.includes('HTTP 404')) {
-    lines.push('📭 URL introuvable — vérifie le endpoint /models ou /api/gateway/models')
   }
 
   return lines
@@ -486,7 +487,18 @@ export function getModelFetchGuidance(providerType: string, err: Error): string[
  * Resolve the best provider config for a given model name.
  * Returns { provider, apiKey, baseUrl, model } or undefined if no match.
  */
-export function resolveProviderForModel(model: string): { provider: string; apiKey: string; baseUrl: string; model: string } | undefined {
+export function resolveProviderForModel(model: string, providerHint?: string): { provider: string; apiKey: string; baseUrl: string; model: string } | undefined {
+  // 0. If provider hint is provided, use it first
+  if (providerHint) {
+    const entries = loadProviders().providers.filter(p =>
+      p.provider === providerHint && p.enabled
+    )
+    if (entries.length > 0) {
+      const entry = entries[0]
+      return { provider: providerHint, apiKey: entry.apiKeys[0] || '', baseUrl: entry.baseUrl, model }
+    }
+  }
+
   // 1. Detect provider from model prefix
   let providerType: string | undefined
   if (model.startsWith('kilo/')) providerType = 'kilo'
@@ -557,7 +569,7 @@ export async function checkLocalProvider(providerType: string): Promise<{ alive:
     }
 
     if (providerType === 'lm-studio') {
-      const res = await fetch(`${base}/models`, { signal: AbortSignal.timeout(3000) })
+      const res = await fetch(`${base}/v1/models`, { signal: AbortSignal.timeout(3000) })
       if (!res.ok) return { alive: false, error: `HTTP ${res.status}` }
       const json = await res.json() as { data?: unknown[] }
       const count = json.data?.length ?? 0

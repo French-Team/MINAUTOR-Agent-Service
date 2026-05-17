@@ -3,7 +3,13 @@ import type { AgentDefinition } from '../src/types/agent-definition.js'
 const definition: AgentDefinition = {
   id: 'orchestrateur',
   displayName: 'Orchestrateur',
-  model: 'kilo-auto/free',
+  model: 'liquid/lfm2.5-1.2b',
+  toolConfig: {
+      "parallelTools": true,
+      "toolTimeoutMs": 30000,
+      "maxParallel": 4
+    },
+  provider: 'lm-studio',
   toolNames: ['run_terminal_command', 'add_message', 'set_output'],
   instructionsPrompt: `Tu es l'Agent-Maître, l'orchestrateur central.
 Ta mission unique est de coordonner les autres agents.

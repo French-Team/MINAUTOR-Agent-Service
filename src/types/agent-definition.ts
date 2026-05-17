@@ -3,6 +3,7 @@ export interface AgentDefinition {
   name?: string
   displayName: string
   model: string
+  provider?: string  // Optional: stores the provider type (kilo, lm-studio, ollama, etc.)
   instructionsPrompt: string
   toolNames: string[]
   spawnerPrompt?: string

@@ -84,6 +84,8 @@ export function readLocalAgent(filename: string): AgentDefinition | null {
   const id = content.match(/id:\s*['"]([^'"]+)['"]/)?.[1] || filename.replace('.ts', '')
   const displayName = content.match(/displayName:\s*['"]([^'"]+)['"]/)?.[1] || content.match(/(?:displayName|name):\s*['"]([^'"]+)['"]/)?.[1] || id
   const model = content.match(/model:\s*['"]([^'"]+)['"]/)?.[1] || 'unknown'
+  const provider = content.match(/provider:\s*['"]([^'"]+)['"]/)?.[1] || undefined
+  const spawnerPrompt = content.match(/spawnerPrompt:\s*['"`]([^'"`]*)['"` ]/)?.[1] || undefined
   const toolsMatch = content.match(/toolNames:\s*\[([^\]]+)\]/)
   const toolNames = toolsMatch
     ? toolsMatch[1].split(',').map(t => t.trim().replace(/['"]/g, ''))
@@ -91,18 +93,25 @@ export function readLocalAgent(filename: string): AgentDefinition | null {
   const instructionsMatch = content.match(/instructionsPrompt:\s*`([^`]*)`/)
   const instructionsPrompt = instructionsMatch?.[1] || ''
 
+  // Extract spawnableAgents array
+  const spawnableAgentsMatch = content.match(/spawnableAgents:\s*\[([^\]]*)\]/)
+  const spawnableAgents = spawnableAgentsMatch
+    ? spawnableAgentsMatch[1].split(',').map(a => a.trim().replace(/['"]/g, '')).filter(a => a)
+    : undefined
+
   // Helper to parse simple config objects from TS file
   const parseConfig = (key: string) => {
-    const regex = new RegExp(`${key}:\\s*({[^{}]*({[^{}]*}[^{}]*)*})`, 's')
+    // Match the config object, handling nested braces and comments
+    const regex = new RegExp(`${key}:\\s*({[^{}]*(?:{[^{}]*}[^{}]*)*})`, 's')
     const match = content.match(regex)
     if (!match) return undefined
     try {
       // Very basic "JS object string to JSON" conversion
       let jsonStr = match[1]
+        .replace(/\/\/.*$/gm, '') // Remove comments first
         .replace(/(\w+):/g, '"$1":') // Quote keys
         .replace(/'/g, '"') // Replace single quotes with double quotes
         .replace(/,\s*([\]}])/g, '$1') // Remove trailing commas
-        .replace(/\/\/.*$/gm, '') // Remove comments
       return JSON.parse(jsonStr)
     } catch {
       return undefined
@@ -119,9 +128,12 @@ export function readLocalAgent(filename: string): AgentDefinition | null {
   return { 
     id, 
     displayName, 
-    model, 
+    model,
+    ...(provider && { provider }),
     toolNames, 
     instructionsPrompt,
+    ...(spawnerPrompt && { spawnerPrompt }),
+    ...(spawnableAgents && { spawnableAgents }),
     selfCorrection,
     guardian,
     healthCheck,
@@ -141,6 +153,11 @@ const definition: AgentDefinition = {
   instructionsPrompt: \`{{instructions}}\`,
 
   // New configurations
+  toolConfig: {
+    parallelTools: true,
+    toolTimeoutMs: 30000,
+    maxParallel: 4,
+  },
   selfCorrection: {
     enabled: false,
     retryOnFailure: true,
@@ -391,17 +408,41 @@ export function removeLocalAgent(filename: string): boolean {
 
 export function updateAgentFile(
   filename: string,
-  updates: { name?: string; instructionsPrompt?: string; model?: string },
+  updates: { name?: string; instructionsPrompt?: string; model?: string; provider?: string; toolConfig?: ToolConfig },
 ): boolean {
   const filePath = join(AGENTS_DIR, filename)
   if (!existsSync(filePath)) return false
   let content = readFileSync(filePath, 'utf-8')
 
   if (updates.name !== undefined) {
-    content = content.replace(/(name|displayName):\s*'[^']*'/, `name: '${updates.name}'`)
+    content = content.replace(/displayName:\s*['"][^'"]*['"]/, `displayName: '${updates.name}'`)
   }
   if (updates.model !== undefined) {
-    content = content.replace(/model:\s*'[^']*'/, `model: '${updates.model}'`)
+    content = content.replace(/model:\s*['"][^'"]*['"]/, `model: '${updates.model}'`)
+  }
+  if (updates.provider !== undefined) {
+    // Check if provider field already exists
+    if (content.includes('provider:')) {
+      content = content.replace(/provider:\s*['"][^'"]*['"]/, `provider: '${updates.provider}'`)
+    } else {
+      // Add provider field after model line
+      content = content.replace(/(model:\s*['"][^'"]*['"],?)/, `$1\n  provider: '${updates.provider}',`)
+    }
+  }
+  if (updates.toolConfig !== undefined) {
+    // Update or add toolConfig
+    const toolConfigStr = JSON.stringify(updates.toolConfig, null, 2)
+      .split('\n')
+      .map((line, i) => i === 0 ? line : '    ' + line)
+      .join('\n')
+    
+    if (content.includes('toolConfig:')) {
+      // Replace existing toolConfig
+      content = content.replace(/toolConfig:\s*{[^}]*}/, `toolConfig: ${toolConfigStr}`)
+    } else {
+      // Add toolConfig after model/provider
+      content = content.replace(/(provider:\s*['"][^'"]*['"],?|model:\s*['"][^'"]*['"],?)/, `$1\n  toolConfig: ${toolConfigStr},`)
+    }
   }
   if (updates.instructionsPrompt !== undefined) {
     content = content.replace(/instructionsPrompt:\s*`[^`]*`/, `instructionsPrompt: \`${updates.instructionsPrompt}\``)
