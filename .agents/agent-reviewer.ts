@@ -1,4 +1,4 @@
-import type { AgentDefinition } from '../src/types/agent-definition'
+import type { AgentDefinition } from '../src/types/agent-definition.js'
 
 const definition: AgentDefinition = {
   id: 'agent-reviewer',

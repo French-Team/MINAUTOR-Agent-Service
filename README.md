@@ -81,7 +81,7 @@ console.log(response)
 node dist/spawn-agent.js agent-id "Your instruction here"
 ```
 
-Results are logged to `agent-logbook.md`.
+Results are logged to `telecom/agent-logbook.md`.
 
 ## Project Structure
 
@@ -122,7 +122,7 @@ data/
 └── agent-name/            # Name generation data
 
 providers.json             # LLM provider configuration (gitignored)
-agent-logbook.md           # Execution log for spawned agents
+telecom/agent-logbook.md    # Execution log for spawned agents
 .notifications.json        # Inter-process notification queue
 ```
 

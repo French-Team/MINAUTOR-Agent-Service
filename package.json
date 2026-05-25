@@ -1,6 +1,7 @@
-﻿{
+{
     "name": "minautor-agent-service",
     "version": "0.1.0",
+    "license": "MIT",
     "description": "System Agentic inspired by Codebuff",
     "type": "module",
     "main": "dist/engine.js",
@@ -8,10 +9,15 @@
         "build": "tsc",
         "start": "node dist/cli.js",
         "cli": "node dist/cli.js",
-        "final": "cls && npm run build && npm start"
+        "final": "cls && npm run build && npm start",
+        "test:unit": "node dist/unit-tests.js",
+        "test:ci": "npm run build && node dist/unit-tests.js && node dist/test.js",
+        "validate:all": "node dist/validate-all.js",
+        "test": "npm run test:ci"
     },
     "devDependencies": {
-        "typescript": "^5.5.0",
-        "@types/node": "^22.0.0"
+        "@types/node": "^22.0.0",
+        "tsx": "^4.22.3",
+        "typescript": "^5.5.0"
     }
 }

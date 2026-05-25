@@ -38,7 +38,17 @@ export function loadProfile(type: 'agents' | 'daemons' | 'bots', profileName: st
 
 function ensureAgentsDir(): void {
   if (!existsSync(AGENTS_DIR)) {
-    mkdirSync(AGENTS_DIR, { recursive: true })
+    try {
+      mkdirSync(AGENTS_DIR, { recursive: true })
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException
+      if (err.code === 'EPERM') {
+        // Windows race condition : le dossier existe mais est verrouillé (anti-virus, indexation)
+        // On ignore — les opérations suivantes confirmeront si le dossier est vraiment inaccessible
+        return
+      }
+      throw e
+    }
   }
 }
 
@@ -149,6 +159,7 @@ const definition: AgentDefinition = {
   id: '{{id}}',
   displayName: '{{displayName}}',
   model: '{{model}}',
+{{providerLine}}
   toolNames: [{{tools}}],
   instructionsPrompt: \`{{instructions}}\`,
 
@@ -300,6 +311,7 @@ export function scaffoldAgent(
   template: 'standard' | 'fast' | 'daemon' = 'standard',
   profile?: AgentProfile,
   maxParallel?: number,
+  provider?: string,
 ): string {
   ensureAgentsDir()
   const filename = `${id}.ts`
@@ -325,6 +337,9 @@ export function scaffoldAgent(
     .replace(/\{\{id\}\}/g, id)
     .replace(/\{\{displayName\}\}/g, name)
     .replace(/\{\{model\}\}/g, model)
+    // Remplacer la ligne provider (conditionnelle : omise si pas de provider)
+    const providerLine = provider ? `  provider: '${provider}',` : ''
+    content = content.replace('{{providerLine}}', providerLine)
     .replace(/\{\{tools\}\}/g, toolsStr)
     .replace(/\{\{instructions\}\}/g, finalInstructions)
 

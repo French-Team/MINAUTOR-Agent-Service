@@ -84,7 +84,7 @@
 | `data/golden-rules/` | Validation rules for agents and orchestration |
 | `data/templates/` | Agent scaffolding templates |
 | `data/protocols/` | PACO protocol documentation and keyword registry |
-| `agent-logbook.md` | Execution log for spawned agents |
+| `telecom/agent-logbook.md` | Execution log for spawned agents |
 | `.notifications.json` | Inter-process notification queue |
 
 ## Built-in Agents
@@ -164,7 +164,7 @@ node dist/spawn-agent.js agent-id "Your instruction"
 
 **What happens**:
 - Agent runs in subprocess
-- Results logged to `agent-logbook.md`
+- Results logged to `telecom/agent-logbook.md`
 - Notifications sent via `.notifications.json`
 - Process exits after completion
 
@@ -329,7 +329,7 @@ Standard set: `['run_terminal_command', 'add_message', 'set_output', 'skill']`
 
 ### Background Agents
 - Use `spawn-agent.js` for daemon/timer agents
-- Results logged to `agent-logbook.md`
+- Results logged to `telecom/agent-logbook.md`
 - Notifications via `.notifications.json`
 
 ## Testing & Validation
@@ -395,7 +395,7 @@ Located in `data/golden-rules/`:
 ### Daemon Agents
 - Should use `pushNotification` for communication
 - Background execution via `spawn-agent.js`
-- Results logged to `agent-logbook.md`
+- Results logged to `telecom/agent-logbook.md`
 - Notifications queued in `.notifications.json`
 
 ### Rate Limiting

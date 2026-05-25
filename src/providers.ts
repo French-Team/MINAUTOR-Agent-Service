@@ -339,10 +339,11 @@ export async function testConnection(
       diagnostics.push('⏳ Trop de requêtes — attends quelques secondes')
     } else if (msg.includes('404')) {
       diagnostics.push('📭 Endpoint introuvable — vérifie l\'URL de base')
-      diagnostics.push(`   URL testée : ${baseUrl}/chat/completions`)
+      const endpoint = (providerType === 'ollama' || providerType === 'ollama-local' || providerType === 'ollama-cloud') ? '/api/chat' : '/chat/completions'
+      diagnostics.push(`   URL testée : ${baseUrl}${endpoint}`)
     } else if (msg.includes('timeout') || msg.includes('ETIMEDOUT') || msg.includes('ECONNREFUSED')) {
       diagnostics.push('🔌 Le serveur ne répond pas')
-      if (providerType === 'ollama' || providerType === 'lm-studio') {
+      if (providerType === 'ollama' || providerType === 'ollama-local' || providerType === 'lm-studio') {
         diagnostics.push('   → Vérifie que le service local est démarré')
       } else {
         diagnostics.push('   → Vérifie ta connexion réseau')
@@ -418,11 +419,22 @@ export async function fetchModels(providerType: string, apiKey: string, baseUrl:
     throw new Error('Format de réponse inattendu — data[] manquant')
   }
 
-  if (providerType === 'ollama') {
+  if (providerType === 'ollama-local') {
     const res = await tryFetch(`${slimUrl}/api/tags`)
     const json = await res.json() as { models?: Array<{ name: string }> }
     if (json.models) {
       return json.models.map(m => m.name.replace(/^.*?\//, '')).filter(Boolean)
+    }
+    throw new Error('Format de réponse inattendu — models[] manquant')
+  }
+
+  if (providerType === 'ollama-cloud') {
+    const res = await tryFetch(`${slimUrl}/api/tags`, {
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+    })
+    const json = await res.json() as { models?: Array<{ name: string }> }
+    if (json.models) {
+      return json.models.map(m => m.name).filter(Boolean)
     }
     throw new Error('Format de réponse inattendu — models[] manquant')
   }
@@ -447,10 +459,12 @@ export function getModelFetchGuidance(providerType: string, err: Error): string[
 
   // Priorité 1 : Erreurs de connexion (avant les erreurs d'authentification)
   if (msg.includes('fetch') || msg.includes('ENOTFOUND') || msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT') || msg.includes('timeout')) {
+    if (providerType === 'ollama') providerType = 'ollama-local'
+
     if (isLocalProvider(providerType)) {
-      lines.push(`🖥️  ${providerType === 'ollama' ? 'Ollama' : 'LM Studio'} n'est pas démarré`)
+      lines.push(`🖥️  ${providerType === 'ollama-local' ? 'Ollama' : 'LM Studio'} n'est pas démarré`)
       lines.push(`   → Démarre le service localement`)
-      if (providerType === 'ollama') lines.push('   → Télécharge : https://ollama.com')
+      if (providerType === 'ollama-local') lines.push('   → Télécharge : https://ollama.com')
       if (providerType === 'lm-studio') lines.push('   → Télécharge : https://lmstudio.ai')
     } else {
       lines.push('🔌 Impossible de contacter le serveur — vérifie ta connexion réseau')
@@ -465,6 +479,7 @@ export function getModelFetchGuidance(providerType: string, err: Error): string[
     if (providerType === 'google') lines.push('   → Active l\'API "Generative Language" dans Google Cloud Console')
     if (providerType === 'openrouter') lines.push('   → Vérifie ta clé sur https://openrouter.ai/keys')
     if (providerType === 'opencode-zen') lines.push('   → Vérifie ta clé Opencode Zen')
+    if (providerType === 'ollama-cloud') lines.push('   → Crée une clé sur https://ollama.com/settings/keys')
     if (providerType === 'custom') lines.push('   → Vérifie que ta clé API est correcte pour ce provider')
   }
   // Priorité 3 : Autres erreurs HTTP
@@ -489,12 +504,15 @@ export function getModelFetchGuidance(providerType: string, err: Error): string[
  */
 export function resolveProviderForModel(model: string, providerHint?: string): { provider: string; apiKey: string; baseUrl: string; model: string } | undefined {
   // 0. If provider hint is provided, use it first
+  //    Prefer enabled providers, but fall back to disabled ones if necessary.
+  //    The user explicitly chose this provider for this agent — respect that choice.
   if (providerHint) {
-    const entries = loadProviders().providers.filter(p =>
-      p.provider === providerHint && p.enabled
-    )
-    if (entries.length > 0) {
-      const entry = entries[0]
+    const allProviders = loadProviders().providers.filter(p => p.provider === providerHint)
+    // Prefer enabled
+    let entry = allProviders.find(p => p.enabled)
+    // Fall back to disabled
+    if (!entry) entry = allProviders[0]
+    if (entry) {
       return { provider: providerHint, apiKey: entry.apiKeys[0] || '', baseUrl: entry.baseUrl, model }
     }
   }
@@ -505,11 +523,11 @@ export function resolveProviderForModel(model: string, providerHint?: string): {
   else if (model.startsWith('gemini-') || model.startsWith('google/')) providerType = 'google'
   else if (model.startsWith('openrouter/')) providerType = 'openrouter'
   else if (model.startsWith('opencode-zen/')) providerType = 'opencode-zen'
-  else if (model.startsWith('ollama/') || model === 'llama3.2' || model.includes('llama')) providerType = 'ollama'
+  else if (model.startsWith('ollama/') || model === 'llama3.2' || model.includes('llama')) providerType = 'ollama-local'
   else if (model.startsWith('lm-studio/')) providerType = 'lm-studio'
 
   // 2. Try the detected type first
-  const KEY_OPTIONAL = ['kilo', 'ollama', 'lm-studio']
+  const KEY_OPTIONAL = ['kilo', 'ollama-local', 'lm-studio']
   if (providerType) {
     // for key-optional providers, match any enabled entry
     // for key-required providers, only match if a key exists
@@ -540,13 +558,14 @@ export function getKnownProviders(): { type: string; label: string; local: boole
     { type: 'openrouter', label: 'OpenRouter', local: false },
     { type: 'opencode-zen', label: 'Opencode Zen', local: false },
     { type: 'custom', label: 'Custom (autre)', local: false },
-    { type: 'ollama', label: 'Ollama (local)', local: true },
+    { type: 'ollama-local', label: 'Ollama (local)', local: true },
+    { type: 'ollama-cloud', label: 'Ollama Cloud', local: false },
     { type: 'lm-studio', label: 'LM Studio (local)', local: true },
   ]
 }
 
 export function isLocalProvider(providerType: string): boolean {
-  return providerType === 'ollama' || providerType === 'lm-studio'
+  return providerType === 'ollama-local' || providerType === 'lm-studio'
 }
 
 /**
@@ -560,7 +579,7 @@ export async function checkLocalProvider(providerType: string): Promise<{ alive:
   const base = config.baseUrl.replace(/\/+$/, '')
 
   try {
-    if (providerType === 'ollama') {
+    if (providerType === 'ollama-local') {
       const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(3000) })
       if (!res.ok) return { alive: false, error: `HTTP ${res.status}` }
       const json = await res.json() as { models?: unknown[] }
