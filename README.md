@@ -5,7 +5,7 @@
 
   **L'orchestration multi-agents nouvelle génération pour TypeScript & Node.js**
 
-  [![Version](https://img.shields.io/badge/version-1.1.0-blue.svg?style=for-the-badge)](https://github.com/votre-repo)
+  [![Version](https://img.shields.io/badge/version-1.2.0-blue.svg?style=for-the-badge)](https://github.com/votre-repo)
   [![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)](LICENSE)
   [![Status](https://img.shields.io/badge/status-active-success.svg?style=for-the-badge)](https://github.com/votre-repo)
   [![Platform](https://img.shields.io/badge/platform-node.js-black.svg?style=for-the-badge)](https://nodejs.org/)
@@ -22,10 +22,11 @@
 3. [🛠️ Tech Stack](#️-tech-stack)
 4. [💎 Caractéristiques Clés](#-caractéristiques-clés)
 5. [🤖 Protocole PACO](#-protocole-paco)
-6. [📚 Bibliothèque de Profils](#-bibliothèque-de-profils)
-7. [🏗️ Architecture du Projet](#️-architecture-du-projet)
-8. [🤝 Contribution](#-contribution)
-9. [📜 Licence](#-licence)
+6. [📦 Écosystème de Kits](#-écosystème-de-kits)
+7. [🛡️ Qualité & Performance](#️-qualité--performance)
+8. [🏗️ Architecture du Projet](#️-architecture-du-projet)
+9. [🤝 Contribution](#-contribution)
+10. [📜 Licence](#-licence)
 
 ---
 
@@ -33,111 +34,100 @@
 
 **MINAUTOR** est un framework complet d'orchestration multi-agents conçu pour l'ère de l'IA de 2026. Il permet de définir, gérer et exécuter des agents spécialisés avec une intégration LLM fluide, une gestion de sessions persistantes et un protocole de gouvernance strict basé sur la délégation (PACO).
 
-Que vous ayez besoin d'un assistant de développement interactif ou de démons de surveillance en arrière-plan, MINAUTOR offre la flexibilité et la robustesse nécessaires pour vos workflows d'IA les plus complexes.
-
 ---
 
 ## 🚀 Démarrage Rapide
 
-### Installation
+### Installation & Build
 
 ```bash
-# Cloner le dépôt
 git clone https://github.com/votre-username/minautor-agents-service.git
 cd minautor-agents-service
-
-# Installer les dépendances
 npm install
-
-# Build & Lancement (Mode Interactif)
-npm run final
+npm run final # Build complet avec linting automatique et lancement CLI
 ```
 
-### Utilisation Interactive (CLI)
+### Scripts Utiles
 
-Lancez le menu principal pour accéder à toutes les fonctionnalités :
-- **1. Create agent** : Configurez votre premier agent (Provider, Modèle, Profil).
-- **2. Start session** : Engagez la conversation avec vos agents.
-- **5. Manage providers** : Configurez vos clés API (Gemini, OpenRouter, Kilo, etc.).
+| Commande | Description |
+| :--- | :--- |
+| `npm run build` | Compilation TS (exécute `lint:regex` en pré-build) |
+| `npm run test:load` | Exécute les tests de charge du moteur |
+| `npm run validate:all` | Valide l'intégrité de tous les agents enregistrés |
+| `npm run lint:regex` | Analyse statique des Regex via AST |
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Technologie | Usage |
-| :--- | :--- |
-| **TypeScript** | Langage principal & Typage strict |
-| **Node.js** | Runtime environnement |
-| **LLM Engine** | Moteur multi-fournisseurs (Kilo, Gemini, Ollama, etc.) |
-| **Inquirer** | Interface CLI interactive |
-| **YAML** | Parsing des compétences (Skill System) |
-| **AST Parsing** | Analyse statique avancée pour le linting et l'injection |
+- **Runtime** : Node.js (v22+)
+- **Langage** : TypeScript (Typage strict, AST Parsing)
+- **Engine** : Multi-fournisseurs (Kilo, Gemini, OpenRouter, Ollama)
+- **Qualité** : ESLint, TSX, Regex Linter (Custom AST)
+- **Interface** : CLI Interactive via Inquirer
 
 ---
 
 ## 💎 Caractéristiques Clés
 
-- 🤖 **Multi-Agent Orchestration** — Déléguez des tâches complexes à une équipe d'agents spécialisés.
-- 🔑 **Multi-Key Rotation** — Failover automatique entre clés API avec détection de rate-limit.
-- 🛠️ **Tool Loop & Guardian** — Exécution sécurisée d'outils avec blocage des commandes dangereuses.
-- 📡 **Inter-Process Notifications** — Communication fluide entre les démons et l'interface CLI.
-- 🔄 **Self-Correction** — Capacité du moteur à valider et corriger les sorties LLM en temps réel.
-- 📦 **Skill System** — Système auto-généré de compétences via `SKILL.md`.
-- 💉 **Kits Injector** — Injection automatique d'imports via marqueurs `@kit` pour accélérer le développement.
-- 🔍 **Regex Linter** — Analyse statique via TypeScript AST pour garantir la validité des expressions régulières.
+- 🤖 **Multi-Agent Orchestration** — Délégation intelligente via le protocole PACO.
+- 🔑 **Multi-Key Rotation** — Failover transparent et gestion du rate-limiting.
+- 💉 **Kits Injector** — Injection automatique d'imports via marqueurs `@kit`.
+- 📡 **Telecom Services** :
+  - `Daemon` : Surveillance active en arrière-plan.
+  - `Resumer` : Synthèse automatique des activités.
+  - `Optimiser` : Optimisation des performances des agents.
+  - `Nettoyer` : Maintenance automatique des sessions et fichiers temporaires.
 
 ---
 
 ## 🤖 Protocole PACO
 
-Le protocole **PACO (Protocol for Agentic COordination)** garantit une gouvernance stricte :
-1. **Orchestrateur** : Coordonne et délègue, ne produit jamais de livrables directement.
-2. **Superviseur** : Surveille la conformité de l'orchestrateur (Lecture seule).
-3. **Daemon-superviseur** : Audit en arrière-plan toutes les 5 minutes.
+Gouvernance par délégation :
+1. **Orchestrateur** : Chef d'orchestre, délègue aux experts.
+2. **Superviseur** : Gardien de la conformité (Read-only).
+3. **Audit Daemon** : Surveillance continue et rapport d'audit toutes les 5 min.
 
 ---
 
-## 📚 Bibliothèque de Profils
+## 📦 Écosystème de Kits
 
-Accédez à **598 profils pré-configurés** pour accélérer vos créations :
-- 👨‍💻 **226 Agents** : Experts en code (Python, React, Rust), planification, analyse.
-- 🤖 **269 Bots** : Automatisation Git, Docker, tests, scripts.
-- 🕵️ **103 Daemons** : Maintenance, surveillance, logs, coordination.
+Le système de **Kits** permet d'étendre les capacités des agents de manière modulaire :
+- **Localisation** : `kits/`
+- **Registre** : `registry.json` gère les versions et dépendances.
+- **Utilisation** : Insérez `// @kit tests` dans votre code pour injecter automatiquement les utilitaires de test.
+
+---
+
+## 🛡️ Qualité & Performance
+
+MINAUTOR intègre des outils de validation de pointe :
+- **Regex AST Linter** : Intégré au workflow de build, il empêche la compilation si des expressions régulières invalides sont détectées.
+- **Load Testing** : Scripts dédiés pour tester la montée en charge des sessions agents.
+- **Guardian** : Système de filtrage des commandes shell pour empêcher l'exécution d'instructions malveillantes.
 
 ---
 
 ## 🏗️ Architecture du Projet
 
 ```text
-src/
-├── engine/           # Moteur LLM (Sessions, Tool Loop, Guardian)
-├── cli/              # Interface utilisateur (Menus, Sessions, Agents)
-├── kits-injector.ts  # Système d'injection automatique de kits
-├── lint-regex.ts     # Validateur de Regex via TypeScript AST
-├── agents.ts         # Gestion CRUD et scaffolding des agents
-├── providers.ts      # Gestion des fournisseurs et rotation des clés
-├── skills.ts         # Système de compétences et parsing YAML
-└── telecom/          # Services d'arrière-plan et intercom
+.
+├── kits/             # Registre et modules de kits réutilisables
+├── src/
+│   ├── engine/       # Cœur du moteur (Executor, Guardian, Sessions)
+│   ├── telecom/      # Services de maintenance et optimisation
+│   ├── kits-injector.ts # Logique d'injection automatique
+│   ├── lint-regex.ts    # Analyseur AST pour les Regex
+│   └── cli.ts        # Point d'entrée de l'interface utilisateur
 ```
-
----
-
-## 🤝 Contribution
-
-Les contributions sont les bienvenues ! 
-1. Forkez le projet
-2. Créez votre branche (`git checkout -b feature/AmazingFeature`)
-3. Committez vos changements (`git commit -m 'Add some AmazingFeature'`)
-4. Pushez vers la branche (`git push origin feature/AmazingFeature`)
-5. Ouvrez une Pull Request
 
 ---
 
 ## 📜 Licence
 
-Distribué sous la licence MIT. Voir `LICENSE` pour plus d'informations.
+Distribué sous la licence MIT.
 
 <div align="center">
   <br />
-  <sub>Propulsé par <b>MINAUTOR</b> — Redéfinir l'autonomie agentique.</sub>
+  <sub>Propulsé par <b>MINAUTOR</b> — L'excellence agentique par la structure.</sub>
 </div>
