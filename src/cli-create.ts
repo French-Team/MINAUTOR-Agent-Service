@@ -137,7 +137,7 @@ export async function handleCreate(rl: ReturnType<typeof createInterface>): Prom
 
 
   let configured = listProviders().find(p => p.provider === providerType)
-  let apiKey = configured?.apiKeys?.[0] || ''
+  let apiKey = configured?.apiKeys?.[0]?.key || ''
 
   while (true) {
     if (KEY_REQUIRED.includes(providerType) && !apiKey) {
@@ -163,7 +163,7 @@ export async function handleCreate(rl: ReturnType<typeof createInterface>): Prom
       process.stdout.write(`\r${GREEN}✓ Clé API valide pour ${providerType}        ${RESET}\n`)
       
       // Sauvegarde de la clé si valide
-      if (apiKey && apiKey !== configured?.apiKeys?.[0]) {
+      if (apiKey && apiKey !== configured?.apiKeys?.[0]?.key) {
         const label = providerType === 'opencode-zen' ? 'Opencode Zen'
           : providerType === 'google' ? 'Google Gemini'
           : providerType === 'custom' ? `Custom (${providerType})`

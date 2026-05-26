@@ -5,6 +5,7 @@ import { createHealthChecker } from './engine-health.js'
 import { createCommandRunner } from './engine-guardian.js'
 import { createToolExecutor } from './engine-executor.js'
 import { createRunner } from './engine-runner.js'
+import { getNextApiKey, markRateLimited, getKeyIdByKey, getKeyById } from './providers.js'
 
 export { type LLMProvider } from './engine-types.js'
 export {
@@ -59,6 +60,10 @@ export function createEngine(config: EngineConfig) {
     checkRateLimit,
     processTools,
     agent,
+    getNextKey: getNextApiKey,
+    markRateLimited,
+    getKeyIdByKey,
+    getKeyById,
   })
 
   return {

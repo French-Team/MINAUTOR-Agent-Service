@@ -11,10 +11,16 @@ import {
   setProviderEnabled,
   getModelFetchGuidance,
   testConnection,
+  checkLocalProvider,
+  getProviderKeyStatuses,
 } from './providers.js'
 import type { ProviderConfig } from './providers.js'
 
-import { RESET, CYAN, GREEN, YELLOW, RED, GRAY, BOLD, top15 } from './constants.js'
+import { RESET, CYAN, GREEN, YELLOW, RED, GRAY, BOLD, top15, KEY_REQUIRED } from './constants.js'
+
+// ── Cache de validation in-memory ─────────────────────────
+// Providers dont la connexion a été testée avec succès pendant cette session
+const validatedProviders = new Set<string>()
 
 // ── Provider Management UI ───────────────────────────────
 
@@ -22,6 +28,13 @@ export async function handleManageProvidersMenu(rl: ReturnType<typeof createInte
   console.log(`\n${BOLD}${CYAN}┌─ Gérer les providers ─────────────────────┐${RESET}`)
   console.log(`${BOLD}${CYAN}│  Configurer les clés API et modèles       │${RESET}`)
   console.log(`${BOLD}${CYAN}└───────────────────────────────────────────┘${RESET}\n`)
+  console.log(`${GRAY}┌─ Alternateur multi-clés${RESET}`)
+  console.log(`${GRAY}│  Ajoutez plusieurs clés API sur un même provider.${RESET}`)
+  console.log(`${GRAY}│  En cas de limite de débit (HTTP 429), le système${RESET}`)
+  console.log(`${GRAY}│  bascule automatiquement sur la clé suivante.${RESET}`)
+  console.log(`${GRAY}│  Maximum 3 rotations avant d'abandonner.${RESET}`)
+  console.log(`${GRAY}│  Cooldown de 60s par clé après un 429.${RESET}`)
+  console.log(`${GRAY}└${RESET}\n`)
 
   const providers = listProviders()
   if (providers.length === 0) {
@@ -31,14 +44,62 @@ export async function handleManageProvidersMenu(rl: ReturnType<typeof createInte
 
   let done = false
   while (!done) {
+    // Ping des providers locaux en parallèle (timeout 3s chacun)
+    const localResults = new Map<string, boolean>()
+    const localChecks = providers
+      .filter(p => p.provider === 'ollama-local' || p.provider === 'lm-studio')
+      .map(async p => {
+        try {
+          const result = await checkLocalProvider(p.provider)
+          localResults.set(p.name, result.alive)
+        } catch {
+          localResults.set(p.name, false)
+        }
+      })
+    await Promise.allSettled(localChecks)
+
+    // Les providers locaux répondant sont automatiquement validés et activés (pas de clé API nécessaire)
+    for (const [name, alive] of localResults) {
+      if (alive) {
+        validatedProviders.add(name)
+        const p = providers.find(x => x.name === name)
+        if (p && !p.enabled) {
+          setProviderEnabled(name, true)
+          p.enabled = true
+        }
+      }
+    }
+
     // Afficher la liste des providers
     console.log(`${BOLD}Fournisseurs disponibles :${RESET}`)
     for (let i = 0; i < providers.length; i++) {
       const p = providers[i]
-      const status = p.enabled ? `${GREEN}✓${RESET}` : `${GRAY}✗${RESET}`
-      const keyCount = p.apiKeys?.length || 0
-      const keyInfo = keyCount > 0 ? `${keyCount} clé(s)` : 'aucune clé'
-      console.log(`  ${CYAN}${i + 1}${RESET}. ${status} ${p.name.padEnd(20)} ${GRAY}[${keyInfo}] ${p.defaultModel}${RESET}`)
+      const enabledIcon = p.enabled ? `${GREEN}✓${RESET}` : `${GRAY}✗${RESET}`
+
+      // Déterminer le badge de statut dynamique
+      let badge: string
+      const hasKeys = (p.apiKeys?.length || 0) > 0
+      const needsKey = KEY_REQUIRED.includes(p.provider)
+      const isValidated = validatedProviders.has(p.name)
+
+      if (isValidated) {
+        badge = `${GREEN}✓ validé${RESET}`
+      } else if (p.provider === 'kilo') {
+        badge = `${GREEN}✓ prêt${RESET}`
+      } else if (p.provider === 'ollama-local' || p.provider === 'lm-studio') {
+        const alive = localResults.get(p.name)
+        if (alive === undefined) badge = `${GRAY}? inconnu${RESET}`
+        else if (alive) badge = `${GREEN}✓ en ligne${RESET}`
+        else badge = `${RED}✗ arrêté${RESET}`
+      } else if (hasKeys) {
+        badge = `${GREEN}✓ ${p.apiKeys!.length} clé(s)${RESET}`
+      } else if (needsKey) {
+        badge = `${RED}✗ clé manq${RESET}`
+      } else {
+        badge = `${GRAY}? config${RESET}`
+      }
+
+      console.log(`  ${CYAN}${i + 1}${RESET}. ${enabledIcon} ${p.name.padEnd(20)}  ${badge}  ${GRAY}${p.defaultModel}${RESET}`)
     }
     console.log(`  ${CYAN}0${RESET}. Retour au menu principal\n`)
 
@@ -78,6 +139,7 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
     console.log(`  ${CYAN}3${RESET}. Voir les clés API`)
     console.log(`  ${CYAN}4${RESET}. Supprimer une clé API`)
     console.log(`  ${CYAN}5${RESET}. ${provider.enabled ? 'Désactiver' : 'Activer'} ce provider`)
+    console.log(`  ${CYAN}6${RESET}. État des clés & alternateur`)
     console.log(`  ${CYAN}0${RESET}. Retour\n`)
 
     const choice = (await rl.question(`${CYAN}Choix${RESET} ${GRAY}>${RESET} `)).trim()
@@ -103,6 +165,7 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
 
         if (setProviderApiKey(provider.name, apiKey)) {
           console.log(`${GREEN}✓ Clé API mise à jour pour "${provider.name}".${RESET}`)
+          validatedProviders.add(provider.name)
           // Recharger le provider pour afficher les infos à jour
           const updated = getProvider(provider.name)
           if (updated) Object.assign(provider, updated)
@@ -122,7 +185,7 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
       // Configurer le modèle par défaut
       console.log(`\n${YELLOW}⟳ Récupération des modèles disponibles...${RESET}`)
       try {
-        const models = await fetchModels(provider.provider, provider.apiKeys?.[0] || '', provider.baseUrl)
+        const models = await fetchModels(provider.provider, provider.apiKeys?.[0]?.key || '', provider.baseUrl)
 
         // Si aucun modèle et que c'est Ollama Local, proposer d'installer lfm2.5-thinking:latest
         if (models.length === 0 && provider.provider === 'ollama-local') {
@@ -144,10 +207,11 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
                 console.log(`${GREEN}✓ Modèle installé avec succès${RESET}`)
 
                 // Récupérer la liste mise à jour
-                const updatedModels = await fetchModels(provider.provider, provider.apiKeys?.[0] || '', provider.baseUrl)
+                const updatedModels = await fetchModels(provider.provider, provider.apiKeys?.[0]?.key || '', provider.baseUrl)
                 if (updatedModels.includes('lfm2.5-thinking:latest')) {
                   if (setProviderDefaultModel(provider.name, 'lfm2.5-thinking:latest')) {
                     console.log(`${GREEN}✓ Modèle par défaut mis à jour : lfm2.5-thinking:latest${RESET}`)
+                    validatedProviders.add(provider.name)
                     const updated = getProvider(provider.name)
                     if (updated) Object.assign(provider, updated)
                   }
@@ -186,13 +250,14 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
         // Test de connexion avec le nouveau modèle
         console.log(`\n${BOLD}${CYAN}┌─ Test de connexion ──────────────────────┐${RESET}`)
         process.stdout.write(`${YELLOW}⟳ Test de connexion à ${provider.provider} / ${model}...${RESET}`)
-        const result = await testConnection(provider.provider, provider.apiKeys?.[0] || '', provider.baseUrl, model)
+        const result = await testConnection(provider.provider, provider.apiKeys?.[0]?.key || '', provider.baseUrl, model)
         if (result.ok) {
           process.stdout.write(`\r${GREEN}✓ Connexion réussie !${RESET}\n\n`)
           console.log(`${BOLD}${CYAN}└────────────────────────────────────────────┘${RESET}\n`)
 
           if (setProviderDefaultModel(provider.name, model)) {
             console.log(`${GREEN}✓ Modèle par défaut mis à jour : ${model}${RESET}`)
+            validatedProviders.add(provider.name)
             // Recharger le provider
             const updated = getProvider(provider.name)
             if (updated) Object.assign(provider, updated)
@@ -220,13 +285,14 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
         // Test de connexion avec le modèle saisi manuellement
         console.log(`\n${BOLD}${CYAN}┌─ Test de connexion ──────────────────────┐${RESET}`)
         process.stdout.write(`${YELLOW}⟳ Test de connexion à ${provider.provider} / ${model}...${RESET}`)
-        const result = await testConnection(provider.provider, provider.apiKeys?.[0] || '', provider.baseUrl, model)
+        const result = await testConnection(provider.provider, provider.apiKeys?.[0]?.key || '', provider.baseUrl, model)
         if (result.ok) {
           process.stdout.write(`\r${GREEN}✓ Connexion réussie !${RESET}\n\n`)
           console.log(`${BOLD}${CYAN}└────────────────────────────────────────────┘${RESET}\n`)
 
           if (setProviderDefaultModel(provider.name, model)) {
             console.log(`${GREEN}✓ Modèle par défaut mis à jour : ${model}${RESET}`)
+            validatedProviders.add(provider.name)
             const updated = getProvider(provider.name)
             if (updated) Object.assign(provider, updated)
           } else {
@@ -250,9 +316,15 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
       } else {
         console.log(`\n${BOLD}Clés API pour ${provider.name} (${keys.length}) :${RESET}`)
         for (let i = 0; i < keys.length; i++) {
-          console.log(`  ${CYAN}${i + 1}${RESET}. ****${keys[i].slice(-4)}`)
+          console.log(`  ${CYAN}${i + 1}${RESET}. ${keys[i].label ? `${keys[i].label} ` : ''}****${keys[i].key.slice(-4)}`)
         }
-        if (keys.length > 1) console.log(`\n${GREEN}⚡ Alternateur actif : ${keys.length} clés en rotation${RESET}`)
+        if (keys.length > 1) {
+          console.log(`\n${GREEN}⚡ Alternateur actif : ${keys.length} clés en rotation${RESET}`)
+          console.log(`${GRAY}   Rotation round-robin — bascule auto sur 429 (cooldown 60s)${RESET}`)
+        } else {
+          console.log(`\n${YELLOW}💡 Astuce : ajoutez une 2ᵉ clé pour activer l'alternateur automatique${RESET}`)
+          console.log(`${GRAY}   En cas de 429, le système basculera sur l'autre clé.${RESET}`)
+        }
       }
       continue
     }
@@ -266,7 +338,7 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
       }
       console.log(`\n${BOLD}Clés disponibles :${RESET}`)
       for (let i = 0; i < keys.length; i++) {
-        console.log(`  ${CYAN}${i + 1}${RESET}. ****${keys[i].slice(-4)}`)
+        console.log(`  ${CYAN}${i + 1}${RESET}. ${keys[i].label ? `${keys[i].label} ` : ''}****${keys[i].key.slice(-4)}`)
       }
       const keyNum = (await rl.question(`\n${CYAN}Numéro de la clé à supprimer${RESET} ${GRAY}>${RESET} `)).trim()
       const keyIdx = parseInt(keyNum, 10) - 1
@@ -274,8 +346,8 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
         console.log(`${RED}Choix invalide.${RESET}`)
         continue
       }
-      if (removeProviderKey(provider.name, keys[keyIdx])) {
-        console.log(`${GREEN}✓ Clé ****${keys[keyIdx].slice(-4)} supprimée de "${provider.name}".${RESET}`)
+      if (removeProviderKey(provider.name, keys[keyIdx].key)) {
+        console.log(`${GREEN}✓ Clé ****${keys[keyIdx].key.slice(-4)} supprimée de "${provider.name}".${RESET}`)
         // Recharger le provider
         const updated = getProvider(provider.name)
         if (updated) Object.assign(provider, updated)
@@ -294,6 +366,69 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
       // Recharger le provider
       const updated = getProvider(provider.name)
       if (updated) Object.assign(provider, updated)
+      continue
+    }
+
+    if (choice === '6') {
+      // Dashboard état des clés & alternateur
+      const keys = getProviderKeys(provider.name)
+      const statuses = getProviderKeyStatuses(provider.name)
+
+      console.log(`\n${BOLD}${CYAN}┌─ État des clés API — ${provider.name}${RESET}`)
+
+      if (keys.length === 0) {
+        console.log(`${CYAN}│${RESET}`)
+        console.log(`${CYAN}│${RESET}  ${YELLOW}Aucune clé configurée.${RESET}`)
+        console.log(`${CYAN}│${RESET}  Ajoutez une clé avec l'option ${GREEN}1${RESET}.`)
+      } else {
+        const status = provider.enabled ? `${GREEN}✓ Activé${RESET}` : `${GRAY}✗ Désactivé${RESET}`
+        console.log(`${CYAN}│${RESET}`)
+        console.log(`${CYAN}│${RESET}  Statut   : ${status}`)
+        console.log(`${CYAN}│${RESET}  Modèle   : ${GRAY}${provider.defaultModel}${RESET}`)
+        console.log(`${CYAN}│${RESET}  Clés     : ${keys.length}`)
+
+        if (keys.length > 1) {
+          console.log(`${CYAN}│${RESET}`)
+          console.log(`${CYAN}│${RESET}  ${GREEN}⚡ Alternateur : ${keys.length} clés en rotation${RESET}`)
+          console.log(`${CYAN}│${RESET}  ${GRAY}   Round-robin — bascule auto sur 429${RESET}`)
+          console.log(`${CYAN}│${RESET}  ${GRAY}   Cooldown 60s par clé — max 3 rotations/appel${RESET}`)
+        }
+
+        console.log(`${CYAN}│${RESET}`)
+        for (const s of statuses) {
+          const label = s.label ? `${CYAN}[${s.label}]${RESET} ` : ''
+          const mask = `****${s.keySuffix}`
+
+          let stateIcon: string
+          let stateText: string
+          if (s.rateLimited) {
+            const secs = Math.ceil(s.remainingCooldownMs / 1000)
+            stateIcon = `${RED}⏳${RESET}`
+            stateText = `${RED}rate-limited${RESET} ${GRAY}(encore ${secs}s)${RESET}`
+          } else if (s.isNextKey) {
+            stateIcon = `${GREEN}→${RESET}`
+            stateText = `${GREEN}prochaine clé sélectionnée${RESET}`
+          } else {
+            stateIcon = `${GREEN}✓${RESET}`
+            stateText = `${GREEN}disponible${RESET}`
+          }
+
+          console.log(`${CYAN}│${RESET}  ${stateIcon} ${label}${mask}  ${stateText}`)
+        }
+
+        if (keys.length > 1) {
+          const available = statuses.filter(s => !s.rateLimited).length
+          const limited = statuses.filter(s => s.rateLimited).length
+          console.log(`${CYAN}│${RESET}`)
+          if (limited > 0) {
+            console.log(`${CYAN}│${RESET}  ${GREEN}${available} disponible(s)${RESET}  ${RED}${limited} rate-limited${RESET}`)
+          } else {
+            console.log(`${CYAN}│${RESET}  ${GREEN}Toutes les clés sont disponibles${RESET}`)
+          }
+        }
+      }
+
+      console.log(`${BOLD}${CYAN}└${RESET}\n`)
       continue
     }
 

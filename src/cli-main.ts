@@ -5,7 +5,7 @@ import { join } from 'path'
 import { fork, ChildProcess } from 'child_process'
 
 const backgroundAgents = new Map<string, ChildProcess>()
-import { listSkills, loadSkill } from './skills.js'
+import { loadSkill } from './skills.js'
 import { popAllNotifications, setNotificationFilter, getNotificationFilter, levelIcon, listLevels, countPendingNotifications, removeNotification, shouldShowNotification, loadNotificationHistory, cleanNotificationArchive, type NotificationLevel, type Notification } from './notify.js'
 import { emitKeypressEvents } from 'readline'
 import { createEngine, type Engine } from './engine.js'
@@ -36,6 +36,7 @@ import { handleCreate } from './cli-create.js'
 import { handleEditAgent } from './cli-edit.js'
 import { handleProviders } from './cli-providers-advanced.js'
 import { handleListAgents, handleUseAgent } from './cli-agents.js'
+import { handleSkillsMenu, showSkillsList } from './cli-skills.js'
 import { showMenu, showHelp } from './cli-menu.js'
 import { showBanner } from './cli-banner.js'
 import { loadUserProfile, getDisplayName, editUserProfile } from './cli-user.js'
@@ -301,9 +302,15 @@ export async function main() {
     if (line === '4') { handleListAgents(currentEngine!); continue }
     if (line === '5') { const newEngine = await handleEditAgent(rl, currentEngine!); if (newEngine) currentEngine = newEngine; continue }
 
+    // ── Skills & prompts ──
+    if (line === '6') {
+      await handleSkillsMenu(rl)
+      continue
+    }
+
     // ── Sessions ──
-    if (line === '6') { const newEngine = await handleStartSession(rl, currentEngine!); if (newEngine) currentEngine = newEngine; continue }
-    if (line === '7') {
+    if (line === '7') { const newEngine = await handleStartSession(rl, currentEngine!); if (newEngine) currentEngine = newEngine; continue }
+    if (line === '8') {
       showSessions(currentEngine!)
       // Afficher aussi les infos de la session active
       console.log()
@@ -313,13 +320,13 @@ export async function main() {
     }
 
     // ── Monitoring ──
-    if (line === '8') {
+    if (line === '9') {
       showIntercomStatus()
       continue
     }
 
     // ── Aide ──
-    if (line === '9') { showHelp(currentEngine!); continue }
+    if (line === '10') { showHelp(currentEngine!); continue }
 
     // ── Quitter ──
     if (line === '0') { stopTelecomDaemon(); console.log(`${GRAY}Bye.${RESET}`); rl.close(); exit(0) }
@@ -430,29 +437,23 @@ export async function main() {
         }
         case 'info': { showInfo(currentEngine!); break }
         case 'skills': {
-          if (args[0] === 'load') {
-            const skillName = args.slice(1).join(' ')
-            if (!skillName) { console.log(`${YELLOW}Usage: /skills load <nom>${RESET}`); break }
-            const skill = loadSkill(skillName)
-            if (!skill) { console.log(`${RED}Skill "${skillName}" introuvable.${RESET}`); break }
-            console.log(`\n${BOLD}${CYAN}┌─ Skill : ${skill.meta.name} ─────────────────────┐${RESET}`)
-            console.log(`${GRAY}${skill.meta.description}${RESET}`)
-            console.log(`${BOLD}${CYAN}└────────────────────────────────────────────┘${RESET}\n`)
-            const body = skill.content.replace(/---[\s\S]*?---\n/, '').trim()
-            console.log(`${body}\n`)
-            eng.addMessage('assistant', `[Skill "${skillName}" loaded]`)
-          } else {
-            const all = listSkills()
-            if (all.length === 0) {
-              console.log(`${YELLOW}Aucune skill disponible.${RESET}`)
-            } else {
-              console.log(`\n${BOLD}Skills disponibles (${all.length}) :${RESET}`)
-              for (const s of all) {
-                console.log(`  ${CYAN}${s.name}${RESET}  ${GRAY}${s.description}${RESET}`)
-              }
-              console.log(`\n${YELLOW}Utilise /skills load <nom> pour charger une skill.${RESET}\n`)
-            }
+          const skillName = args.join(' ')
+          if (!skillName) {
+            showSkillsList()
+            break
           }
+          const skill = loadSkill(skillName)
+          if (!skill) {
+            console.log(`${RED}Skill "${skillName}" introuvable. Utilisez /skills pour lister les skills disponibles.${RESET}`)
+            break
+          }
+          const body = skill.content.replace(/---[\s\S]*?---\n/, '').trim()
+          console.log(`\n${BOLD}${CYAN}════════════════════════════════════════════${RESET}`)
+          console.log(`${BOLD}${CYAN}  ${skill.meta.name}${RESET}`)
+          if (skill.meta.category) console.log(`  ${GRAY}${skill.meta.category}${RESET}`)
+          console.log(`  ${GREEN}${skill.meta.description}${RESET}`)
+          console.log(`${BOLD}${CYAN}════════════════════════════════════════════${RESET}\n`)
+          console.log(`${body}\n`)
           break
         }
         case 'ps': {

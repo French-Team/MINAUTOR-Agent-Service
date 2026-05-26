@@ -15,7 +15,7 @@ export const ONLINE_URLS: Record<string, string> = {
   kilo: 'https://api.kilo.ai',
   google: 'https://generativelanguage.googleapis.com',
   openrouter: 'https://openrouter.ai/api/v1',
-  'opencode-zen': 'https://zen.opencode.ai/v1',
+  'opencode-zen': 'https://opencode.ai/zen/v1',
   'lm-studio': 'http://localhost:1234/v1',
   'ollama-local': 'http://localhost:11434',
   'ollama-cloud': 'https://ollama.com',
@@ -53,9 +53,11 @@ const TOP_MODELS = [
 ]
 
 export function top15(m: string[]): string[] {
-  const free = m.filter(x => x.includes(':free'))
+  // Détecte :free (OpenRouter) ou -free (Opencode Zen, etc.)
+  const isFree = (x: string) => x.includes(':free') || x.endsWith('-free')
+  const free = m.filter(x => isFree(x))
   const best = m.filter(x =>
-    !x.includes(':free') &&
+    !isFree(x) &&
     TOP_MODELS.some(t => x.toLowerCase().includes(t.toLowerCase()))
   )
   const rest = m.filter(x => !free.includes(x) && !best.includes(x))

@@ -61,7 +61,7 @@ const SECTIONS: PickerSection[] = [
     title: '🧠 Skills',
     items: [
       { cmd: '/skills', label: 'Lister les skills' },
-      { cmd: '/skills load <nom>', label: 'Charger une skill' },
+      { cmd: '/skills <nom>', label: 'Voir le contenu d\'une skill' },
     ],
   },
   {

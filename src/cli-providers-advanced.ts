@@ -260,12 +260,14 @@ export async function handleProviders(
     const keys = getProviderKeys(name)
     if (keys.length === 0) {
       console.log(`${YELLOW}Aucune clé pour "${name}".${RESET}`)
-    } else {
-      console.log(`\n${BOLD}Clés API pour ${name} (${keys.length}) :${RESET}`)
-      for (let i = 0; i < keys.length; i++) {
-        console.log(`  ${CYAN}${i + 1}${RESET}. ****${keys[i].slice(-4)}`)
-      }
-      if (keys.length > 1) console.log(`\n${GREEN}⚡ Alternateur actif : ${keys.length} clés en rotation${RESET}`)
+    } else {        console.log(`\n${BOLD}Clés API pour ${name} (${keys.length}) :${RESET}`)
+        for (let i = 0; i < keys.length; i++) {
+          console.log(`  ${CYAN}${i + 1}${RESET}. ${keys[i].label ? `${keys[i].label} ` : ''}****${keys[i].key.slice(-4)}`)
+        }
+        if (keys.length > 1) {
+          console.log(`\n${GREEN}⚡ Alternateur actif : ${keys.length} clés en rotation${RESET}`)
+          console.log(`${GRAY}   Rotation round-robin — bascule auto sur 429 (cooldown 60s/clé)${RESET}`)
+        }
     }
     return
   }
@@ -280,7 +282,13 @@ export async function handleProviders(
     if (addProviderKey(name, key)) {
       const total = getProviderKeys(name).length
       console.log(`${GREEN}✓ Clé ajoutée à "${name}" (${total} clés au total)${RESET}`)
-      if (total >= 2) console.log(`${GREEN}⚡ Alternateur actif : ${total} clés en rotation pour ce provider${RESET}`)
+      if (total >= 2) {
+        console.log(`${GREEN}⚡ Alternateur actif : ${total} clés en rotation pour ce provider${RESET}`)
+        console.log(`${GRAY}   Rotation round-robin — bascule auto sur 429 (cooldown 60s/clé)${RESET}`)
+      } else {
+        console.log(`${YELLOW}💡 Ajoutez une 2ᵉ clé pour activer l'alternateur automatique${RESET}`)
+        console.log(`${GRAY}   En cas de 429, le système basculera sur l'autre clé automatiquement.${RESET}`)
+      }
     }
     return
   }
@@ -291,9 +299,9 @@ export async function handleProviders(
     const keySuffix = rest[rest.length - 1]
     if (!name || !keySuffix) { console.log(`${YELLOW}Usage: /providers removekey <nom> <suffixe>${RESET}`); return }
     const keys = getProviderKeys(name)
-    const match = keys.filter(k => k.endsWith(keySuffix))
+    const match = keys.filter(k => k.key.endsWith(keySuffix))
     if (match.length === 0) { console.log(`${RED}Aucune clé finissant par "${keySuffix}" pour "${name}"${RESET}`); return }
-    const key = match[0]
+    const key = match[0].key
     if (removeProviderKey(name, key)) {
       console.log(`${GREEN}✓ Clé ****${key.slice(-4)} supprimée de "${name}"${RESET}`)
     }

@@ -1,10 +1,16 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 
+export interface ApiKeyEntry {
+  id: string
+  key: string
+  label?: string
+}
+
 export interface ProviderConfig {
   name: string
   provider: string
-  apiKeys: string[]
+  apiKeys: ApiKeyEntry[]
   baseUrl: string
   defaultModel: string
   enabled: boolean
@@ -56,15 +62,15 @@ const DEFAULT_PROVIDERS: ProvidersFile = {
       name: 'Opencode Zen',
       provider: 'opencode-zen',
       apiKeys: [],
-      baseUrl: 'https://api.opencode.ai/v1',
+      baseUrl: 'https://opencode.ai/zen/v1',
       defaultModel: 'opencode-zen/default',
       enabled: false,
       currentKeyIndex: 0,
       maxParallel: 1,
     },
     {
-      name: 'Ollama',
-      provider: 'ollama',
+      name: 'Ollama (local)',
+      provider: 'ollama-local',
       apiKeys: [],
       baseUrl: 'http://localhost:11434',
       defaultModel: 'llama3.2',
@@ -101,14 +107,26 @@ function loadProviders(): ProvidersFile {
     }
     data.providers = data.providers.filter(p => p && typeof p === 'object')
     for (const p of data.providers) {
-      // migrate legacy apiKey → apiKeys
+      // migrate legacy string apiKeys → ApiKeyEntry[]
       if (!p.apiKeys) p.apiKeys = []
-      if (p.apiKey && !p.apiKeys.includes(p.apiKey)) {
-        p.apiKeys.unshift(p.apiKey)
+      if (typeof p.apiKeys[0] === 'string') {
+        p.apiKeys = (p.apiKeys as unknown as string[]).map(k => ({
+          id: generateKeyId(),
+          key: k,
+        }))
+      }
+      if (p.apiKey && !(p.apiKeys as ApiKeyEntry[]).some(e => e.key === p.apiKey)) {
+        ;(p.apiKeys as ApiKeyEntry[]).unshift({ id: generateKeyId(), key: p.apiKey })
       }
       if (p.currentKeyIndex === undefined) p.currentKeyIndex = 0
       if (p.maxParallel === undefined) p.maxParallel = 1
       p.apiKey = undefined
+
+      // migrate legacy provider type 'ollama' → 'ollama-local'
+      if (p.provider === 'ollama') {
+        if (p.name === 'Ollama') p.name = 'Ollama (local)'
+        p.provider = 'ollama-local'
+      }
     }
     return data
   } catch {
@@ -148,14 +166,27 @@ export function getProvidersByType(providerType: string): ProviderConfig[] {
   return loadProviders().providers.filter(p => p.provider === providerType)
 }
 
-export function addProvider(config: Partial<ProviderConfig> & { name: string; provider: string }): void {
+export function addProvider(config: {
+  name: string
+  provider: string
+  apiKeys?: (string | ApiKeyEntry)[]
+  apiKey?: string
+  baseUrl?: string
+  defaultModel?: string
+  enabled?: boolean
+  maxParallel?: number
+}): void {
   const data = loadProviders()
   if (data.providers.find(p => p.name === config.name)) {
     throw new Error(`Provider "${config.name}" already exists`)
   }
-  const apiKeys: string[] = []
-  if (config.apiKeys) apiKeys.push(...config.apiKeys)
-  if (config.apiKey) apiKeys.push(config.apiKey)
+  const apiKeys: ApiKeyEntry[] = []
+  if (config.apiKeys) {
+    for (const k of config.apiKeys) {
+      apiKeys.push(typeof k === 'string' ? { id: generateKeyId(), key: k } : k)
+    }
+  }
+  if (config.apiKey) apiKeys.push({ id: generateKeyId(), key: config.apiKey })
   data.providers.push({
     name: config.name,
     provider: config.provider,
@@ -187,12 +218,12 @@ export function setProviderEnabled(name: string, enabled: boolean): boolean {
   return true
 }
 
-export function setProviderApiKey(name: string, apiKey: string): boolean {
+export function setProviderApiKey(name: string, apiKey: string, label?: string): boolean {
   const data = loadProviders()
   const provider = data.providers.find(p => p.name === name)
   if (!provider) return false
-  if (!provider.apiKeys.includes(apiKey)) {
-    provider.apiKeys.push(apiKey)
+  if (!provider.apiKeys.some(e => e.key === apiKey)) {
+    provider.apiKeys.push({ id: generateKeyId(), key: apiKey, label })
     saveProviders(data)
   }
   return true
@@ -213,17 +244,17 @@ export function getProviderConfigPath(): string {
 
 // ── Multi-key helpers ────────────────────────────────────
 
-export function getProviderKeys(name: string): string[] {
+export function getProviderKeys(name: string): ApiKeyEntry[] {
   const p = getProvider(name)
   return p ? [...p.apiKeys] : []
 }
 
-export function addProviderKey(name: string, key: string): boolean {
+export function addProviderKey(name: string, key: string, label?: string): boolean {
   const data = loadProviders()
   const p = data.providers.find(pr => pr.name === name)
   if (!p) return false
-  if (!p.apiKeys.includes(key)) {
-    p.apiKeys.push(key)
+  if (!p.apiKeys.some(e => e.key === key)) {
+    p.apiKeys.push({ id: generateKeyId(), key, label })
     saveProviders(data)
   }
   return true
@@ -233,11 +264,20 @@ export function removeProviderKey(name: string, key: string): boolean {
   const data = loadProviders()
   const p = data.providers.find(pr => pr.name === name)
   if (!p) return false
-  const idx = p.apiKeys.indexOf(key)
+  const idx = p.apiKeys.findIndex(e => e.key === key)
   if (idx === -1) return false
   p.apiKeys.splice(idx, 1)
   saveProviders(data)
   return true
+}
+
+// ── Key ID generator ─────────────────────────────────────
+
+let keyIdCounter = 0
+function generateKeyId(): string {
+  keyIdCounter++
+  // short, readable ID: k_001, k_002, …
+  return 'k_' + String(keyIdCounter).padStart(3, '0')
 }
 
 // ── Key rotation / alternator ────────────────────────────
@@ -247,17 +287,22 @@ export function removeProviderKey(name: string, key: string): boolean {
  * Cycles through ALL keys across ALL provider entries of that type in round-robin.
  * Returns undefined if all keys are rate-limited.
  */
-export function getNextApiKey(providerType: string): { key: string; providerName: string } | undefined {
+/**
+ * Return the next available (non-rate-limited) API key entry for a given provider type.
+ * Cycles through ALL keys across ALL provider entries of that type in round-robin.
+ * Returns the ApiKeyEntry + providerName, or undefined if all keys are rate-limited.
+ */
+export function getNextApiKey(providerType: string): { keyId: string; key: string; providerName: string } | undefined {
   resetExpiredCooldowns()
   const entries = loadProviders().providers.filter(p => p.provider === providerType && p.enabled)
   if (entries.length === 0) return undefined
 
-  // flatten all (key, providerName) pairs that aren't rate-limited
-  const allFresh: { key: string; providerName: string }[] = []
+  // flatten all non-rate-limited ApiKeyEntry objects
+  const allFresh: { keyId: string; key: string; providerName: string }[] = []
   for (const entry of entries) {
     for (const k of entry.apiKeys) {
-      if (!rateLimitedUntil.has(k)) {
-        allFresh.push({ key: k, providerName: entry.name })
+      if (!rateLimitedUntil.has(k.id)) {
+        allFresh.push({ keyId: k.id, key: k.key, providerName: entry.name })
       }
     }
   }
@@ -276,34 +321,101 @@ export function getNextApiKey(providerType: string): { key: string; providerName
 const cursor = new Map<string, number>()
 
 /**
- * Mark a key as rate-limited for a given duration.
+ * Read the current rotation cursor position for a provider type.
+ * Returns the index into the flattened keys list, or 0 if not set.
+ */
+export function getRotationCursor(providerType: string): number {
+  return cursor.get(providerType) ?? 0
+}
+
+/**
+ * Mark a key entry as rate-limited for a given duration.
  * Returns the next available key if any, allowing immediate failover.
  */
-export function markRateLimited(apiKey: string, cooldownMs = 60000): { key: string; providerName: string } | undefined {
-  rateLimitedUntil.set(apiKey, Date.now() + cooldownMs)
+export function markRateLimited(keyIdOrKey: string, cooldownMs = 60000): { keyId: string; key: string; providerName: string } | undefined {
+  rateLimitedUntil.set(keyIdOrKey, Date.now() + cooldownMs)
 
-  // find which provider type this key belongs to
-  const entries = loadProviders().providers.filter(p => p.apiKeys.includes(apiKey))
+  // find which provider type this key entry belongs to
+  // Try matching by keyId first, then fallback to matching by key value
+  let entries = loadProviders().providers.filter(p => p.apiKeys.some(e => e.id === keyIdOrKey))
+  if (entries.length === 0) {
+    entries = loadProviders().providers.filter(p => p.apiKeys.some(e => e.key === keyIdOrKey))
+    if (entries.length > 0) {
+      // Also mark the actual keyId
+      for (const e of entries[0].apiKeys) {
+        if (e.key === keyIdOrKey) {
+          rateLimitedUntil.set(e.id, Date.now() + cooldownMs)
+          break
+        }
+      }
+    }
+  }
   if (entries.length === 0) return undefined
 
   return getNextApiKey(entries[0].provider)
 }
 
 /**
- * Check if a given API key is currently rate-limited.
+ * Check if a given key entry ID is currently rate-limited.
  */
-export function isRateLimited(apiKey: string): boolean {
+export function isRateLimited(keyId: string): boolean {
   resetExpiredCooldowns()
-  return rateLimitedUntil.has(apiKey)
+  return rateLimitedUntil.has(keyId)
 }
 
 /**
- * Check if an API key is already used by another provider entry.
+ * Return detailed key status for all keys of a provider.
+ */
+export function getProviderKeyStatuses(name: string): {
+  keyId: string
+  keySuffix: string
+  label?: string
+  providerName: string
+  providerType: string
+  rateLimited: boolean
+  remainingCooldownMs: number
+  isNextKey: boolean
+}[] {
+  resetExpiredCooldowns()
+  const now = Date.now()
+  const p = loadProviders().providers.find(pr => pr.name === name)
+  if (!p) return []
+
+  // Flatten all non-rate-limited keys like getNextApiKey does
+  const allFresh: { keyId: string; key: string }[] = []
+  for (const k of p.apiKeys) {
+    if (!rateLimitedUntil.has(k.id) || (rateLimitedUntil.get(k.id) ?? 0) <= now) {
+      allFresh.push({ keyId: k.id, key: k.key })
+    }
+  }
+
+  // Determine which key will be selected next (the one at cursor position)
+  const cursorPos = getRotationCursor(p.provider)
+  const nextKeyId = allFresh.length > 0 ? allFresh[cursorPos % allFresh.length]?.keyId : undefined
+
+  return p.apiKeys.map(k => {
+    const until = rateLimitedUntil.get(k.id)
+    const rateLimited = until !== undefined && until > now
+    return {
+      keyId: k.id,
+      keySuffix: k.key.slice(-4),
+      label: k.label,
+      providerName: p.name,
+      providerType: p.provider,
+      rateLimited,
+      remainingCooldownMs: until ? Math.max(0, until - now) : 0,
+      isNextKey: k.id === nextKeyId && !rateLimited,
+    }
+  })
+}
+
+/**
+ * Check if an API key string is already used by another provider entry.
  */
 export function isApiKeyUsed(apiKey: string): { name: string; provider: string } | undefined {
   if (!apiKey) return undefined
   for (const p of loadProviders().providers) {
-    if (p.apiKeys.includes(apiKey)) return { name: p.name, provider: p.provider }
+    if (p.apiKeys.some(e => e.key === apiKey)) return { name: p.name, provider: p.provider }
   }
   return undefined
 }
@@ -372,6 +484,29 @@ export function getProviderTypesWithKeys(): string[] {
     if (p.apiKeys.length > 0) types.add(p.provider)
   }
   return Array.from(types)
+}
+
+/**
+ * Return the API key string for a given key ID.
+ */
+export function getKeyById(keyId: string): string | undefined {
+  for (const p of loadProviders().providers) {
+    const found = p.apiKeys.find(e => e.id === keyId)
+    if (found) return found.key
+  }
+  return undefined
+}
+
+/**
+ * Find the key ID for a given API key string.
+ * Returns the matching keyId, or the key string itself if not found.
+ */
+export function getKeyIdByKey(key: string): string {
+  for (const p of loadProviders().providers) {
+    const found = p.apiKeys.find(e => e.key === key)
+    if (found) return found.id
+  }
+  return key
 }
 
 // ── Model fetching (unchanged) ───────────────────────────
@@ -508,17 +643,26 @@ export function getModelFetchGuidance(providerType: string, err: Error): string[
  * Returns { provider, apiKey, baseUrl, model } or undefined if no match.
  */
 export function resolveProviderForModel(model: string, providerHint?: string): { provider: string; apiKey: string; baseUrl: string; model: string } | undefined {
-  // 0. If provider hint is provided, use it first
-  //    Prefer enabled providers, but fall back to disabled ones if necessary.
-  //    The user explicitly chose this provider for this agent — respect that choice.
+  // 0. If provider hint is provided, use key rotation first
   if (providerHint) {
-    const allProviders = loadProviders().providers.filter(p => p.provider === providerHint)
-    // Prefer enabled
-    let entry = allProviders.find(p => p.enabled)
-    // Fall back to disabled
-    if (!entry) entry = allProviders[0]
-    if (entry) {
-      return { provider: providerHint, apiKey: entry.apiKeys[0] || '', baseUrl: entry.baseUrl, model }
+    const rotated = getNextApiKey(providerHint)
+    if (rotated) {
+      const entry = loadProviders().providers.find(p => p.name === rotated.providerName)
+      if (entry) {
+        return { provider: providerHint, apiKey: rotated.key, baseUrl: entry.baseUrl, model }
+      }
+    }
+    // Fallback: if all keys are rate-limited, pick the first entry anyway (last resort)
+    const fallback = loadProviders().providers.find(p => p.provider === providerHint && p.enabled)
+    if (!fallback) {
+      const allProviders = loadProviders().providers.filter(p => p.provider === providerHint)
+      if (allProviders.length > 0) {
+        return { provider: providerHint, apiKey: allProviders[0].apiKeys[0]?.key || '', baseUrl: allProviders[0].baseUrl, model }
+      }
+    }
+    if (fallback) {
+      const rotated2 = getNextApiKey(providerHint)
+      return { provider: providerHint, apiKey: rotated2?.key || fallback.apiKeys[0]?.key || '', baseUrl: fallback.baseUrl, model }
     }
   }
 
@@ -531,26 +675,39 @@ export function resolveProviderForModel(model: string, providerHint?: string): {
   else if (model.startsWith('ollama/') || model === 'llama3.2' || model.includes('llama')) providerType = 'ollama-local'
   else if (model.startsWith('lm-studio/')) providerType = 'lm-studio'
 
-  // 2. Try the detected type first
+  // 2. Try the detected type first — use key rotation
   const KEY_OPTIONAL = ['kilo', 'ollama-local', 'lm-studio']
   if (providerType) {
-    // for key-optional providers, match any enabled entry
-    // for key-required providers, only match if a key exists
+    const rotated = getNextApiKey(providerType)
+    if (rotated) {
+      const entry = loadProviders().providers.find(p => p.name === rotated.providerName)
+      if (entry) {
+        return { provider: providerType, apiKey: rotated.key, baseUrl: entry.baseUrl, model }
+      }
+    }
+    // All keys rate-limited or no keys: try to match any enabled entry
     const entries = loadProviders().providers.filter(p =>
       p.provider === providerType && p.enabled &&
       (KEY_OPTIONAL.includes(providerType) || p.apiKeys.length > 0)
     )
     if (entries.length > 0) {
       const entry = entries[0]
-      return { provider: providerType, apiKey: entry.apiKeys[0] || '', baseUrl: entry.baseUrl, model }
+      return { provider: providerType, apiKey: entry.apiKeys[0]?.key || '', baseUrl: entry.baseUrl, model }
     }
   }
 
   // 3. Fallback: try all enabled providers
   const all = loadProviders().providers.filter(p => p.enabled)
+  for (const p of all) {
+    const rotated = p.apiKeys.length > 0 ? getNextApiKey(p.provider) : undefined
+    if (rotated) {
+      return { provider: p.provider, apiKey: rotated.key, baseUrl: p.baseUrl, model }
+    }
+  }
+  // Last resort: pick the first enabled provider even if rate-limited
   const match = all.find(p => p.defaultModel === model || p.apiKeys.length > 0 || KEY_OPTIONAL.includes(p.provider))
   if (match) {
-    return { provider: match.provider, apiKey: match.apiKeys[0] || '', baseUrl: match.baseUrl, model }
+    return { provider: match.provider, apiKey: match.apiKeys[0]?.key || '', baseUrl: match.baseUrl, model }
   }
 
   return undefined
@@ -593,7 +750,7 @@ export async function checkLocalProvider(providerType: string): Promise<{ alive:
     }
 
     if (providerType === 'lm-studio') {
-      const res = await fetch(`${base}/v1/models`, { signal: AbortSignal.timeout(3000) })
+      const res = await fetch(`${base}/models`, { signal: AbortSignal.timeout(3000) })
       if (!res.ok) return { alive: false, error: `HTTP ${res.status}` }
       const json = await res.json() as { data?: unknown[] }
       const count = json.data?.length ?? 0

@@ -22,7 +22,8 @@ export function handleListAgents(engine: Engine): void {
     console.log(`  ${CYAN}${a.id}${RESET}  ${a.name}${active}`)
     console.log(`  ${GRAY}   └─ ${a.file}${RESET}`)
   }
-  console.log(`\n${YELLOW}Utilisez /use <id> pour charger un agent.${RESET}\n`)
+  console.log(`\n${YELLOW}Utilisez /use <id> pour charger un agent.${RESET}`)
+  console.log(`  ${GRAY}Entrée vide ou /menu pour revenir au menu principal.${RESET}\n`)
 }
 
 export function handleUseAgent(args: string[], _currentEngine: Engine): Engine | null {

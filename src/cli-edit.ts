@@ -99,7 +99,7 @@ export async function handleEditAgent(
     const existingProv = listProviders().find(p => p.provider === resolvedProviderType)
     if (KEY_REQUIRED.includes(resolvedProviderType)) {
       if (existingProv?.apiKeys?.length) {
-        console.log(`${GRAY}   Clé existante : ****${existingProv.apiKeys[0].slice(-4)}${RESET}`)
+        console.log(`${GRAY}   Clé existante : ****${existingProv.apiKeys[0].key.slice(-4)}${RESET}`)
         const reuse = (await rl.question(`${CYAN}Utiliser cette clé ?${RESET} (O/n) ${GRAY}>${RESET} `)).trim().toLowerCase()
         if (reuse === 'n') {
           while (!newApiKey) {
@@ -107,7 +107,7 @@ export async function handleEditAgent(
             if (!newApiKey) console.log(`${RED}La clé API est requise.${RESET}`)
           }
         } else {
-          newApiKey = existingProv.apiKeys[0]
+          newApiKey = existingProv.apiKeys[0].key
         }
       } else {
         while (!newApiKey) {

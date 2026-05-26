@@ -2,6 +2,7 @@ import type { ToolCall } from './types/agent-definition.js'
 import type { LLMProvider } from './engine-types.js'
 import { internalCallLLM, type StreamingConfig } from './engine-llm.js'
 import { parseToolCalls } from './engine-parser.js'
+import { RESET, YELLOW, RED } from './constants.js'
 
 interface RunnerDependencies {
   addMessage: (role: 'user' | 'assistant', content: string) => void
@@ -13,6 +14,11 @@ interface RunnerDependencies {
     streaming?: StreamingConfig
     rateLimit?: { backoffMultiplier?: number }
   }
+  /** Key rotation functions — injected from engine.ts */
+  getNextKey?: (providerType: string) => { keyId: string; key: string; providerName: string } | undefined
+  markRateLimited?: (keyId: string, cooldownMs?: number) => void
+  getKeyIdByKey?: (key: string) => string
+  getKeyById?: (keyId: string) => string | undefined
 }
 
 export function createRunner(deps: RunnerDependencies) {
@@ -57,6 +63,10 @@ export function createRunner(deps: RunnerDependencies) {
 
     let currentMessage = userMessage
 
+    // Maximum de 3 rotations de clé sur 429 avant d'abandonner
+    let keyRotationAttempts = 0
+    const MAX_KEY_ROTATIONS = 3
+
     while (retries <= maxRetries) {
       try {
         let response = await internalCallLLM(
@@ -96,6 +106,31 @@ export function createRunner(deps: RunnerDependencies) {
 
         return response
       } catch (err) {
+        const msg = (err as Error).message
+
+        // ── 429 Rate-limited : rotation de clé automatique ──
+        if (msg.includes('429') && deps.markRateLimited && deps.getNextKey && keyRotationAttempts < MAX_KEY_ROTATIONS) {
+          keyRotationAttempts++
+          // On ne connaît pas le keyId de la clé actuelle on marque via l'injection
+          // On utilise markRateLimited avec l'apiKey string comme fallback
+          // Chercher le keyId via getKeyIdByKey
+          const keyId = deps.getKeyIdByKey?.(llm.apiKey) || llm.apiKey
+          deps.markRateLimited(keyId, 60000)
+
+          // Tenter la rotation vers une autre clé
+          const next = deps.getNextKey(llm.provider)
+          if (next) {
+            console.warn(`${YELLOW}⚠ 429 — rotation vers ${next.key.slice(-4)} (${next.providerName}, tentative ${keyRotationAttempts}/${MAX_KEY_ROTATIONS})${RESET}`)
+            llm.apiKey = next.key
+            // Ne pas compter comme un retry normal ; continuer immédiatement
+            continue
+          } else {
+            console.warn(`${RED}✗ 429 — plus aucune clé disponible pour ${llm.provider}${RESET}`)
+            // Toutes les clés sont rate-limited : on remet une cooldown et on lance l'erreur
+            throw err
+          }
+        }
+
         if (!retryOnFailure || retries >= maxRetries) throw err
         retries++
         const backoff = (deps.agent.rateLimit?.backoffMultiplier || 1) * 1000 * retries

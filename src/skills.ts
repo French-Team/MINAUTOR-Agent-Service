@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, existsSync } from 'fs'
-import { join } from 'path'
+import { join, relative } from 'path'
 
 export interface SkillMeta {
   name: string
@@ -18,16 +18,32 @@ const SKILLS_DIR = join(process.cwd(), 'skills')
 export function listSkills(): SkillMeta[] {
   if (!existsSync(SKILLS_DIR)) return []
   try {
-    return readdirSync(SKILLS_DIR, { withFileTypes: true })
-      .filter(d => d.isDirectory())
-      .map(dir => {
-        const skillPath = join(SKILLS_DIR, dir.name, 'SKILL.md')
-        if (!existsSync(skillPath)) return null
-        const content = readFileSync(skillPath, 'utf-8')
-        const meta = parseFrontmatter(content)
-        return meta ? { ...meta, name: dir.name } : null
-      })
-      .filter((s): s is SkillMeta => s !== null)
+    const results: SkillMeta[] = []
+
+    function walk(dir: string) {
+      const entries = readdirSync(dir, { withFileTypes: true })
+      for (const entry of entries) {
+        const fullPath = join(dir, entry.name)
+        if (entry.isDirectory()) {
+          // Vérifier si ce dossier contient un SKILL.md
+          const skillPath = join(fullPath, 'SKILL.md')
+          if (existsSync(skillPath)) {
+            const content = readFileSync(skillPath, 'utf-8')
+            const meta = parseFrontmatter(content)
+            if (meta) {
+              // Nom relatif depuis skills/ : "skill-engineering/debug-mantra" etc.
+              const relativeName = relative(SKILLS_DIR, fullPath).replace(/\\/g, '/')
+              results.push({ ...meta, name: relativeName })
+            }
+          }
+          // Descendre dans les sous-dossiers
+          walk(fullPath)
+        }
+      }
+    }
+
+    walk(SKILLS_DIR)
+    return results
   } catch {
     return []
   }
