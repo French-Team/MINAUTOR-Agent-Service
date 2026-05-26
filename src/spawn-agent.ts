@@ -7,6 +7,7 @@
 
 import { existsSync, appendFileSync, mkdirSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { safeExit } from './constants.js'
 import { createEngine } from './engine.js'
 import { readLocalAgent } from './agents.js'
 import { resolveProviderForModel } from './providers.js'
@@ -42,7 +43,7 @@ async function main() {
     const match = agents.find(a => a.id === agentId || a.id.startsWith(agentId))
     if (!match) {
       console.error(`Agent "${agentId}" introuvable.`)
-      process.exit(1)
+      safeExit(1); return
     }
     agentFile = match.file
   }
@@ -50,7 +51,7 @@ async function main() {
   const agentDef = readLocalAgent(agentFile)
   if (!agentDef) {
     console.error(`Impossible de charger "${agentFile}".`)
-    process.exit(1)
+    safeExit(1); return
   }
 
   // ── Initialisation du workspace ────────────────────────
@@ -102,7 +103,7 @@ async function main() {
   const resolved = resolveProviderForModel(agentDef.model, agentDef.provider)
   if (!resolved) {
     appendFileSync(logbookPath, `\n## ${(agentDef.displayName || agentDef.id)} (${agentDef.id})\n\n**Erreur :** Aucun provider configuré pour le modèle ${agentDef.model}\n\n`, 'utf-8')
-    process.exit(0)
+    safeExit(0); return
   }
 
   const systemPrompt = agentDef.instructionsPrompt || 'You are a helpful assistant.'
@@ -159,10 +160,10 @@ async function main() {
     pushNotification(agentDef.displayName || agentDef.id, `❌ ${msg.slice(0, 200)}`, 'avertissement')
   }
 
-  process.exitCode = 0
+  safeExit(0)
 }
 
 main().catch(err => {
   console.error(err.message)
-  process.exitCode = 1
+  safeExit(1)
 })

@@ -5,7 +5,7 @@
 
   **L'orchestration multi-agents nouvelle génération pour TypeScript & Node.js**
 
-  [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg?style=for-the-badge)](https://github.com/votre-repo)
+  [![Version](https://img.shields.io/badge/version-1.1.0-blue.svg?style=for-the-badge)](https://github.com/votre-repo)
   [![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)](LICENSE)
   [![Status](https://img.shields.io/badge/status-active-success.svg?style=for-the-badge)](https://github.com/votre-repo)
   [![Platform](https://img.shields.io/badge/platform-node.js-black.svg?style=for-the-badge)](https://nodejs.org/)
@@ -71,6 +71,7 @@ Lancez le menu principal pour accéder à toutes les fonctionnalités :
 | **LLM Engine** | Moteur multi-fournisseurs (Kilo, Gemini, Ollama, etc.) |
 | **Inquirer** | Interface CLI interactive |
 | **YAML** | Parsing des compétences (Skill System) |
+| **AST Parsing** | Analyse statique avancée pour le linting et l'injection |
 
 ---
 
@@ -82,6 +83,8 @@ Lancez le menu principal pour accéder à toutes les fonctionnalités :
 - 📡 **Inter-Process Notifications** — Communication fluide entre les démons et l'interface CLI.
 - 🔄 **Self-Correction** — Capacité du moteur à valider et corriger les sorties LLM en temps réel.
 - 📦 **Skill System** — Système auto-généré de compétences via `SKILL.md`.
+- 💉 **Kits Injector** — Injection automatique d'imports via marqueurs `@kit` pour accélérer le développement.
+- 🔍 **Regex Linter** — Analyse statique via TypeScript AST pour garantir la validité des expressions régulières.
 
 ---
 
@@ -109,6 +112,8 @@ Accédez à **598 profils pré-configurés** pour accélérer vos créations :
 src/
 ├── engine/           # Moteur LLM (Sessions, Tool Loop, Guardian)
 ├── cli/              # Interface utilisateur (Menus, Sessions, Agents)
+├── kits-injector.ts  # Système d'injection automatique de kits
+├── lint-regex.ts     # Validateur de Regex via TypeScript AST
 ├── agents.ts         # Gestion CRUD et scaffolding des agents
 ├── providers.ts      # Gestion des fournisseurs et rotation des clés
 ├── skills.ts         # Système de compétences et parsing YAML

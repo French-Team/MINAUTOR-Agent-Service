@@ -9,6 +9,7 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, rmSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import { safeExit } from './constants.js'
 import { createEngine } from './engine.js'
 import {
   addProvider, listProviders, removeProvider, resolveProviderForModel,
@@ -171,7 +172,7 @@ async function main() {
 
   const resolved = resolveProviderForModel('kilo-auto/free')
   assert('Provider résolu pour kilo-auto/free', !!resolved)
-  if (!resolved) { console.log(`${FAIL} Arrêt — impossible de résoudre le provider\n`); process.exit(1) }
+  if (!resolved) { console.log(`${FAIL} Arrêt — impossible de résoudre le provider\n`); safeExit(1); return }
 
   console.log(`    ${YELLOW}Test : POST ${resolved.provider} ${resolved.model} vers ${resolved.baseUrl}${RESET}`)
   console.log(`    ${YELLOW}API Key : "${resolved.apiKey ? '****' + resolved.apiKey.slice(-4) : '(aucune)'}"${RESET}`)
@@ -306,9 +307,11 @@ async function main() {
   // Nettoyage du dossier temporaire
   if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true, force: true })
   if (existsSync(PROVIDERS_FILE)) unlinkSync(PROVIDERS_FILE)
+
+  safeExit(failed > 0 ? 1 : 0)
 }
 
 main().catch(e => {
   console.error(`${RED}Test crash : ${e.message}${RESET}`)
-  process.exit(1)
+  safeExit(1)
 })

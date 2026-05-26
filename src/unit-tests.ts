@@ -9,7 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'http'
 
 // ── Imports ESM (obligatoire car "type": "module") ──────
 
-import { top15 } from './constants.js'
+import { top15, safeExit } from './constants.js'
 import { DEFAULT_AGENT, getAgent } from './cli-utils.js'
 import { showMenu, showHelp } from './cli-menu.js'
 import { showBanner } from './cli-banner.js'
@@ -766,10 +766,10 @@ async function main() {
   else console.log(`${BOLD}${GREEN}  TOUS LES TESTS SONT PASSÉS${RESET}`)
   console.log(`${BOLD}${CYAN}═══════════════════════════════════════════${RESET}\n`)
 
-  if (failed > 0) process.exitCode = 1
+  safeExit(failed > 0 ? 1 : 0)
 }
 
 main().catch(err => {
   console.error(`${RED}Test crash : ${err.message}${RESET}`)
-  process.exitCode = 1
+  safeExit(1)
 })

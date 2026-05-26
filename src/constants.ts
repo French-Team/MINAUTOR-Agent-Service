@@ -25,6 +25,21 @@ export const ONLINE_URLS: Record<string, string> = {
 
 export const KEY_REQUIRED = ['google', 'openrouter', 'opencode-zen', 'custom', 'ollama-cloud']
 
+// ── Safe exit (Windows workaround for libuv assertion with undici/fetch) ──
+
+/**
+ * Safe exit that avoids libuv assertion on Windows when fetch/undici handles
+ * are still closing. Sets process.exitCode immediately, then schedules a
+ * forced process.exit() after 200ms. The timer is unref'd so Node can exit
+ * naturally if handles close cleanly.
+ *
+ * Usage: safeExit(0) or safeExit(failed > 0 ? 1 : 0)
+ */
+export function safeExit(code: number): void {
+  process.exitCode = code
+  setTimeout(() => process.exit(), 200).unref()
+}
+
 // ── Model ranking helpers ───────────────────────────────
 
 const TOP_MODELS = [

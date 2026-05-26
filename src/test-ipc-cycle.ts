@@ -147,6 +147,7 @@ async function testCycle(): Promise<void> {
 
   // Nettoyer
   cleanup()
+  process.exit(0)
 }
 
 testCycle().catch(err => {

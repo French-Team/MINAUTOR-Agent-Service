@@ -302,9 +302,9 @@ function main(): void {
     console.log(`${BOLD}${GREEN}  ✅ TOUS LES REGEX SONT VALIDES${RESET}`)
   } else {
     console.log(`${BOLD}${RED}  ❌ ${totalErrors} REGEX INVALIDE(S)${RESET}`)
-    process.exitCode = 1
   }
   console.log(`${CYAN}════════════════════════════════════════════${RESET}\n`)
+  process.exit(totalErrors > 0 ? 1 : 0)
 }
 
 main()

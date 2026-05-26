@@ -9,7 +9,7 @@
 
 // ── Imports ──────────────────────────────────────────────────────────
 
-import { top15 } from './constants.js'
+import { top15, safeExit } from './constants.js'
 import { createEngine } from './engine.js'
 import { createRunner } from './engine-runner.js'
 import type { AgentDefinition } from './types/agent-definition.js'
@@ -1341,13 +1341,13 @@ async function main() {
 
   if (failed > 0) {
     process.stdout.write(`\n${BOLD}${RED}  ${failed} ASSERTION(S) EN \u00c9CHEC${RESET}\n`)
-    process.exitCode = 1
   }
 
   process.stdout.write(`\n${BOLD}${CYAN}\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557${RESET}\n\n`)
+  safeExit(failed > 0 ? 1 : 0)
 }
 
 main().catch(err => {
   process.stderr.write(`${RED}\u274C Load test crash : ${err.message}${RESET}\n`)
-  process.exitCode = 1
+  safeExit(1)
 })
