@@ -6,18 +6,26 @@
     "type": "module",
     "main": "dist/engine.js",
     "scripts": {
+        "prebuild": "npx tsx src/lint-regex.ts",
         "build": "tsc",
         "start": "node dist/cli.js",
         "cli": "node dist/cli.js",
         "final": "cls && npm run build && npm start",
         "test:unit": "node dist/unit-tests.js",
-        "test:ci": "npm run build && node dist/unit-tests.js && node dist/test.js",
+        "test:load": "npx tsx src/load-tests.ts",
+        "test:ci": "npm run build && npm run lint && node dist/unit-tests.js && node dist/test.js",
+        "test:ci:full": "npm run test:ci && npm run test:load",
         "validate:all": "node dist/validate-all.js",
+        "lint": "eslint src/",
+        "lint:fix": "eslint src/ --fix",
+        "lint:regex": "npx tsx src/lint-regex.ts",
         "test": "npm run test:ci"
     },
     "devDependencies": {
         "@types/node": "^22.0.0",
+        "eslint": "^10.4.0",
         "tsx": "^4.22.3",
-        "typescript": "^5.5.0"
+        "typescript": "^5.5.0",
+        "typescript-eslint": "^8.59.4"
     }
 }

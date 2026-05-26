@@ -14,7 +14,7 @@ export function createHealthChecker(agent: AgentDefinition) {
         // Simple health check simulation: we could try a very simple LLM call or just check process
         consecutiveFailures = 0
         if (agent.guardian?.auditTrail) console.log(`[HealthCheck] Agent ${agent.id} is healthy.`)
-      } catch (err) {
+      } catch (_err) {
         consecutiveFailures++
         const maxFailures = agent.healthCheck!.maxConsecutiveFailures
         console.error(`[HealthCheck] Agent ${agent.id} failure (${consecutiveFailures}/${maxFailures})`)

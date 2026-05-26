@@ -248,12 +248,18 @@ async function main() {
     assert('OpenRouter modèles récupérés', false, `${e}`)
   }
   // Ollama Local
-  const existingOllama = getProvider('Ollama')
-  if (existingOllama) removeProvider('Ollama')
+  const existingOllama = getProvider('Ollama Local')
+  if (existingOllama) removeProvider('Ollama Local')
   addProvider({ name: 'Ollama Local', provider: 'ollama-local', apiKeys: [], baseUrl: 'http://localhost:11434', defaultModel: 'llama3.2' })
   try {
     const models = await fetchModels('ollama-local', '', 'http://localhost:11434')
-    assert('Ollama modèles récupérés', models.length > 0)
+    if (models.length === 0) {
+      console.log(`    ${YELLOW}⚠  Ollama accessible mais aucun modèle installé${RESET}`)
+      console.log(`    ${YELLOW}   → Lance : ollama pull lfm2.5-thinking:latest${RESET}`)
+      assert('Ollama modèles récupérés (aucun modèle)', true)
+    } else {
+      assert('Ollama modèles récupérés', models.length > 0)
+    }
   } catch (e) {
     console.log(`    ${YELLOW}⚠  Ollama local non disponible : ${(`${e}`).slice(0, 80)}${RESET}`)
     assert('Ollama modèles récupérés (hors-ligne)', true)

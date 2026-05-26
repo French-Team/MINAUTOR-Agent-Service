@@ -5,8 +5,7 @@ import {
   RESET, CYAN, GREEN, YELLOW, RED, GRAY, BOLD,
 } from './constants.js'
 
-export function handleListAgents(currentEngine: Engine): void {
-  const engine = currentEngine
+export function handleListAgents(engine: Engine): void {
   const local = listLocalAgents()
 
   console.log(`\n${BOLD}Agent actif :${RESET}`)
@@ -26,7 +25,7 @@ export function handleListAgents(currentEngine: Engine): void {
   console.log(`\n${YELLOW}Utilisez /use <id> pour charger un agent.${RESET}\n`)
 }
 
-export function handleUseAgent(args: string[], currentEngine: Engine): Engine | null {
+export function handleUseAgent(args: string[], _currentEngine: Engine): Engine | null {
   const name = args[0]
   if (!name) {
     console.log(`${YELLOW}Usage: /use <agent-id>${RESET}`)

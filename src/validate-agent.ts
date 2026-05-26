@@ -17,7 +17,6 @@ async function main() {
   const cwd = process.cwd()
   const agentPath = join(cwd, '.agents', agentId + '.ts')
   const skillPath = join(cwd, 'skills', 'skill-' + agentId, 'SKILL.md')
-  const logbookPath = join(cwd, 'telecom', 'agent-logbook.md')
   let exitCode = 0
 
   console.log(`\n🔍 Validation de l'agent "${agentId}"\n`)
@@ -66,8 +65,8 @@ async function main() {
   const provPath = join(cwd, 'providers.json')
   if (existsSync(provPath)) {
     const prov = JSON.parse(readFileSync(provPath, 'utf-8'))
-    const enabled = prov.providers.filter((p: any) => p.enabled)
-    const withKeys = enabled.filter((p: any) => p.apiKeys?.length > 0 || ['kilo','ollama','lm-studio'].includes(p.provider))
+    const enabled = prov.providers.filter((p: { enabled?: boolean }) => p.enabled)
+    const withKeys = enabled.filter((p: { apiKeys?: string[]; provider?: string }) => (p.apiKeys?.length ?? 0) > 0 || ['kilo','ollama','lm-studio','ollama-local'].includes(p.provider ?? ''))
     console.log(`  ${withKeys.length > 0 ? '✓' : '✗'} Provider : ${withKeys.length} fournisseur(s) actif(s) avec clé`)
     if (withKeys.length === 0) { exitCode = 1; console.log('     → Aucun provider actif configuré') }
   } else {

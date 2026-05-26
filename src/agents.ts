@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import type { AgentDefinition, SelfCorrection, Guardian, DaemonHealth, Streaming, RateLimit, ToolConfig } from './types/agent-definition.js'
 
@@ -67,7 +67,6 @@ export function listLocalAgents(): { id: string; name: string; file: string }[] 
         } else {
           const idMatch = content.match(/id:\s*['"]([^'"]+)['"]/)
           const nameMatch = content.match(/(?:displayName|name):\s*['"]([^'"]+)['"]/)
-          const modelMatch = content.match(/model:\s*['"]([^'"]+)['"]/)
           agents.push({
             id: idMatch?.[1] || file.replace(/\.(ts|json)$/, ''),
             name: nameMatch?.[1] || idMatch?.[1] || file,
@@ -117,7 +116,7 @@ export function readLocalAgent(filename: string): AgentDefinition | null {
     if (!match) return undefined
     try {
       // Very basic "JS object string to JSON" conversion
-      let jsonStr = match[1]
+      const jsonStr = match[1]
         .replace(/\/\/.*$/gm, '') // Remove comments first
         .replace(/(\w+):/g, '"$1":') // Quote keys
         .replace(/'/g, '"') // Replace single quotes with double quotes
@@ -413,7 +412,6 @@ export function removeLocalAgent(filename: string): boolean {
   const filePath = join(AGENTS_DIR, filename)
   if (!existsSync(filePath)) return false
   try {
-    const { unlinkSync } = require('fs')
     unlinkSync(filePath)
     return true
   } catch {

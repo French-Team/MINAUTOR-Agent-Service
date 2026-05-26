@@ -5,7 +5,7 @@
  * Usage : node dist/spawn-agent.js <agent-id> <instruction>
  */
 
-import { existsSync, readFileSync, appendFileSync, mkdirSync, readdirSync, writeFileSync } from 'fs'
+import { existsSync, appendFileSync, mkdirSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { createEngine } from './engine.js'
 import { readLocalAgent } from './agents.js'

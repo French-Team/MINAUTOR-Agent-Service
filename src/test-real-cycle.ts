@@ -7,9 +7,9 @@
  * Usage: npx tsx src/test-real-cycle.ts
  */
 
-import { fork, ChildProcess } from 'child_process'
+import { fork } from 'child_process'
 import { join } from 'path'
-import { existsSync, unlinkSync, readdirSync, writeFileSync, readFileSync } from 'fs'
+import { existsSync, unlinkSync, readdirSync, readFileSync } from 'fs'
 
 const CWD = process.cwd()
 const TIMEOUT_MS = 120_000 // 2 minutes max
@@ -90,8 +90,7 @@ async function main(): Promise<void> {
   }
 
   let output = ''
-  let promptCount = 0
-  let lastChunkTime = Date.now()
+  let _lastChunkTime = Date.now()
 
   const cli = fork(cliPath, [], {
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
@@ -101,11 +100,7 @@ async function main(): Promise<void> {
   cli.stdout?.on('data', (chunk: Buffer) => {
     const text = chunk.toString()
     output += text
-    lastChunkTime = Date.now()
-
-    // Compter les prompts
-    if (text.includes('> ')) promptCount++
-
+    _lastChunkTime = Date.now()
     process.stdout.write(text)
   })
 
@@ -212,7 +207,7 @@ async function main(): Promise<void> {
   const anyBadgePattern = /\[\d+\]\s*>/m
   
   const hasBadge = anyBadgePattern.test(output)
-  const exactBadge = badgePattern.test(output)
+  const _exactBadge = badgePattern.test(output)
 
   if (hasBadge) {
     // Extraire la ligne du badge

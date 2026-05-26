@@ -95,6 +95,11 @@ function loadProviders(): ProvidersFile {
   try {
     const content = readFileSync(CONFIG_PATH, 'utf-8')
     const data = JSON.parse(content) as ProvidersFile
+    // Résilience : providers[] doit être un tableau ; filtrer les entrées null/malformées
+    if (!Array.isArray(data.providers)) {
+      return DEFAULT_PROVIDERS
+    }
+    data.providers = data.providers.filter(p => p && typeof p === 'object')
     for (const p of data.providers) {
       // migrate legacy apiKey → apiKeys
       if (!p.apiKeys) p.apiKeys = []
@@ -103,7 +108,7 @@ function loadProviders(): ProvidersFile {
       }
       if (p.currentKeyIndex === undefined) p.currentKeyIndex = 0
       if (p.maxParallel === undefined) p.maxParallel = 1
-      delete (p as any).apiKey
+      p.apiKey = undefined
     }
     return data
   } catch {
@@ -150,7 +155,7 @@ export function addProvider(config: Partial<ProviderConfig> & { name: string; pr
   }
   const apiKeys: string[] = []
   if (config.apiKeys) apiKeys.push(...config.apiKeys)
-  if ((config as any).apiKey) apiKeys.push((config as any).apiKey)
+  if (config.apiKey) apiKeys.push(config.apiKey)
   data.providers.push({
     name: config.name,
     provider: config.provider,
@@ -454,7 +459,7 @@ export async function fetchModels(providerType: string, apiKey: string, baseUrl:
 
 export function getModelFetchGuidance(providerType: string, err: Error): string[] {
   const msg = err.message
-  const httpStatus = (err as any).httpStatus as number | undefined
+  const httpStatus = (err as { httpStatus?: number }).httpStatus
   const lines: string[] = []
 
   // Priorité 1 : Erreurs de connexion (avant les erreurs d'authentification)

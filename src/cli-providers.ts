@@ -152,7 +152,7 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
                     if (updated) Object.assign(provider, updated)
                   }
                 }
-              } catch (err) {
+              } catch (_err) {
                 console.log(`${RED}✗ Erreur lors de l'installation${RESET}`)
                 console.log(`${GRAY}Assure-toi que Ollama est installé et accessible via la commande 'ollama'${RESET}`)
               }

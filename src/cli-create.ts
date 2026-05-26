@@ -213,8 +213,8 @@ export async function handleCreate(rl: ReturnType<typeof createInterface>): Prom
   await pause('Provider validé → Sélection du modèle')
 
   // --- 2. Choix du modèle ---
-  let effectiveApiKey = apiKey || ''
-  let effectiveBaseUrl = configured?.baseUrl || ONLINE_URLS[providerType] || 'https://api.openai.com/v1'
+  const effectiveApiKey = apiKey || ''
+  const effectiveBaseUrl = configured?.baseUrl || ONLINE_URLS[providerType] || 'https://api.openai.com/v1'
   let models: string[] = []
   let model = ''
   
@@ -242,15 +242,14 @@ export async function handleCreate(rl: ReturnType<typeof createInterface>): Prom
 
   // --- 2.1 Test de connexion complet ---
   console.log(`\n${BOLD}${CYAN}┌─ Test de connexion ──────────────────────┐${RESET}`)
-  while (true) {
-    process.stdout.write(`\n${YELLOW}⟳ Test de connexion à ${providerType} / ${model}...${RESET}`)
-    const result = await testConnection(providerType, effectiveApiKey, effectiveBaseUrl, model)
-    if (result.ok) {
+  while (true) {      process.stdout.write(`\n${YELLOW}⟳ Test de connexion à ${providerType} / ${model}...${RESET}`)
+      const _result = await testConnection(providerType, effectiveApiKey, effectiveBaseUrl, model)
+    if (_result.ok) {
       process.stdout.write(`\r${GREEN}✓ Connexion réussie !${RESET}\n\n`)
       break
     }
     process.stdout.write(`\r${RED}✗ Échec de connexion${RESET}\n\n`)
-    for (const d of result.diagnostics) console.log(`  ${d}`)
+    for (const d of _result.diagnostics) console.log(`  ${d}`)
     console.log()
     const choice = (await rl.question(
       `${CYAN}[R]${RESET} Réessayer  ${CYAN}[M]${RESET} Changer modèle  ${CYAN}[A]${RESET} Annuler  ${GRAY}>${RESET} `
@@ -426,7 +425,7 @@ export async function handleCreate(rl: ReturnType<typeof createInterface>): Prom
     console.log(`  ${BOLD}Nom      :${RESET} ${assignedName}`)
     console.log(`  ${BOLD}Template :${RESET} ${template}`)
     console.log(`  ${BOLD}Profil   :${RESET} ${decision.profileName || 'Aucun'}`)
-  } catch (err) {
+  } catch (_err) {
     console.log(`${YELLOW}⚠ Erreur lors de l'analyse automatique, utilisation des défauts.${RESET}`)
   }
 
@@ -564,7 +563,7 @@ export async function handleCreate(rl: ReturnType<typeof createInterface>): Prom
   async function getTscErrors(agentId: string): Promise<string[]> {
     try {
       const { execFileSync } = await import('child_process')
-      const result = execFileSync('npx.cmd', ['tsc', '--noEmit'], { timeout: 15000, cwd: process.cwd(), encoding: 'utf-8' })
+      const _result = execFileSync('npx.cmd', ['tsc', '--noEmit'], { timeout: 15000, cwd: process.cwd(), encoding: 'utf-8' })
       return []
     } catch (err: unknown) {
       const stderr = (err as { stderr?: string }).stderr || (err as Error).message || ''

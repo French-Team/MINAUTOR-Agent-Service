@@ -8,3 +8,5 @@ providers.json
 telecom/*
 !telecom/templates/
 !telecom/templates/*
+
+nul

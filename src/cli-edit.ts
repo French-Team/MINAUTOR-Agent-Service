@@ -19,7 +19,7 @@ import { RESET, CYAN, GREEN, YELLOW, RED, GRAY, BOLD, ONLINE_URLS, KEY_REQUIRED 
 
 export async function handleEditAgent(
   rl: ReturnType<typeof createInterface>,
-  engine: Engine
+  _engine: Engine
 ): Promise<Engine | null> {
   const local = listLocalAgents()
   if (local.length === 0) {

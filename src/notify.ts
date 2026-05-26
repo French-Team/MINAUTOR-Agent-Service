@@ -85,7 +85,9 @@ function load(): Notification[] {
   try {
     const raw = readFileSync(NOTIFY_PATH, 'utf-8').trim()
     if (!raw) return []
-    return JSON.parse(raw) as Notification[]
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((n): n is Notification => n !== null && typeof n === 'object')
   } catch {
     return []
   }

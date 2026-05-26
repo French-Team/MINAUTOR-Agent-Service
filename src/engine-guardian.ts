@@ -1,5 +1,6 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
+import { injectKitsIntoCommand, scanCommandOutput } from './kits-injector.js'
 import type { AgentDefinition } from './types/agent-definition.js'
 
 const execAsync = promisify(exec)
@@ -7,6 +8,14 @@ const execAsync = promisify(exec)
 export function createCommandRunner(cwd: string, agent: AgentDefinition) {
 
   async function runTerminalCommand(command: string, processType: 'SYNC' | 'BACKGROUND' = 'SYNC', timeoutSeconds = 60): Promise<string> {
+    // ── Injection automatique des imports de kits ──────────────
+    let augmentedCommand: string
+    try {
+      augmentedCommand = injectKitsIntoCommand(command, cwd)
+    } catch {
+      augmentedCommand = command // Fallback : commande originale
+    }
+
     // Increase default timeout for complex tasks like "pisteur"
     const timeout = timeoutSeconds * 1000
 
@@ -26,40 +35,44 @@ export function createCommandRunner(cwd: string, agent: AgentDefinition) {
       const customPatterns = (agent.guardian.blockedPatterns || []).map(p => new RegExp(p, 'i'))
       const allPatterns = [...harmfulPatterns, ...customPatterns]
 
-      if (agent.guardian.blockHarmful && allPatterns.some(p => p.test(command))) {
-        const msg = `Guardian: Blocked potentially harmful command: ${command}`
+      if (agent.guardian.blockHarmful && allPatterns.some(p => p.test(augmentedCommand))) {
+        const msg = `Guardian: Blocked potentially harmful command: ${augmentedCommand}`
         if (agent.guardian.auditTrail) console.warn(`[Guardian Audit] ${msg}`)
         return msg
       }
 
       if (agent.guardian.requireConfirmation) {
-        const msg = `Guardian: Command requires confirmation: ${command}`
+        const msg = `Guardian: Command requires confirmation: ${augmentedCommand}`
         if (agent.guardian.auditTrail) console.warn(`[Guardian Audit] ${msg}`)
         return msg
       }
 
       if (agent.guardian.auditTrail) {
-        console.log(`[Guardian Audit] Executing command: ${command}`)
+        console.log(`[Guardian Audit] Executing command: ${augmentedCommand}`)
       }
     }
 
     try {
       if (processType === 'BACKGROUND') {
-        exec(command, { cwd, windowsHide: true }, (error) => {
+        exec(augmentedCommand, { cwd, windowsHide: true }, (error) => {
           if (error && agent.guardian?.auditTrail) {
-            console.error(`[Background Error] ${command}: ${error.message}`)
+            console.error(`[Background Error] ${augmentedCommand}: ${error.message}`)
           }
         })
-        return `Command started in background: ${command}`
+        return `Command started in background: ${augmentedCommand}`
       }
 
-      const { stdout, stderr } = await execAsync(command, {
+      const { stdout, stderr } = await execAsync(augmentedCommand, {
         cwd,
         maxBuffer: 50 * 1024 * 1024, // Increased to 50MB for large project mapping
         timeout,
         windowsHide: true,
       })
-      return stdout?.trim() || stderr?.trim() || ''
+
+      // ── Scan post-écriture : vérifie la conformité des imports de kits ──
+      const output = stdout?.trim() || stderr?.trim() || ''
+      const scanWarning = scanCommandOutput(augmentedCommand, cwd)
+      return scanWarning ? `${output}\n${scanWarning}` : output
     } catch (err: unknown) {
       const error = err as { stdout?: string; stderr?: string; message?: string; code?: string | number }
 

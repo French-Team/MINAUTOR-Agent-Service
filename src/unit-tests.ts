@@ -5,6 +5,8 @@
 
 import type { Engine } from './engine.js'
 
+import type { IncomingMessage, ServerResponse } from 'http'
+
 // ── Imports ESM (obligatoire car "type": "module") ──────
 
 import { top15 } from './constants.js'
@@ -133,8 +135,6 @@ const RESET = '\x1b[0m'
 const GREEN = '\x1b[32m'
 const RED = '\x1b[31m'
 const CYAN = '\x1b[36m'
-const YELLOW = '\x1b[33m'
-const GRAY = '\x1b[90m'
 const BOLD = '\x1b[1m'
 const PASS = `${GREEN}✓${RESET}`
 const FAIL = `${RED}✗${RESET}`
@@ -143,8 +143,8 @@ let passed = 0
 let failed = 0
 
 function assert(label: string, ok: boolean, detail?: string) {
-  if (ok) { passed++; console.log(`  ${PASS} ${label}`) }
-  else { failed++; console.log(`  ${FAIL} ${label} ${detail ? `— ${RED}${detail}${RESET}` : ''}`) }
+  if (ok) { passed++; process.stdout.write(`  ${PASS} ${label}\n`) }
+  else { failed++; process.stdout.write(`  ${FAIL} ${label}${detail ? ` — ${RED}${detail}${RESET}` : ''}\n`) }
 }
 
 // Helper: capture console.log dans un tableau avec restauration automatique
@@ -325,11 +325,13 @@ function testCliMenu() {
     assert('showHelp() affiche le modèle',
       captured.some(l => l.includes('kilo-auto/free'))
     )
-    assert('showHelp() affiche les sections (Menu, Agents, Providers, Sessions)',
+    assert('showHelp() affiche les sections (Menu, Configuration, Agents, Sessions, Monitoring, Prompt modes)',
       captured.some(l => l.includes('Menu')) &&
+      captured.some(l => l.includes('Configuration')) &&
       captured.some(l => l.includes('Agents')) &&
-      captured.some(l => l.includes('Providers')) &&
-      captured.some(l => l.includes('Sessions'))
+      captured.some(l => l.includes('Sessions')) &&
+      captured.some(l => l.includes('Monitoring')) &&
+      captured.some(l => l.includes('Prompt modes'))
     )
   })
 }
@@ -515,7 +517,7 @@ async function testEngineRunner() {
   // 8. callLLM — via un serveur HTTP local mock
   {
     const httpMod = await import('http')
-    const server = httpMod.createServer((_req: any, res: any) => {
+    const server = httpMod.createServer((_req: IncomingMessage, res: ServerResponse) => {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({
         choices: [{ message: { content: 'Bonjour, je suis le serveur mock !' } }]
@@ -544,6 +546,7 @@ async function testEngineRunner() {
         `response: ${result}`
       )
     } finally {
+      server.closeAllConnections()
       await new Promise<void>((resolve) => server.close(() => resolve()))
     }
   }
@@ -551,9 +554,9 @@ async function testEngineRunner() {
   // 9. callLLM — sans streaming, réponse minimale
   {
     const httpMod = await import('http')
-    const server = httpMod.createServer((_req: any, res: any) => {
+    const server = httpMod.createServer((_req: IncomingMessage, res: ServerResponse) => {
       let body = ''
-      _req.on('data', (chunk: any) => { body += chunk })
+      _req.on('data', (chunk: Buffer) => { body += chunk.toString() })
       _req.on('end', () => {
         const parsed = JSON.parse(body)
         assert('callLLM envoie les bons paramètres',
@@ -590,6 +593,7 @@ async function testEngineRunner() {
         `response: ${result}`
       )
     } finally {
+      server.closeAllConnections()
       await new Promise<void>((resolve) => server.close(() => resolve()))
     }
   }
@@ -762,10 +766,10 @@ async function main() {
   else console.log(`${BOLD}${GREEN}  TOUS LES TESTS SONT PASSÉS${RESET}`)
   console.log(`${BOLD}${CYAN}═══════════════════════════════════════════${RESET}\n`)
 
-  if (failed > 0) process.exit(1)
+  if (failed > 0) process.exitCode = 1
 }
 
 main().catch(err => {
   console.error(`${RED}Test crash : ${err.message}${RESET}`)
-  process.exit(1)
+  process.exitCode = 1
 })

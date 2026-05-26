@@ -89,7 +89,7 @@ function startTelecomDaemon(): void {
       }
     })
 
-    telecomDaemon.on('exit', (code) => {
+    telecomDaemon.on('exit', (_code) => {
       backgroundAgents.delete('telecom-daemon')
       telecomDaemon = null
     })
@@ -271,7 +271,6 @@ export async function main() {
       console.log(`${BOLD}${LIME}╚${RESET}\n`)
     }
 
-    const session = currentEngine!.getCurrentSession()
     const displayName = getDisplayName(loadUserProfile())
     const prefix = GRAY + displayName + RESET
     const pending = countPendingNotifications()
@@ -290,18 +289,39 @@ export async function main() {
       }
     }
 
-    if (line === '1') { await handleCreate(rl); continue }
-    if (line === '2') { const newEngine = await handleStartSession(rl, currentEngine!); if (newEngine) currentEngine = newEngine; continue }
-    if (line === '3') { handleListAgents(currentEngine!); continue }
-    if (line === '4') { const newEngine = await handleEditAgent(rl, currentEngine!); if (newEngine) currentEngine = newEngine; continue }
-    if (line === '5') {
+    // ── Configuration ──
+    if (line === '1') {
       await handleManageProvidersMenu(rl)
       continue
     }
-    if (line === '6') { showSessions(currentEngine!); continue }
-    if (line === '7') { showInfo(currentEngine!); continue }
-    if (line === '8') { showHelp(currentEngine!); continue }
-    if (line === '9') { await editUserProfile(rl); continue }
+    if (line === '2') { await editUserProfile(rl); continue }
+
+    // ── Agents ──
+    if (line === '3') { await handleCreate(rl); continue }
+    if (line === '4') { handleListAgents(currentEngine!); continue }
+    if (line === '5') { const newEngine = await handleEditAgent(rl, currentEngine!); if (newEngine) currentEngine = newEngine; continue }
+
+    // ── Sessions ──
+    if (line === '6') { const newEngine = await handleStartSession(rl, currentEngine!); if (newEngine) currentEngine = newEngine; continue }
+    if (line === '7') {
+      showSessions(currentEngine!)
+      // Afficher aussi les infos de la session active
+      console.log()
+      showInfo(currentEngine!)
+      console.log()
+      continue
+    }
+
+    // ── Monitoring ──
+    if (line === '8') {
+      showIntercomStatus()
+      continue
+    }
+
+    // ── Aide ──
+    if (line === '9') { showHelp(currentEngine!); continue }
+
+    // ── Quitter ──
     if (line === '0') { stopTelecomDaemon(); console.log(`${GRAY}Bye.${RESET}`); rl.close(); exit(0) }
 
     if (line.startsWith('/')) {
@@ -506,7 +526,7 @@ export async function main() {
           exit(0)
         }
         default: {
-          console.log(`${YELLOW}Commande inconnue : /${cmd}. Tapez /menu ou 1-7.${RESET}`)
+          console.log(`${YELLOW}Commande inconnue : /${cmd}. Tapez /menu, /?, ou 0-9.${RESET}`)
         }
       }
       continue

@@ -1,7 +1,6 @@
 import { mkdirSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { createEngine, type LLMProvider } from './engine.js'
-import type { AgentDefinition } from './types/agent-definition.js'
 
 const SKILLS_DIR = join(process.cwd(), 'skills')
 

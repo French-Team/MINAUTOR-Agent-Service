@@ -48,7 +48,7 @@ function parseFrontmatter(content: string): SkillMeta | null {
   const match = content.match(/[\s\S]*?^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n([\s\S]*)$/m)
   if (!match) return null
   const yaml = match[1]
-  const body = match[2].trim()
+  const _body = match[2].trim()
   
   // Extraction plus souple des champs YAML
   const name = yaml.match(/^name:\s*(.+)$/m)?.[1]?.trim()

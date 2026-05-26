@@ -1,4 +1,4 @@
-import type { EngineConfig, LLMProvider } from './engine-types.js'
+import type { EngineConfig } from './engine-types.js'
 import { createSessionManager } from './engine-sessions.js'
 import { createRateLimiter } from './engine-rate-limit.js'
 import { createHealthChecker } from './engine-health.js'
@@ -7,6 +7,22 @@ import { createToolExecutor } from './engine-executor.js'
 import { createRunner } from './engine-runner.js'
 
 export { type LLMProvider } from './engine-types.js'
+export {
+  injectKits,
+  injectKitsIntoCommand,
+  scanCommandOutput,
+  extractTargetFilePath,
+  expandBrace,
+  extractFindTargets,
+  detectKitMarkers,
+  findKit,
+  getKitNames,
+  getKitInfo,
+  suggestKits,
+  scanFile,
+  loadRegistry,
+  clearRegistryCache,
+} from './kits-injector.js'
 
 export function createEngine(config: EngineConfig) {
   const cwd = config.cwd || process.cwd()

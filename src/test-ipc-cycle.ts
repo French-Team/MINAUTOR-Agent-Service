@@ -6,9 +6,9 @@
  * Usage: npx tsx src/test-ipc-cycle.ts
  */
 
-import { fork, ChildProcess } from 'child_process'
+import { fork } from 'child_process'
 import { join } from 'path'
-import { unlinkSync, existsSync, writeFileSync, readFileSync, readdirSync } from 'fs'
+import { unlinkSync, existsSync, readFileSync, readdirSync } from 'fs'
 import { tryRouteIntercom } from './cli-intercom-router.js'
 
 const CWD = process.cwd()
@@ -19,7 +19,7 @@ function cleanup(): void {
   for (const dir of ['telecom/intercom', 'telecom/routed']) {
     const d = join(CWD, dir)
     if (existsSync(d)) {
-      for (const f of ['*.json']) {
+      for (const _f of ['*.json']) {
         try {
           const files = readdirSync(d).filter((x: string) => x.endsWith('.json'))
           for (const file of files) {
@@ -52,9 +52,9 @@ async function testCycle(): Promise<void> {
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
   })
 
-  let daemonOutput = ''
-  daemon.stdout?.on('data', (d: Buffer) => { daemonOutput += d.toString() })
-  daemon.stderr?.on('data', (d: Buffer) => { daemonOutput += d.toString() })
+  let _daemonOutput = ''
+  daemon.stdout?.on('data', (d: Buffer) => { _daemonOutput += d.toString() })
+  daemon.stderr?.on('data', (d: Buffer) => { _daemonOutput += d.toString() })
 
   daemon.on('message', (msg: unknown) => {
     const data = msg as { type?: string; from?: string; message?: string }

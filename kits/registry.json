@@ -1,0 +1,40 @@
+{
+  "version": "1",
+  "kits": [
+    {
+      "name": "tests",
+      "path": "kits/kit-tests/index.js",
+      "description": "Fail-fast pour les tests — arrête tout à la première erreur avec diagnostic clair",
+      "triggers": ["*.test.ts", "*.spec.ts"],
+      "exports": ["stopTestOnError", "stopTestOnErrorAsync", "runTests", "TestError", "formatError"]
+    },
+    {
+      "name": "errors",
+      "path": "kits/kit-errors/index.js",
+      "description": "Gestion centralisée des erreurs avec contexte et pile d'appels complète",
+      "triggers": ["*.ts"],
+      "exports": ["ErrorBoundary", "wrapWithContext"]
+    },
+    {
+      "name": "timeout",
+      "path": "kits/kit-timeout/index.js",
+      "description": "Timeout et garde-fous temporels pour opérations longues",
+      "triggers": ["*.ts"],
+      "exports": ["withTimeout", "TimeoutError"]
+    },
+    {
+      "name": "validation",
+      "path": "kits/kit-validation/index.js",
+      "description": "Validation d'entrées avec messages d'erreur explicites et typage strict",
+      "triggers": ["*.ts"],
+      "exports": ["validate", "assertSchema"]
+    },
+    {
+      "name": "logging",
+      "path": "kits/kit-logging/index.js",
+      "description": "Logging structuré avec niveaux (DEBUG, INFO, WARN, ERROR) et contexte automatique",
+      "triggers": ["*.ts"],
+      "exports": ["logger", "LogLevel"]
+    }
+  ]
+}

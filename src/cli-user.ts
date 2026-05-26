@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'readline/promises'
 import {
-  RESET, CYAN, GREEN, YELLOW, RED, GRAY, BOLD,
+  RESET, CYAN, GREEN, GRAY, BOLD,
 } from './constants.js'
 
 export interface UserProfile {
