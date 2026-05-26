@@ -5,9 +5,9 @@
 
   **L'orchestration multi-agents nouvelle génération pour TypeScript & Node.js**
 
-  [![Version](https://img.shields.io/badge/version-1.2.0-blue.svg?style=for-the-badge)](https://github.com/votre-repo)
+  [![Version](https://img.shields.io/badge/version-1.3.0-blue.svg?style=for-the-badge)](https://github.com/French-Team/MINAUTOR-Agent-Service)
   [![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)](LICENSE)
-  [![Status](https://img.shields.io/badge/status-active-success.svg?style=for-the-badge)](https://github.com/votre-repo)
+  [![Status](https://img.shields.io/badge/status-active-success.svg?style=for-the-badge)](https://github.com/French-Team/MINAUTOR-Agent-Service)
   [![Platform](https://img.shields.io/badge/platform-node.js-black.svg?style=for-the-badge)](https://nodejs.org/)
 
   *Inspiré par Codebuff. Propulsé par l'intelligence collective.*
@@ -41,7 +41,7 @@
 ### Installation & Build
 
 ```bash
-git clone https://github.com/votre-username/minautor-agents-service.git
+git clone https://github.com/French-Team/MINAUTOR-Agent-Service.git
 cd minautor-agents-service
 npm install
 npm run final # Build complet avec linting automatique et lancement CLI
@@ -72,12 +72,11 @@ npm run final # Build complet avec linting automatique et lancement CLI
 
 - 🤖 **Multi-Agent Orchestration** — Délégation intelligente via le protocole PACO.
 - 🔑 **Multi-Key Rotation** — Failover transparent et gestion du rate-limiting.
-- 💉 **Kits Injector** — Injection automatique d'imports via marqueurs `@kit`.
+- 💉 **Kits Injector & Engine API** — Injection automatique d'imports et exportations directes des fonctions de kits via le moteur.
 - 📡 **Telecom Services** :
   - `Daemon` : Surveillance active en arrière-plan.
-  - `Resumer` : Synthèse automatique des activités.
-  - `Optimiser` : Optimisation des performances des agents.
-  - `Nettoyer` : Maintenance automatique des sessions et fichiers temporaires.
+  - `Resumer/Optimiser/Nettoyer` : Trio de services avec gestion de contexte (`telecom/service/context/`).
+- 🎨 **Visual Identity** : Système de couches utilisateur (`src/logo/layer-user.ts`) pour une identification visuelle dynamique.
 
 ---
 
@@ -95,16 +94,16 @@ Gouvernance par délégation :
 Le système de **Kits** permet d'étendre les capacités des agents de manière modulaire :
 - **Localisation** : `kits/`
 - **Registre** : `registry.json` gère les versions et dépendances.
-- **Utilisation** : Insérez `// @kit tests` dans votre code pour injecter automatiquement les utilitaires de test.
+- **Injection** : Utilisation de `// @kit <nom>` pour l'auto-injection d'imports.
 
 ---
 
 ## 🛡️ Qualité & Performance
 
 MINAUTOR intègre des outils de validation de pointe :
-- **Regex AST Linter** : Intégré au workflow de build, il empêche la compilation si des expressions régulières invalides sont détectées.
-- **Load Testing** : Scripts dédiés pour tester la montée en charge des sessions agents.
-- **Guardian** : Système de filtrage des commandes shell pour empêcher l'exécution d'instructions malveillantes.
+- **Regex AST Linter** : Intégré au workflow de build pour garantir la sécurité des expressions régulières.
+- **Load Testing** : Scripts dédiés pour tester la montée en charge.
+- **Guardian** : Filtrage intelligent des commandes shell.
 
 ---
 
@@ -114,9 +113,10 @@ MINAUTOR intègre des outils de validation de pointe :
 .
 ├── kits/             # Registre et modules de kits réutilisables
 ├── src/
-│   ├── engine/       # Cœur du moteur (Executor, Guardian, Sessions)
-│   ├── telecom/      # Services de maintenance et optimisation
-│   ├── kits-injector.ts # Logique d'injection automatique
+│   ├── engine/       # Cœur du moteur (Executor, Guardian, Sessions, Runner)
+│   ├── telecom/      # Services de maintenance et contextes dédiés
+│   ├── logo/         # Logique d'identité visuelle utilisateur
+│   ├── kits-injector.ts # Moteur d'injection de kits
 │   ├── lint-regex.ts    # Analyseur AST pour les Regex
 │   └── cli.ts        # Point d'entrée de l'interface utilisateur
 ```
