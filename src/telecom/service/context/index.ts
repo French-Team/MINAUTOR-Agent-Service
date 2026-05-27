@@ -19,7 +19,7 @@ import { resumer, type ResumerOptions } from './telecom-context-resumer.js'
 
 export { optimiser, optimiserDetail } from './telecom-context-optimiser.js'
 export { nettoyer, gainNettoyage } from './telecom-context-nettoyer.js'
-export { resumer, resumerDetail } from './telecom-context-resumer.js'
+export { resumer } from './telecom-context-resumer.js'
 export {
   resolveProfile,
   resolveProfileDetail,

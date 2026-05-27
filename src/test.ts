@@ -279,7 +279,7 @@ async function main() {
     } else {
       assert('Ollama modèles récupérés', models.length > 0)
     }
-  } catch (_e) {
+  } catch {
     console.log(`    ${YELLOW}⚠  Ollama local non disponible (normal en CI)${RESET}`)
     assert('Ollama modèles récupérés (hors-ligne)', true)
   }
@@ -291,7 +291,7 @@ async function main() {
   try {
     const models = await fetchModels('lm-studio', '', 'http://localhost:1234/v1')
     assert('LM Studio modèles récupérés', models.length > 0)
-  } catch (_e) {
+  } catch {
     console.log(`    ${YELLOW}⚠  LM Studio non disponible (normal en CI)${RESET}`)
     assert('LM Studio modèles récupérés (hors-ligne)', true)
   }
