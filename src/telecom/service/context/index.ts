@@ -15,7 +15,7 @@
 import type { Message, TextPart, ToolCallPart } from '../../../types/agent-definition.js'
 import { optimiser } from './telecom-context-optimiser.js'
 import { nettoyer } from './telecom-context-nettoyer.js'
-import { resumer, resumerDetail, type ResumerOptions } from './telecom-context-resumer.js'
+import { resumer, type ResumerOptions } from './telecom-context-resumer.js'
 
 export { optimiser, optimiserDetail } from './telecom-context-optimiser.js'
 export { nettoyer, gainNettoyage } from './telecom-context-nettoyer.js'
