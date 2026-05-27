@@ -1,0 +1,30 @@
+[
+  {
+    "id": "1779907799450-7hsa",
+    "from": "intercom",
+    "message": "alice → agent-telecom [project-request]: {\"demande\":\"liste les projets\"}",
+    "level": "info",
+    "timestamp": "2026-05-27T18:49:59.451Z"
+  },
+  {
+    "id": "1779907799456-4tgc",
+    "from": "intercom",
+    "message": "alice → agent-telecom [project-request]: {\"demande\":\"liste les projets\"}",
+    "level": "info",
+    "timestamp": "2026-05-27T18:49:59.456Z"
+  },
+  {
+    "id": "1779907799483-q8xb",
+    "from": "intercom",
+    "message": "alice → agent-telecom [project-request]: {\"demande\":\"montre moi mes workspaces\"}",
+    "level": "info",
+    "timestamp": "2026-05-27T18:49:59.484Z"
+  },
+  {
+    "id": "1779907799489-syff",
+    "from": "intercom",
+    "message": "alice → agent-telecom [debug-request]: {\"demande\":\"j'ai un bug dans le login\"}",
+    "level": "info",
+    "timestamp": "2026-05-27T18:49:59.489Z"
+  }
+]

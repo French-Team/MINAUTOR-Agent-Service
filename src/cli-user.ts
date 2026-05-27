@@ -39,9 +39,9 @@ export function getDisplayName(profile: UserProfile): string {
 export async function editUserProfile(rl: ReturnType<typeof createInterface>): Promise<void> {
   const profile = loadUserProfile()
 
-  console.log(`\n${BOLD}${CYAN}┌─ Mon profil ───────────────────────────┐${RESET}`)
+  console.log(`\n${BOLD}${CYAN}┌─ Mon profil ──────────────────────────┐${RESET}`)
   console.log(`${BOLD}${CYAN}│  Remplis ton profil utilisateur       │${RESET}`)
-  console.log(`${BOLD}${CYAN}└─────────────────────────────────────────┘${RESET}\n`)
+  console.log(`${BOLD}${CYAN}└───────────────────────────────────────┘${RESET}\n`)
 
   const current = profile.prenom || profile.pseudo
   if (current) {

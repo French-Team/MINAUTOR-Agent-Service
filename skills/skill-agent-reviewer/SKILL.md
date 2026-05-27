@@ -39,3 +39,4 @@ Cuando tu reçois plusieurs fichiers (agent + skill) :
 - Si tout est parfait, le dire clairement et féliciter
 - Ne jamais inventer des problèmes qui n'existent pas
 - Vérifier que les sections ont un contenu substentiel (pas juste 2 mots)
+- Utiliser les marqueurs de suivi [DECISION], [ACTION], [FAIT], [TODO], [ATTENTE] dans les diagnostics pour que l'historien puisse tracer les décisions et actions

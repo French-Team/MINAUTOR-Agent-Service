@@ -2,7 +2,7 @@ import type { Message, ToolCall, ContextProfile } from './types/agent-definition
 import type { LLMProvider } from './engine-types.js'
 import { internalCallLLM, type StreamingConfig } from './engine-llm.js'
 import { parseToolCalls } from './engine-parser.js'
-import { resolveContextOptionsFor } from './telecom/service/context/index.js'
+import { resolveContextOptionsFor, historienResumePourLLM } from './telecom/service/context/index.js'
 import { RESET, YELLOW, RED } from './constants.js'
 
 interface RunnerDependencies {
@@ -13,6 +13,7 @@ interface RunnerDependencies {
   checkRateLimit: () => Promise<void>
   processTools: (toolCalls: ToolCall[]) => Promise<string[]>
   agent: {
+    id: string
     selfCorrection?: { enabled?: boolean; maxRetries?: number; retryOnFailure?: boolean }
     streaming?: StreamingConfig
     rateLimit?: { backoffMultiplier?: number }
@@ -68,6 +69,20 @@ export function createRunner(deps: RunnerDependencies) {
     // comme nouveau prompt).
     const history = deps.getHistory?.() ?? []
 
+    // ── Injection automatique du suivi de session pour Alice ──
+    // Le module historien (étape 3.5 du pipeline) analyse l'historique
+    // pour en extraire les décisions, actions en cours, réalisations,
+    // reste à faire, et éléments en attente. Ce résumé est injecté dans
+    // le system prompt pour donner à Alice une mémoire contextuelle
+    // sans dépendre de la compression de l'historique brut.
+    let effectiveSystemPrompt = systemPrompt
+    if (deps.agent.id === 'alice') {
+      const suivi = historienResumePourLLM(history, { ecrireFichier: true })
+      if (suivi) {
+        effectiveSystemPrompt = systemPrompt + '\n\n' + suivi
+      }
+    }
+
     // Persister le message utilisateur dans la session pour les tours suivants
     // (c'était le bug racine de la perte de mémoire d'Alice).
     deps.addMessage('user', userMessage)
@@ -96,7 +111,7 @@ export function createRunner(deps: RunnerDependencies) {
         let response = await internalCallLLM(
           currentMessage,
           llm,
-          systemPrompt,
+          effectiveSystemPrompt,
           deps.agent.streaming,
           history,
           contextOptions,
@@ -124,7 +139,7 @@ export function createRunner(deps: RunnerDependencies) {
           response = await internalCallLLM(
             'Continue sur la base des résultats ci-dessus.',
             llm,
-            systemPrompt,
+            effectiveSystemPrompt,
             deps.agent.streaming,
             history,
             contextOptions,

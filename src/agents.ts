@@ -56,7 +56,7 @@ export function listLocalAgents(): { id: string; name: string; file: string }[] 
   ensureAgentsDir()
   const agents: { id: string; name: string; file: string }[] = []
   try {
-    const files = readdirSync(AGENTS_DIR).filter(f => f.endsWith('.ts') || f.endsWith('.json'))
+    const files = readdirSync(AGENTS_DIR).filter(f => (f.endsWith('.ts') || f.endsWith('.json')) && f !== 'tsconfig.json')
     for (const file of files) {
       const filePath = join(AGENTS_DIR, file)
       const content = readFileSync(filePath, 'utf-8')

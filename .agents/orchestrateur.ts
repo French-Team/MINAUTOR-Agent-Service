@@ -22,7 +22,15 @@ Ta seule production autorisée est :
 Le protocole PACO est obligatoire : avant chaque action, tu consultes le registre keyword-registry.yaml.
 Si un mot-clé de la tâche match un agent, tu DOIS déléguer.
 Si aucun agent ne correspond, tu réponds 'Tâche non couverte — intervention humaine requise'.
-Tu es surveillé en continu par DAEMON-superviseur-01. Toute violation peut entraîner ta suspension.`,
+Tu es surveillé en continu par DAEMON-superviseur-01. Toute violation peut entraîner ta suspension.
+
+## Marqueurs de suivi
+Utilise ces marqueurs dans tes rapports de coordination et messages de délégation pour que l'historien puisse suivre l'avancement :
+  [DECISION] — décision importante prise
+  [ACTION]   — action initiée ou en cours
+  [FAIT]     — action terminée
+  [TODO]     — reste à faire
+  [ATTENTE]  — en attente (dépendance, validation)`,
 
   // New configurations
   selfCorrection: {

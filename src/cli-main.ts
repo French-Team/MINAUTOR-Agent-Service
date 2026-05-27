@@ -333,6 +333,7 @@ export async function main() {
     // ── Configuration ──
     if (line === '1') {
       await handleManageProvidersMenu(rl)
+      showMenu(currentEngine!)
       continue
     }
     if (line === '2') { await editUserProfile(rl); continue }
@@ -340,11 +341,12 @@ export async function main() {
     // ── Agents ──
     if (line === '3') { await handleCreate(rl); continue }
     if (line === '4') { handleListAgents(currentEngine!); continue }
-    if (line === '5') { const newEngine = await handleEditAgent(rl, currentEngine!); if (newEngine) currentEngine = newEngine; continue }
+    if (line === '5') { const newEngine = await handleEditAgent(rl, currentEngine!); if (newEngine) currentEngine = newEngine; showMenu(currentEngine!); continue }
 
     // ── Skills & prompts ──
     if (line === '6') {
       await handleSkillsMenu(rl)
+      showMenu(currentEngine!)
       continue
     }
 
@@ -657,16 +659,19 @@ export async function main() {
     let systemPrompt = eng.agent.instructionsPrompt || 'You are a helpful assistant.'
 
     // Auto-injecter les Règles d'Or Universelles dans le system prompt de TOUT agent
-    try {
-      const rulesPath = join(process.cwd(), 'data', 'rules', 'AGENT_RULES.md')
-      if (existsSync(rulesPath)) {
-        const rulesContent = readFileSync(rulesPath, 'utf-8').trim()
-        if (rulesContent) {
-          systemPrompt += `\n\n=== RÈGLES D\'OR UNIVERSELLES ===\n\n${rulesContent}`
+    // (sauf Alice — modèle 1.2B, son seul rôle est parler + Intercom, les règles générales la noient)
+    if (eng.agent.id !== 'alice') {
+      try {
+        const rulesPath = join(process.cwd(), 'data', 'rules', 'AGENT_RULES.md')
+        if (existsSync(rulesPath)) {
+          const rulesContent = readFileSync(rulesPath, 'utf-8').trim()
+          if (rulesContent) {
+            systemPrompt += `\n\n=== RÈGLES D\'OR UNIVERSELLES ===\n\n${rulesContent}`
+          }
         }
+      } catch {
+        // Fichier introuvable ou inaccessible — on continue sans
       }
-    } catch {
-      // Fichier introuvable ou inaccessible — on continue sans
     }
 
     // Auto-injecter la skill correspondante dans le system prompt
@@ -681,20 +686,8 @@ export async function main() {
       systemPrompt += `\n\n=== SKILL : ${skill.meta.name} ===\n\n${body}`
     }
 
-    // Auto-injecter l'INDEX du cahier d'aide pour Alice
-    if (eng.agent.id === 'alice') {
-      try {
-        const cahierIndexPath = join(process.cwd(), 'data', 'cahier-aides-alice', 'INDEX.md')
-        if (existsSync(cahierIndexPath)) {
-          const indexContent = readFileSync(cahierIndexPath, 'utf-8').trim()
-          if (indexContent) {
-            systemPrompt += `\n\n=== CAHIER D\'AIDE - INDEX ===\n\n${indexContent}`
-          }
-        }
-      } catch {
-        // Fichier introuvable — on continue sans
-      }
-    }
+    // Cahier d'aide INDEX.md — SUSPENDU pour Alice (modèle 1.2B, 35+ lignes le saturent).
+    // Les patterns Intercom font le travail à sa place.
 
     process.stdout.write(`\n${YELLOW}⟳${RESET} ${GRAY}${resolved.provider} / ${resolved.model}${RESET} `)
     try {

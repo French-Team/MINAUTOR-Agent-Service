@@ -120,6 +120,7 @@ function makeMockRunnerDeps(overrides?: Partial<{
         return calls.map(() => 'mock-tool-result')
       },
       agent: {
+        id: 'test-agent',
         selfCorrection: { enabled: false, maxRetries: 0, retryOnFailure: false },
         streaming: { enabled: false },
         rateLimit: { backoffMultiplier: 1 },

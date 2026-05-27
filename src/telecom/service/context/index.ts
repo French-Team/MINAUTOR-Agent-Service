@@ -2,12 +2,16 @@
  * Pipeline de compression de contexte.
  *
  * Ordre d'application :
- *   1. optimiser  — langage naturel → directives IA compactes
- *   2. nettoyer   — caractères de contrôle, espaces, lignes vides
- *   3. resumer    — synthèse structurelle (anciens messages → bloc résumé)
+ *   0. conservateur — analyse et trie les patterns du system prompt
+ *   0.5 composeur   — assemble le system prompt optimisé
+ *   1. optimiser    — langage naturel → directives IA compactes
+ *   2. nettoyer     — caractères de contrôle, espaces, lignes vides
+ *   3. resumer      — synthèse structurelle (anciens messages → bloc résumé)
+ *   3.5 historien   — filtre les decisions/actions/todos de l'historique
  *
+ * Les étapes 0-0.5 opèrent sur le system prompt (texte brut).
  * Les étapes 1 et 2 opèrent sur le texte de chaque message individuellement.
- * L'étape 3 opère sur le tableau complet de messages.
+ * Les étapes 3 et 3.5 opèrent sur le tableau complet de messages.
  *
  * Aucune étape ne fait d'appel LLM : tout est déterministe et instantané.
  */
@@ -16,6 +20,9 @@ import type { Message, TextPart, ToolCallPart } from '../../../types/agent-defin
 import { optimiser } from './telecom-context-optimiser.js'
 import { nettoyer } from './telecom-context-nettoyer.js'
 import { resumer, type ResumerOptions } from './telecom-context-resumer.js'
+import { conserver, type Pattern, PatternImportance, ConservateurOptions } from './telecom-context-conservateur.js'
+import { composeur as _composeur, type ComposeurResult, ComposeurOptions } from './telecom-context-composeur.js'
+import { analyserHistorique, historienResumePourLLM, type RapportSuivi, type SuiviEntry } from './telecom-context-historien.js'
 
 export { optimiser, optimiserDetail } from './telecom-context-optimiser.js'
 export { nettoyer, gainNettoyage } from './telecom-context-nettoyer.js'
@@ -27,10 +34,16 @@ export {
   resolveContextOptionsFor,
   PROFILES,
 } from './model-profiles.js'
+export { conserver, conserverDetail } from './telecom-context-conservateur.js'
+export { composeur, composer } from './telecom-context-composeur.js'
 export type { ModelProfile, ProfileName } from './model-profiles.js'
 export type { ResumerOptions, ResumerResult } from './telecom-context-resumer.js'
 export type { OptimiserOptions, OptimiserResult } from './telecom-context-optimiser.js'
 export type { NettoyerOptions } from './telecom-context-nettoyer.js'
+export type { Pattern, PatternImportance, ConservateurOptions, ConservateurResult } from './telecom-context-conservateur.js'
+export type { ComposeurOptions, ComposeurResult } from './telecom-context-composeur.js'
+export { analyserHistorique, historienResumePourLLM, lireFichierSuivi, ajouterMarqueur, MARQUEURS } from './telecom-context-historien.js'
+export type { RapportSuivi, SuiviEntry, SuiviCategorie, HistorienOptions } from './telecom-context-historien.js'
 
 export interface ProcessContextOptions extends ResumerOptions {
   /** Désactiver l'étape optimiser (utile pour les messages déjà structurés). */
@@ -117,6 +130,46 @@ export function processContext(
   }
 
   return transformed
+}
+/**
+ * Optimisation one-shot du system prompt : conservateur → composeur.
+ *
+ * Applique les étapes 0 et 0.5 du pipeline pour réduire la taille
+ * du system prompt sans perdre les directives critiques.
+ *
+ * @param prompt   Le system prompt complet
+ * @param maxChars Troncature optionnelle (0 = illimité)
+ * @returns Le prompt optimisé
+ */
+export function optimizeSystemPrompt(prompt: string, maxChars = 0): string {
+  if (!prompt || !prompt.trim()) return prompt
+  const result = conserver(prompt, { dropNoise: true })
+  const composed = _composeur(result.kept, { compactWhitespace: true, stripDecorators: true, maxChars })
+  return composed.text ?? prompt
+}
+
+/**
+ * Variante détaillée qui retourne les stats de compression.
+ */
+export function optimizeSystemPromptDetail(
+  prompt: string,
+  maxChars = 0,
+): { text: string; stats: { charsBefore: number; charsAfter: number; ratio: number; kept: number; dropped: number } } {
+  if (!prompt || !prompt.trim()) {
+    return { text: prompt, stats: { charsBefore: 0, charsAfter: 0, ratio: 0, kept: 0, dropped: 0 } }
+  }
+  const result = conserver(prompt, { dropNoise: true })
+  const composed = _composeur(result.kept, { compactWhitespace: true, stripDecorators: true, maxChars })
+  return {
+    text: composed.text ?? prompt,
+    stats: {
+      charsBefore: result.stats.charsBefore,
+      charsAfter: composed.charsAfter,
+      ratio: composed.compressionRatio,
+      kept: result.stats.kept,
+      dropped: result.stats.dropped,
+    },
+  }
 }
 
 /**

@@ -67,7 +67,15 @@ Fournis toujours ta réponse dans ce format :
 - Sois précis et factuel dans tes critiques
 - Propose toujours une solution concrète, pas juste une plainte
 - Classe les problèmes par gravité (Urgent > Important > Obligatoire > À voir)
-- Si tout est parfait, dis-le clairement et félicite`,
+- Si tout est parfait, dis-le clairement et félicite
+
+## Marqueurs de suivi
+Utilise ces marqueurs dans ton diagnostic pour que l'historien puisse suivre l'avancement :
+  [DECISION] — décision importante prise (ex: rejet d'un fichier)
+  [ACTION]   — action initiée ou en cours (ex: analyse en cours)
+  [FAIT]     — action terminée (ex: review complétée)
+  [TODO]     — reste à faire (ex: corrections à appliquer)
+  [ATTENTE]  — en attente (ex: information complémentaire requise)`,
 }
 
 export default definition

@@ -1,6 +1,6 @@
 import type { LLMProvider } from './engine-types.js'
 import type { Message, TextPart, ToolCallPart } from './types/agent-definition.js'
-import { processContext, type ProcessContextOptions } from './telecom/service/context/index.js'
+import { processContext, optimizeSystemPrompt, type ProcessContextOptions } from './telecom/service/context/index.js'
 
 export interface StreamingConfig {
   enabled: boolean
@@ -88,14 +88,20 @@ export async function internalCallLLM(
 ): Promise<string> {
   const base = llm.baseUrl.replace(/\/+$/, '')
 
-  // Pipeline de compression : optimiser → nettoyer → resumer.
+  // Pipeline de compression (étapes 0-0.5) : le system prompt est passé
+  // au conservateur (tri des patterns) puis au composeur (assemblage compact).
+  // Le résultat garde l'essentiel (mission, règles, compétences) et supprime
+  // le bruit décoratif (séparateurs, fluff). Invisible pour l'appelant.
+  const optimizedPrompt = optimizeSystemPrompt(systemPrompt)
+
+  // Pipeline de compression (étapes 1-3) : optimiser → nettoyer → resumer.
   // L'historique compressé est inséré entre le system prompt et le nouveau
   // message utilisateur, ce qui donne au LLM la mémoire de la conversation
   // tout en gardant la fenêtre de contexte sous contrôle.
   const compressedHistory = history.length > 0 ? processContext(history, contextOptions) : []
 
   const msgs: Array<{ role: string; content: string }> = [
-    { role: 'system', content: systemPrompt },
+    { role: 'system', content: optimizedPrompt },
     ...compressedHistory.map(toApiMessage),
     { role: 'user', content: userMessage },
   ]
@@ -109,7 +115,7 @@ export async function internalCallLLM(
     contents.push({ role: 'user', parts: [{ text: userMessage }] })
     const res = await post(url, {
       contents,
-      systemInstruction: { parts: [{ text: systemPrompt }] },
+      systemInstruction: { parts: [{ text: optimizedPrompt }] },
     })
     const json = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text: string }> } }> }
     return json.candidates?.[0]?.content?.parts?.[0]?.text || '(réponse vide)'

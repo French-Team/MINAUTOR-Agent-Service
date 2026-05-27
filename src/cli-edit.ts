@@ -28,17 +28,23 @@ export async function handleEditAgent(
   }
 
   console.log(`\n${BOLD}${CYAN}┌─ Éditer un agent ─────────────────────────┐${RESET}`)
-  console.log(`${BOLD}${CYAN}│  Ctrl+C pour annuler                         │${RESET}`)
-  console.log(`${BOLD}${CYAN}└────────────────────────────────────────────┘${RESET}\n`)
+  console.log(`${BOLD}${CYAN}│  Ctrl+C pour annuler                      │${RESET}`)
+  console.log(`${BOLD}${CYAN}└───────────────────────────────────────────┘${RESET}\n`)
 
   console.log(`${BOLD}Agents disponibles :${RESET}`)
   for (let i = 0; i < local.length; i++) {
     const a = local[i]
     console.log(`  ${CYAN}${i + 1}${RESET}. ${a.name} ${GRAY}(${a.id})${RESET}`)
   }
+  console.log(`  ${CYAN}0${RESET}. Retour au menu principal`)
 
   const choice = (await rl.question(`\n${CYAN}Choix${RESET} (numéro ou ID) ${GRAY}>${RESET} `)).trim()
   if (!choice) { console.log(`${YELLOW}Annulé.${RESET}\n`); return null }
+
+  if (choice === '0') {
+    console.log()
+    return null
+  }
 
   const num = parseInt(choice, 10)
   let match: { id: string; name: string; file: string } | undefined
@@ -62,6 +68,10 @@ export async function handleEditAgent(
   const newInstructions = (await rl.question(`${CYAN}Nouvelles instructions${RESET} (laisser vide) ${GRAY}>${RESET} `)).trim()
 
   // ── Provider / modèle / clé API ──
+  if (!agent.model) {
+    console.log(`\n${RED}Erreur : l'agent n'a pas de modèle défini. Abandon.${RESET}\n`)
+    return null
+  }
   const providerInfo = resolveProviderForModel(agent.model, agent.provider)
   console.log(`\n${BOLD}Configuration actuelle :${RESET}`)
   console.log(`  Modèle   : ${CYAN}${agent.model}${RESET}`)

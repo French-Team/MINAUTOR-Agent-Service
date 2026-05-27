@@ -87,6 +87,13 @@ const PATTERNS: IntercomPattern[] = [
     subject: 'agent-list-request',
     response: 'Je te transmets la demande pour voir la liste des agents disponibles.',
   },
+  // P9 — Projets / workspaces (solution de repli Intercom pour le petit modèle)
+  {
+    keywords: ['projet', 'projets', 'workspace', 'workspaces'],
+    minMatch: 1,
+    subject: 'project-request',
+    response: 'Je transmets ta demande concernant les projets à agent-telecom.',
+  },
 ]
 
 // ── Projet courant ─────────────────────────────────
