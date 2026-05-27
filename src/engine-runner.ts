@@ -1,4 +1,4 @@
-import type { Message, ToolCall } from './types/agent-definition.js'
+import type { Message, ToolCall, ContextProfile } from './types/agent-definition.js'
 import type { LLMProvider } from './engine-types.js'
 import { internalCallLLM, type StreamingConfig } from './engine-llm.js'
 import { parseToolCalls } from './engine-parser.js'
@@ -16,7 +16,7 @@ interface RunnerDependencies {
     selfCorrection?: { enabled?: boolean; maxRetries?: number; retryOnFailure?: boolean }
     streaming?: StreamingConfig
     rateLimit?: { backoffMultiplier?: number }
-    toolConfig?: { contextProfile?: string }
+    toolConfig?: { contextProfile?: ContextProfile }
   }
   /** Key rotation functions — injected from engine.ts */
   getNextKey?: (providerType: string) => { keyId: string; key: string; providerName: string } | undefined

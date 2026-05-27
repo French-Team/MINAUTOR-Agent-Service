@@ -19,6 +19,15 @@
  */
 
 import type { ResumerOptions } from './telecom-context-resumer.js'
+import type { ContextProfile } from '../../../types/agent-definition.js'
+
+// ── Compile-time sync guard ──
+// Vérification bidirectionnelle : si ProfileName et ContextProfile dérivent
+// (valeurs différentes), une de ces lignes produit une erreur de type.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _profileSyncA: ContextProfile = null as unknown as ProfileName
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _profileSyncB: ProfileName = null as unknown as ContextProfile
 
 // Type structurel local pour éviter une dépendance circulaire avec index.ts
 // (qui ré-exporte ce module). Doit rester en phase avec ProcessContextOptions.

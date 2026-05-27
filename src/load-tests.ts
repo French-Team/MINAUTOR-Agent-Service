@@ -189,7 +189,7 @@ async function loadTestProviderCRUD() {
         defaultModel: 'm',
         enabled: true,
       })
-    }, 50)
+    }, 25)
   } finally {
     // Nettoyer tous les providers CRUD- cr\u00e9\u00e9s, m\u00eame si le bench crash
     const { listProviders } = await import('./providers.js')
@@ -339,7 +339,7 @@ async function loadTestProviderResolution() {
 
     await benchmark('resolveProviderForModel (5 000 r\u00e9solutions, 7 patterns)', 5000, () => {
       for (const m of models) resolveProviderForModel(m)
-    }, 500)
+    }, 200)
   } finally {
     removeProvider('ResolveTest Kilo')
     if (originalConfig) fs.writeFileSync(configPath, originalConfig, 'utf-8')
@@ -443,7 +443,7 @@ async function loadTestFullEngine() {
         llm,
         'Tu r\u00e9ponds toujours par 42.',
       )
-    }, 20_000)
+    }, 20)
 
     // V\u00e9rifier que les sessions accumulent bien des messages
     const session = engine.getCurrentSession()
@@ -626,7 +626,7 @@ async function loadTestConcurrent() {
         llm,
         'R\u00e9ponse mock\u00e9e rapide.',
       )
-    }, 15_000)
+    }, 800)
 
   } finally {
     globalThis.fetch = originalFetch
