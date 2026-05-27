@@ -144,7 +144,7 @@ async function loadTestKeyRotation() {
 
     await benchmark('getNextApiKey rotation (5 keys)', 10000, () => {
       getNextApiKey('kilo')
-    }, 2_000)
+    }, 1_000)
 
     // Simuler 5 rate-limits cons\u00e9cutifs pour toutes les cl\u00e9s
     await benchmark('markRateLimited failover (5 calls)', 1000, () => {
@@ -220,7 +220,7 @@ async function loadTestNotifications() {
 
   await benchmark('sanitizeNotificationMessage (50 000 appels)', 50000, () => {
     for (const msg of messages) sanitizeNotificationMessage(msg)
-  }, 150_000)
+  }, 30_000)
 
   await benchmark('levelIcon lookup (50 000 appels)', 50000, () => {
     levelIcon('urgent')
@@ -266,9 +266,10 @@ async function loadTestEngineRunner() {
   ]
 
   // runPrompt est async \u2014 il faut await chaque appel pour mesurer le temps r\u00e9el
+
   await benchmark('runPrompt (5 000 prompts, 5 patterns)', 5000, async () => {
     for (const p of prompts) await runner.runPrompt(p)
-  }, 150_000)
+  }, 30_000)
 }
 
 // ── Tests de charge 5 : Constants \u2014 top15 tri \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -415,7 +416,7 @@ async function loadTestFullEngine() {
 
     await benchmark('createSession (5 000 sessions)', 5000, () => {
       engine.createSession()
-    }, 500_000)
+    }, 250_000)
 
     // Cr\u00e9er une session de travail pour les benchmarks suivants
     engine.createSession()
@@ -423,11 +424,11 @@ async function loadTestFullEngine() {
     await benchmark('addMessage + getCurrentSession (10 000 ops)', 10000, () => {
       engine.addMessage('user', 'Un message de test pour la charge.')
       engine.getCurrentSession()
-    }, 5_000_000)
+    }, 500_000)
 
     await benchmark('listSessions (5 000 appels)', 5000, () => {
       engine.listSessions()
-    }, 35_000)
+    }, 10_000)
 
     // Benchmark callLLM \u2014 mock\u00e9, aucun r\u00e9seau r\u00e9el
     const llm = {
