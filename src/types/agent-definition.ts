@@ -1,3 +1,5 @@
+import type { AgentPermission as AgentPermissionDef } from '../feurouge/types.js'
+
 export interface AgentDefinition {
   id: string
   name?: string
@@ -18,6 +20,9 @@ export interface AgentDefinition {
   rateLimit?: RateLimit
   toolConfig?: ToolConfig
   
+  // Permissions (FeuRouge)
+  permissions?: AgentPermissionDef
+
   // Backward compatibility for daemon
   daemonConfig?: {
     defaultIntervalMs: number

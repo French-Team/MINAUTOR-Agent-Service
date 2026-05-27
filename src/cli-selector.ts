@@ -65,6 +65,23 @@ const SECTIONS: PickerSection[] = [
     ],
   },
   {
+    title: '📁 Projets',
+    items: [
+      { cmd: '/project', label: 'Menu projets interactif' },
+      { cmd: '!project create <nom> [description]', label: 'Créer un projet' },
+      { cmd: '!project list', label: 'Lister les projets' },
+      { cmd: '!project use <nom>', label: 'Définir le projet courant (injecté dans intercom)' },
+      { cmd: '!project use', label: 'Désélectionner le projet courant' },
+      { cmd: '!project show <nom>', label: 'Détails d\'un projet' },
+      { cmd: '!project init <nom>', label: 'Initialiser un dossier existant' },
+      { cmd: '!project tasks <nom> [area]', label: 'Tâches d\'un projet' },
+      { cmd: '!project task <nom> add <area> <titre>', label: 'Ajouter une tâche' },
+      { cmd: '!project archive <nom>', label: 'Archiver un projet' },
+      { cmd: '!project delete <nom>', label: 'Supprimer un projet' },
+      { cmd: '/tasks <project>', label: 'Raccourci : tâches d\'un projet' },
+    ],
+  },
+  {
     title: '❓ Aide & Navigation',
     items: [
       { cmd: '/help', label: 'Aide / commandes' },

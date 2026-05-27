@@ -1,6 +1,7 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { injectKitsIntoCommand, scanCommandOutput } from './kits-injector.js'
+import { getFeuRougeClient } from './feurouge/feurouge-client.js'
 import type { AgentDefinition } from './types/agent-definition.js'
 
 const execAsync = promisify(exec)
@@ -8,6 +9,17 @@ const execAsync = promisify(exec)
 export function createCommandRunner(cwd: string, agent: AgentDefinition) {
 
   async function runTerminalCommand(command: string, processType: 'SYNC' | 'BACKGROUND' = 'SYNC', timeoutSeconds = 60): Promise<string> {
+    // ── FeuRouge check — vérifier les permissions AVANT l'exécution ──
+    const feurouge = getFeuRougeClient()
+    if (feurouge.isAlive()) {
+      const check = await feurouge.checkCommand(agent.id, command, cwd)
+      if (!check.allowed) {
+        const msg = `FeuRouge: Commande bloquée — ${check.reason || 'Permission non accordée'} pour l'agent ${agent.id}`
+        if (agent.guardian?.auditTrail) console.warn(`[FeuRouge Audit] ${msg}`)
+        return msg
+      }
+    }
+
     // ── Injection automatique des imports de kits ──────────────
     let augmentedCommand: string
     try {

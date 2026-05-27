@@ -1,0 +1,110 @@
+# data/permissions/permissions.yaml
+# Fichier maître des permissions — généré automatiquement.
+# Éditable via !permissions edit <agent-id> <field> <value> ou directement.
+#
+# Niveaux :
+#   admin       — Accès complet (programme + workspaces)
+#   restricted  — Accès à workspaces/ racine seulement
+#   confined    — Accès à un seul projet dans workspaces/
+#   readonly    — Lecture seule
+
+version: 1
+
+# Défauts pour les agents de niveau "confined"
+defaults:
+  confined:
+    allowed_commands:
+      - "cat"
+      - "ls"
+      - "dir"
+      - "findstr"
+      - "node"
+      - "npm"
+      - "npx"
+      - "mkdir"
+      - "echo"
+      - "type"
+      - "copy"
+      - "move"
+      - "writefile"
+    forbidden_commands:
+      - "rm -rf"
+      - "del /s"
+      - "rmdir /s"
+      - "format"
+    forbidden_paths:
+      - ".agents/"
+      - "data/"
+      - "src/"
+      - "providers.json"
+      - "package.json"
+      - "tsconfig.json"
+
+# Permissions par agent
+agents:
+  - id: alice
+    level: admin
+    allowed_commands:
+      - "*"
+
+  - id: orchestrateur
+    level: admin
+    allowed_commands:
+      - "node dist/telecom/service/intercom-manager.js *"
+      - "cat"
+      - "ls"
+      - "dir"
+      - "findstr"
+      - "echo"
+      - "type"
+    allowed_paths:
+      - "data/protocols/"
+      - "telecom/"
+      - "workspaces/"
+
+  - id: agent-superviseur
+    level: readonly
+    allowed_commands:
+      - "cat"
+      - "ls"
+      - "dir"
+      - "findstr"
+      - "echo"
+
+  - id: agent-reviewer
+    level: admin
+    allowed_paths:
+      - "."
+
+  - id: DAEMON-superviseur-01
+    level: admin
+    allowed_paths:
+      - "."
+
+  - id: DAEMON-feurouge-01
+    level: admin
+    allowed_paths:
+      - "data/permissions/"
+      - "telecom/"
+
+  - id: agent-telecom
+    level: admin
+    allowed_commands:
+      - "node dist/telecom/service/intercom-manager.js *"
+      - "node dist/spawn-agent.js *"
+      - "cat"
+      - "ls"
+      - "dir"
+      - "findstr"
+      - "echo"
+      - "type"
+
+  - id: agent-hecatonchires
+    level: restricted
+    allowed_paths:
+      - "workspaces/"
+      - "."
+
+  # Wildcard : tous les autres agents (créés par l'utilisateur)
+  - id: "*"
+    level: confined

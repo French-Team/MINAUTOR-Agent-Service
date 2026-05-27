@@ -89,6 +89,25 @@ const PATTERNS: IntercomPattern[] = [
   },
 ]
 
+// ── Projet courant ─────────────────────────────────
+
+let _currentProject: string | undefined
+
+/**
+ * Définit le projet courant pour les prochains messages intercom.
+ * Le nom du projet est automatiquement ajouté au payload de chaque message.
+ */
+export function setCurrentProject(name: string | undefined): void {
+  _currentProject = name
+}
+
+/**
+ * Retourne le nom du projet courant, ou undefined si aucun projet sélectionné.
+ */
+export function getCurrentProject(): string | undefined {
+  return _currentProject
+}
+
 // ── Intercom writer ──────────────────────────────────
 
 const INTERCOM_DIR = join(process.cwd(), 'telecom', 'intercom')
@@ -116,15 +135,19 @@ function shortTimestamp(): string {
     String(d.getSeconds()).padStart(2, '0')
 }
 
-function writeIntercomMessage(subject: string, userMessage: string): void {
+function writeIntercomMessage(subject: string, userMessage: string, projectName?: string): void {
   const uuid = randomUUID()
+  const payload: Record<string, string> = { demande: userMessage }
+  if (projectName) {
+    payload.project = projectName
+  }
   const msg = {
     id: uuid,
     from: 'alice',
     to: 'agent-telecom',
     type: 'request' as const,
     subject,
-    payload: { demande: userMessage },
+    payload,
     timestamp: new Date().toISOString(),
     status: 'pending' as const,
   }
@@ -154,9 +177,12 @@ export interface RouteResult {
 /**
  * Analyse un message utilisateur et le route vers agent-telecom si un pattern match.
  *
+ * @param userMessage - Le message utilisateur à analyser
+ * @param projectName - Nom du projet (optionnel, utilise le projet courant si non fourni)
  * @returns RouteResult si un pattern a matché, null sinon.
  */
-export function tryRouteIntercom(userMessage: string): RouteResult | null {
+export function tryRouteIntercom(userMessage: string, projectName?: string): RouteResult | null {
+  const project = projectName ?? _currentProject
   const lower = userMessage.toLowerCase()
 
   for (const pattern of PATTERNS) {
@@ -167,7 +193,7 @@ export function tryRouteIntercom(userMessage: string): RouteResult | null {
       }
     }
     if (matchCount >= pattern.minMatch) {
-      writeIntercomMessage(pattern.subject, userMessage)
+      writeIntercomMessage(pattern.subject, userMessage, project)
       return { subject: pattern.subject, response: pattern.response }
     }
   }

@@ -44,10 +44,15 @@ import { logSkillLoaded, logDaemonStarted, logWelcomeMessage } from './cli-start
 import { DEFAULT_AGENT, getAgent, loadAgentFromFile } from './cli-utils.js'
 import { handleCommandPicker } from './cli-selector.js'
 import { handleShellLine } from './cli-runner.js'
-import { tryRouteIntercom } from './cli-intercom-router.js'
+import { tryRouteIntercom, getCurrentProject } from './cli-intercom-router.js'
+import { getFeuRougeClient, resetFeuRougeClient } from './feurouge/feurouge-client.js'
+import { handlePermissionsCommand } from './feurouge/permissions-cli.js'
+import { getPermissionsConfig, listRegistrations } from './feurouge/permissions.js'
+import { dispatchProjectCommand, handleProjectMenu } from './project/workspace-cli.js'
 
 let currentEngine: Engine | null = null
 let telecomDaemon: ChildProcess | null = null
+let feurougeDaemon: ChildProcess | null = null
 
 function startTelecomDaemon(): void {
   const daemonPath = join(import.meta.dirname, 'telecom', 'service', 'telecom-daemon.js')
@@ -105,6 +110,18 @@ function showIntercomStatus(): void {
   const routedDir = join(process.cwd(), 'telecom', 'routed')
 
   console.log(`\n${BOLD}${CYAN}┌─ Status du systeme ─────────────────────┐${RESET}`)
+
+  // ── Daemon feurouge ──
+  const frClient = getFeuRougeClient()
+  const frAlive = frClient.isAlive()
+  console.log(`\n${BOLD}FeuRouge (sécurité) :${RESET}`)
+  console.log(`  ${frAlive ? `${GREEN}▶ Actif${RESET}` : `${GRAY}■ Inactif${RESET}`}`)
+  if (frAlive) {
+    const config = getPermissionsConfig()
+    const registrations = listRegistrations()
+    if (config) console.log(`  ${GRAY}${config.agents.length} règles de permissions${RESET}`)
+    if (registrations.length > 0) console.log(`  ${GRAY}${registrations.length} agent(s) enregistré(s)${RESET}`)
+  }
 
   // ── Daemon telecom ──
   const daemonAlive = telecomDaemon !== null && telecomDaemon.exitCode === null
@@ -176,6 +193,22 @@ function showIntercomStatus(): void {
   console.log(`\n${BOLD}${CYAN}└────────────────────────────────────────────┘${RESET}\n`)
 }
 
+function startFeuRougeDaemon(): void {
+  const client = getFeuRougeClient()
+  const started = client.start()
+  if (started) {
+    console.log(`${GREEN}✓ FeuRouge — démon de sécurité actif${RESET}`)
+  } else {
+    console.log(`${YELLOW}⚠ FeuRouge — non disponible (compile d'abord)${RESET}`)
+  }
+}
+
+function stopFeuRougeDaemon(): void {
+  const client = getFeuRougeClient()
+  client.stop()
+  resetFeuRougeClient()
+}
+
 function stopTelecomDaemon(): void {
   if (telecomDaemon) {
     telecomDaemon.kill('SIGTERM')
@@ -213,6 +246,7 @@ export async function main() {
     'providers key', 'providers model', 'providers remove',
     'sessions', 'session', 'new', 'info', 'status',
     'notifications', 'notifications filter', 'notifications history',
+    'permissions', 'permissions show', 'permissions edit', 'permissions reload',
     'exit', 'quit',
   ]
 
@@ -244,6 +278,7 @@ export async function main() {
   // ── Messages de démarrage ──
   logSkillLoaded()
   startTelecomDaemon()
+  startFeuRougeDaemon()
   // Nettoyer les archives de notifications plus vieilles que 30 jours
   cleanNotificationArchive()
   logWelcomeMessage()
@@ -273,7 +308,9 @@ export async function main() {
     }
 
     const displayName = getDisplayName(loadUserProfile())
-    const prefix = GRAY + displayName + RESET
+    const currentProject = getCurrentProject()
+    const projectBadge = currentProject ? ` ${CYAN}◈${currentProject}${RESET}` : ''
+    const prefix = GRAY + displayName + projectBadge + RESET
     const pending = countPendingNotifications()
     const badge = pending > 0 ? ` ${YELLOW}[${pending}]${RESET} ` : ''
     let line = (await rl.question(`${prefix}${badge}> `)).trim()
@@ -329,7 +366,7 @@ export async function main() {
     if (line === '10') { showHelp(currentEngine!); continue }
 
     // ── Quitter ──
-    if (line === '0') { stopTelecomDaemon(); console.log(`${GRAY}Bye.${RESET}`); rl.close(); exit(0) }
+    if (line === '0') { stopFeuRougeDaemon(); stopTelecomDaemon(); console.log(`${GRAY}Bye.${RESET}`); rl.close(); exit(0) }
 
     if (line.startsWith('/')) {
       const [cmd, ...args] = line.slice(1).split(/\s+/)
@@ -519,8 +556,25 @@ export async function main() {
           }
           break
         }
+        case 'permissions': {
+          await handlePermissionsCommand(args)
+          break
+        }
+        case 'project': {
+          await handleProjectMenu(rl)
+          break
+        }
+        case 'tasks': {
+          if (args.length > 0) {
+            dispatchProjectCommand('tasks ' + args.join(' '))
+          } else {
+            console.log(`${YELLOW}Usage: /tasks <project> [area]${RESET}`)
+          }
+          break
+        }
         case 'exit':
         case 'quit': {
+          stopFeuRougeDaemon()
           stopTelecomDaemon()
           console.log(`${GRAY}Bye.${RESET}`)
           rl.close()
@@ -538,6 +592,23 @@ export async function main() {
       const match = line.match(/(\d+)\s*(min|m|minute|sec|s)/i)
       const interval = match ? match[1] + (match[2]?.startsWith('s') ? 's' : 'm') : '1h'
       line = `!spawn timer-man ${interval}`
+    }
+
+    // ── Commandes internes ! ────────────────────────────
+    if (line.startsWith('!project')) {
+      const rest = line.slice(9).trim()
+      dispatchProjectCommand(rest || 'help')
+      continue
+    }
+    if (line.startsWith('!tasks')) {
+      const rest = line.slice(7).trim()
+      dispatchProjectCommand(`tasks ${rest}`)
+      continue
+    }
+    if (line.startsWith('!permissions')) {
+      const args = line.slice(13).trim().split(/\s+/)
+      await handlePermissionsCommand(args)
+      continue
     }
 
     const isCommand = line.startsWith('!')

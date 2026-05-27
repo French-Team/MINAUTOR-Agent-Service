@@ -20,6 +20,8 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { fork } from 'node:child_process'
 import { pushNotification, type NotificationLevel } from '../../notify.js'
+import { getFeuRougeClient } from '../../feurouge/feurouge-client.js'
+import { getAgentPermission } from '../../feurouge/permissions.js'
 
 const cwd = process.cwd()
 const INTERCOM_DIR = join(cwd, 'telecom', 'intercom')
@@ -250,13 +252,79 @@ function buildInstruction(agentId: string, msg: IntercomMessage): string {
     return base.concat([
       '',
       `1. Lis le message dans telecom/routed/${msg.id}.json`,
-      `2. Consulte le registre de mots-cles (keyword-registry.yaml)`,
-      `3. Si un mot-cle correspond a un agent specialise :`,
-      `   a. Execute : node dist/telecom/service/intercom-manager.js send orchestrateur <agent-id> request delegation --payload '{"demande":"..."}'`,
-      `      en remplacant le payload JSON par la demande a transmettre`,
-      `   b. Le daemon telecom spawnera automatiquement l'agent cible`,
-      `4. Si aucun mot-cle ne correspond : reponds "Tache non couverte — intervention humaine requise"`,
-      `5. Ne produit aucun livrable toi-meme — tu delegates toujours`,
+      '',
+      '── PHASE 1 : LECTURE DU TABLEAU DES TACHES ──',
+      '2. Determine le projet concerne :',
+      `   a. Si msg.payload contient "project" : utilise ce nom de projet`,
+      `   b. Sinon, cherche dans la demande si un nom de projet est mentionne`,
+      `   c. En dernier recours, utilise le tableau global (passe la commande sans nom de projet)`,
+      '3. Consulte le tableau des taches du projet :',
+      '   node dist/project/task-board-cli.js summary <project>',
+      '   Cela te donne la liste des domaines, les taches en cours et les prochaines disponibles.',
+      '',
+      '── PHASE 2 : ANALYSE DE LA DEMANDE ──',
+      '4. Consulte le registre de mots-cles (keyword-registry.yaml)',
+      '   pour determiner a quel domaine appartient la demande (backend, frontend, docs, infra, ...)',
+      '   et quel agent specialise est le plus adapte.',
+      '5. Verifie si le domaine est disponible :',
+      '   node dist/project/task-board-cli.js can-assign <project> <domaine>',
+      `   - Si la reponse contient "disponible" avec une tache : utilise son ID pour lancer la tache`,
+      `   - Si la reponse contient "occupe" : tu ne peux pas deleguer dans ce domaine maintenant.`,
+      `     Essaie un autre domaine parallelisable, ou reponds a l'utilisateur que la tache est en file d'attente.`,
+      `   - SI LE DOMAINE EST OCCUPE : ne delegue PAS a un agent dans le meme domaine. Tu dois :`,
+      `     a. Reporter la delegation a plus tard`,
+      `     b. Ou, si un autre domaine est libre (frontend VS backend), deleguer sur cet autre domaine`,
+      `     c. Tu peux paralleliser des taches de domaines DIFFERENTS, mais JAMAIS du meme domaine en meme temps.`,
+      '',
+      '── PHASE 3 : DELEGATION AVEC SUIVI ──',
+      '6. Obtiens la prochaine tache disponible :',
+      '   node dist/project/task-board-cli.js next <project> [domaine]',
+      `   Cela retourne l'ID de la tache a executer.`,
+      '7. Si la tache existe, demarre-la et assigne-la a l\'agent specialise :',
+      '   node dist/project/task-board-cli.js start <project> <task-id> <agent-id>',
+      `   (agent-id est le nom de l'agent specialise, ex: "agent-codeur-backend")`,
+      '8. Ensuite, envoie la mission a l\'agent specialise :',
+      `   a. Execute : node dist/telecom/service/intercom-manager.js send orchestrateur <agent-id> request delegation --payload '{"demande":"...","task_id":"<task-id>","project":"<project>"}'`,
+      `      en incluant TOUJOURS le task_id et le project dans le payload.`,
+      `   b. Le daemon telecom spawnera automatiquement l'agent cible.`,
+      '',
+      '── REGLES DE SEQUENCEMENT (IMPORTANT) ──',
+      '- MEME DOMAINE = SEQUENTIEL : si une tache backend est en cours,',
+      '  tu ne peux PAS deleguer une autre tache backend tant qu\'elle n\'est pas terminee.',
+      '- DOMAINES DIFFERENTS = PARALLELE : tu PEUX deleguer frontend + backend en parallele,',
+      '  tant qu\'ils sont dans des domaines differents.',
+      '- DEPENDANCES : si une tache a des dependances (dependsOn dans le board),',
+      '  elle n\'est disponible que quand ses dependances sont terminees.',
+      '- UN AGENT = UNE TACHE : ne donne jamais toutes les missions a un meme agent.',
+      '- FILE D\'ATTENTE : si le domaine est occupe, la tache reste en "todo" dans le board.',
+      '  L\'utilisateur peut suivre l\'avancement avec !project tasks <project>.',
+      '',
+      '── QUAND UN AGENT RENVOIE UN RESULTAT ──',
+      '9. Quand tu recois un resultat d\'un agent specialise (message intercom de retour) :',
+      '   a. Lis le payload pour retrouver le task_id et le project',
+      '   b. Marque la tache comme terminee :',
+      '      node dist/project/task-board-cli.js done <project> <task-id>',
+      '   c. Verifie s\'il y a une prochaine tache dans le meme domaine :',
+      '      node dist/project/task-board-cli.js next <project> <domaine>',
+      '   d. Si oui, repete la delegation (retour a la phase 3)',
+      '   e. Si le board ne contient plus de taches "todo" :',
+      '      - Tu peux creer la prochaine tache a partir de la demande utilisateur :',
+      '        node dist/project/task-board-cli.js add <project> <domaine> "<titre de la tache>"',
+      '      - Puis delegue normalement.',
+      '',
+      '── COMMANDES RAPIDES ──',
+      '  Voir le resume complet  : node dist/project/task-board-cli.js summary <project>',
+      '  Lire toutes les taches  : node dist/project/task-board-cli.js read <project> [domaine]',
+      '  Verifier disponibilite   : node dist/project/task-board-cli.js can-assign <project> <domaine>',
+      '  Prochaine tache         : node dist/project/task-board-cli.js next <project> [domaine]',
+      '  Demarrer tache          : node dist/project/task-board-cli.js start <project> <task-id> <agent>',
+      '  Terminer tache          : node dist/project/task-board-cli.js done <project> <task-id>',
+      '  Ajouter une tache       : node dist/project/task-board-cli.js add <project> <domaine> "<titre>"',
+      '  Taches en attente      : node dist/project/task-board-cli.js pending <project> [domaine]',
+      '  Aide complete           : node dist/project/task-board-cli.js help',
+      '',
+      '5. Ne produit aucun livrable toi-meme — tu delegates toujours. Ton role est de COORDONNER.',
+      '6. Si aucun mot-cle ne correspond : reponds "Tache non couverte — intervention humaine requise".',
       seedContext,
     ]).join('\n')
   }
@@ -612,6 +680,21 @@ function spawnAgent(agentId: string, msg: IntercomMessage): void {
   const child = fork(spawnPath, [agentId, instruction], {
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   })
+
+  // ── Enregistrer l'agent auprès du FeuRouge avec le vrai PID ──
+  if (child.pid) {
+    const feurouge = getFeuRougeClient()
+    if (feurouge.isAlive()) {
+      const perm = getAgentPermission(agentId)
+      const level = perm?.level ?? 'confined'
+      feurouge.registerAgent(agentId, child.pid, level, perm?.workspace)
+        .then((ok) => {
+          if (ok) {
+            console.log(`[Daemon] Agent "${agentId}" enregistré FeuRouge (PID ${child.pid}) [${level}]${perm?.workspace ? ` → ${perm.workspace}` : ''}`)
+          }
+        })
+    }
+  }
 
   let output = ''
   child.stdout?.on('data', (d: Buffer) => { output += d.toString() })

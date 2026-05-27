@@ -17,14 +17,15 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20, 22]
+        node-version: [22, 24]
+
 
     steps:
       - name: 📥 Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 🟢 Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node-version }}
 
@@ -34,14 +35,66 @@ jobs:
       - name: 🏗️ Build
         run: npm run build
 
-      - name: 🔍 Lint
-        run: npm run lint
+      - name: 📦 Upload build artifact
+        if: matrix.node-version == 22
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.node-version }}
+          path: dist/
 
       - name: 🧪 Unit tests
         run: node dist/unit-tests.js
 
       - name: 🔄 Integration tests
         run: node dist/test.js
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v5
+
+      - name: 🟢 Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: 📦 Install dependencies
+        run: npm install
+
+      - name: 🔍 Lint
+        run: npm run lint
+
+  performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [test, lint]
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v5
+
+      - name: 🟢 Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: 📦 Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-22
+          path: dist/
+
+      - name: 📦 Install dependencies
+        run: npm install
 
       - name: ⚡ Performance tests
         run: npm run test:load
