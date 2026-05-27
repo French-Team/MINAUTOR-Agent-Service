@@ -5,7 +5,7 @@
 
   **L'orchestration multi-agents nouvelle génération pour TypeScript & Node.js**
 
-  [![Version](https://img.shields.io/badge/version-1.3.0-blue.svg?style=for-the-badge)](https://github.com/French-Team/MINAUTOR-Agent-Service)
+  [![Version](https://img.shields.io/badge/version-1.4.0-blue.svg?style=for-the-badge)](https://github.com/French-Team/MINAUTOR-Agent-Service)
   [![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)](LICENSE)
   [![Status](https://img.shields.io/badge/status-active-success.svg?style=for-the-badge)](https://github.com/French-Team/MINAUTOR-Agent-Service)
   [![Platform](https://img.shields.io/badge/platform-node.js-black.svg?style=for-the-badge)](https://nodejs.org/)
@@ -63,8 +63,8 @@ npm run final # Build complet avec linting automatique et lancement CLI
 - **Runtime** : Node.js (v22+)
 - **Langage** : TypeScript (Typage strict, AST Parsing)
 - **Engine** : Multi-fournisseurs (Kilo, Gemini, OpenRouter, Ollama)
+- **CI/CD** : GitHub Actions (Linting AST, Tests Unitaires & Performance)
 - **Qualité** : ESLint, TSX, Regex Linter (Custom AST)
-- **Interface** : CLI Interactive via Inquirer
 
 ---
 
@@ -75,7 +75,7 @@ npm run final # Build complet avec linting automatique et lancement CLI
 - 💉 **Kits Injector & Engine API** — Injection automatique d'imports et exportations directes des fonctions de kits via le moteur.
 - 📡 **Telecom Services** :
   - `Daemon` : Surveillance active en arrière-plan.
-  - `Resumer/Optimiser/Nettoyer` : Trio de services avec gestion de contexte (`telecom/service/context/`).
+  - `Context Management` : Dossier `src/telecom/service/context/` dédié à la gestion modulaire des contextes (Resumer, Optimiser, Nettoyer). *Structure en cours de développement pour une meilleure extensibilité.*
 - 🎨 **Visual Identity** : Système de couches utilisateur (`src/logo/layer-user.ts`) pour une identification visuelle dynamique.
 
 ---
@@ -101,7 +101,7 @@ Le système de **Kits** permet d'étendre les capacités des agents de manière 
 ## 🛡️ Qualité & Performance
 
 MINAUTOR intègre des outils de validation de pointe :
-- **Regex AST Linter** : Intégré au workflow de build pour garantir la sécurité des expressions régulières.
+- **Regex AST Linter** : Intégré au workflow de build et à la CI pour garantir la sécurité des expressions régulières.
 - **Load Testing** : Scripts dédiés pour tester la montée en charge.
 - **Guardian** : Filtrage intelligent des commandes shell.
 
@@ -111,10 +111,12 @@ MINAUTOR intègre des outils de validation de pointe :
 
 ```text
 .
+├── .github/workflows # Configuration CI/CD (GitHub Actions)
 ├── kits/             # Registre et modules de kits réutilisables
 ├── src/
 │   ├── engine/       # Cœur du moteur (Executor, Guardian, Sessions, Runner)
-│   ├── telecom/      # Services de maintenance et contextes dédiés
+│   ├── telecom/      # Services de maintenance et gestion des contextes
+│   │   └── service/context/ # Nouveaux modules de contexte (en développement)
 │   ├── logo/         # Logique d'identité visuelle utilisateur
 │   ├── kits-injector.ts # Moteur d'injection de kits
 │   ├── lint-regex.ts    # Analyseur AST pour les Regex

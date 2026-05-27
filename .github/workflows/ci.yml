@@ -52,8 +52,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
 
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: 📥 Checkout
@@ -75,8 +73,6 @@ jobs:
     timeout-minutes: 15
     needs: [test, lint]
 
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: 📥 Checkout
@@ -86,6 +82,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: 'npm'
 
       - name: 📦 Download build artifact
         uses: actions/download-artifact@v4
@@ -94,7 +91,7 @@ jobs:
           path: dist/
 
       - name: 📦 Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: ⚡ Performance tests
         run: npm run test:load
