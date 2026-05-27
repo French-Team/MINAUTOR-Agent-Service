@@ -1,9 +1,67 @@
 import type { LLMProvider } from './engine-types.js'
+import type { Message, TextPart, ToolCallPart } from './types/agent-definition.js'
+import { processContext, type ProcessContextOptions } from './telecom/service/context/index.js'
 
 export interface StreamingConfig {
   enabled: boolean
   chunkSize?: number
   showThinking?: boolean
+}
+
+/**
+ * Convertit un message interne (format Codebuff) en message API OpenAI/Ollama.
+ * Les tool-calls et tool-results sont aplatis en texte pour les providers
+ * qui ne supportent pas le format multi-parts (cas le plus courant en local).
+ */
+function toApiMessage(msg: Message): { role: string; content: string } {
+  // Les serveurs locaux OpenAI-compatibles (LM Studio, llama.cpp) rejettent
+  // souvent le rôle 'tool' sans tool_call_id apparié. On aplatit donc les
+  // résultats d'outils en message 'user' préfixé, ce qui préserve l'info
+  // sans casser les providers stricts.
+  if (msg.role === 'tool') {
+    const text = msg.content.map(p => p.content).join('\n')
+    return { role: 'user', content: `[résultat outil] ${text}` }
+  }
+
+  const text = msg.content
+    .map(p => {
+      const part = p as TextPart | ToolCallPart
+      if (part.type === 'text') return part.text
+      if (part.type === 'tool-call') {
+        return `[outil: ${part.toolName}(${JSON.stringify(part.input)})]`
+      }
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n')
+
+  return { role: msg.role, content: text }
+}
+
+/**
+ * Convertit un message interne en format Google Gemini (parts + role mapping).
+ */
+function toGoogleContent(msg: Message): { role: string; parts: Array<{ text: string }> } | null {
+  if (msg.role === 'system') return null // Gemini gère systemInstruction séparément
+  if (msg.role === 'tool') {
+    const text = msg.content.map(p => p.content).join('\n')
+    return { role: 'user', parts: [{ text: `[résultat outil] ${text}` }] }
+  }
+
+  const text = msg.content
+    .map(p => {
+      const part = p as TextPart | ToolCallPart
+      if (part.type === 'text') return part.text
+      if (part.type === 'tool-call') return `[outil: ${part.toolName}]`
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n')
+
+  return {
+    role: msg.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text }],
+  }
 }
 
 async function post(url: string, body: unknown, headers?: Record<string, string>, timeout = 60000): Promise<Response> {
@@ -25,19 +83,32 @@ export async function internalCallLLM(
   llm: LLMProvider,
   systemPrompt: string,
   streamingConfig?: StreamingConfig,
+  history: Message[] = [],
+  contextOptions: ProcessContextOptions = {},
 ): Promise<string> {
   const base = llm.baseUrl.replace(/\/+$/, '')
 
-  const msgs = [
+  // Pipeline de compression : optimiser → nettoyer → resumer.
+  // L'historique compressé est inséré entre le system prompt et le nouveau
+  // message utilisateur, ce qui donne au LLM la mémoire de la conversation
+  // tout en gardant la fenêtre de contexte sous contrôle.
+  const compressedHistory = history.length > 0 ? processContext(history, contextOptions) : []
+
+  const msgs: Array<{ role: string; content: string }> = [
     { role: 'system', content: systemPrompt },
+    ...compressedHistory.map(toApiMessage),
     { role: 'user', content: userMessage },
   ]
 
   if (llm.provider === 'google') {
     const modelName = llm.model.replace(/^models\//, '')
     const url = `${base}/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(llm.apiKey)}`
+    const contents = compressedHistory
+      .map(toGoogleContent)
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+    contents.push({ role: 'user', parts: [{ text: userMessage }] })
     const res = await post(url, {
-      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+      contents,
       systemInstruction: { parts: [{ text: systemPrompt }] },
     })
     const json = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text: string }> } }> }

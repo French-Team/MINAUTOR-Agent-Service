@@ -66,10 +66,29 @@ export interface RateLimit {
   backoffMultiplier: number
 }
 
+/**
+ * Profil de compression du contexte pour le pipeline telecom-context.
+ * Source de vérité : `src/telecom/service/context/model-profiles.ts` (PROFILES).
+ *
+ * - tiny   : ≤1.5B params (LFM2.5-1.2B). Compression agressive.
+ * - small  : 1.5–4B (Llama3.2-3B, Phi-3-mini). Compression marquée.
+ * - medium : 4–15B (Llama3-8B, Mistral-7B). Défaut sain.
+ * - large  : 15B–70B / cloud puissant (GPT-4, Claude Sonnet, Gemini Flash).
+ * - huge   : long-context (Gemini 2.5 1M, Claude 200k+). Compression minimale.
+ */
+export type ContextProfile = 'tiny' | 'small' | 'medium' | 'large' | 'huge'
+
 export interface ToolConfig {
   parallelTools: boolean
   toolTimeoutMs: number
   maxParallel: number
+  /**
+   * Override du profil de compression de contexte (optionnel).
+   * Si absent, le profil est résolu automatiquement à partir du nom du modèle.
+   * Utile par exemple pour forcer 'tiny' sur un daemon qui doit toujours être léger
+   * indépendamment du modèle configuré.
+   */
+  contextProfile?: ContextProfile
 }
 
 export interface AgentState {

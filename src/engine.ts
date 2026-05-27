@@ -56,6 +56,7 @@ export function createEngine(config: EngineConfig) {
 
   const { runPrompt, callLLM } = createRunner({
     addMessage,
+    getHistory: () => sessionManager.getCurrentSession()?.messages ?? [],
     runTerminalCommand,
     checkRateLimit,
     processTools,

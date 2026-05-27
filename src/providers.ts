@@ -668,7 +668,7 @@ export function resolveProviderForModel(model: string, providerHint?: string): {
 
   // 1. Detect provider from model prefix
   let providerType: string | undefined
-  if (model.startsWith('kilo/')) providerType = 'kilo'
+  if (model.startsWith('kilo/') || model.startsWith('kilo-auto/')) providerType = 'kilo'
   else if (model.startsWith('gemini-') || model.startsWith('google/')) providerType = 'google'
   else if (model.startsWith('openrouter/')) providerType = 'openrouter'
   else if (model.startsWith('opencode-zen/')) providerType = 'opencode-zen'

@@ -1,11 +1,14 @@
-import type { ToolCall } from './types/agent-definition.js'
+import type { Message, ToolCall } from './types/agent-definition.js'
 import type { LLMProvider } from './engine-types.js'
 import { internalCallLLM, type StreamingConfig } from './engine-llm.js'
 import { parseToolCalls } from './engine-parser.js'
+import { resolveContextOptionsFor } from './telecom/service/context/index.js'
 import { RESET, YELLOW, RED } from './constants.js'
 
 interface RunnerDependencies {
   addMessage: (role: 'user' | 'assistant', content: string) => void
+  /** Snapshot non-mutant de l'historique de la session courante. */
+  getHistory?: () => Message[]
   runTerminalCommand: (command: string, processType?: 'SYNC' | 'BACKGROUND', timeoutSeconds?: number) => Promise<string>
   checkRateLimit: () => Promise<void>
   processTools: (toolCalls: ToolCall[]) => Promise<string[]>
@@ -13,6 +16,7 @@ interface RunnerDependencies {
     selfCorrection?: { enabled?: boolean; maxRetries?: number; retryOnFailure?: boolean }
     streaming?: StreamingConfig
     rateLimit?: { backoffMultiplier?: number }
+    toolConfig?: { contextProfile?: string }
   }
   /** Key rotation functions — injected from engine.ts */
   getNextKey?: (providerType: string) => { keyId: string; key: string; providerName: string } | undefined
@@ -57,6 +61,17 @@ export function createRunner(deps: RunnerDependencies) {
   ): Promise<string> {
     await deps.checkRateLimit()
 
+    // CONTRAT : l'appelant ne doit PAS pré-ajouter le message utilisateur
+    // à la session. callLLM s'en charge ici de façon centralisée.
+    // Snapshot de l'historique AVANT d'ajouter le nouveau message utilisateur,
+    // sinon il apparaîtrait deux fois (une fois dans l'historique, une fois
+    // comme nouveau prompt).
+    const history = deps.getHistory?.() ?? []
+
+    // Persister le message utilisateur dans la session pour les tours suivants
+    // (c'était le bug racine de la perte de mémoire d'Alice).
+    deps.addMessage('user', userMessage)
+
     let retries = 0
     const maxRetries = deps.agent.selfCorrection?.enabled ? (deps.agent.selfCorrection.maxRetries ?? 0) : 0
     const retryOnFailure = deps.agent.selfCorrection?.retryOnFailure || false
@@ -67,6 +82,15 @@ export function createRunner(deps: RunnerDependencies) {
     let keyRotationAttempts = 0
     const MAX_KEY_ROTATIONS = 3
 
+    // Tuning du pipeline de compression selon la taille du modèle actif :
+    // un 1.2B reçoit un historique très court ; un Gemini Flash garde large.
+    // Un agent peut forcer un profil spécifique via toolConfig.contextProfile
+    // (utile pour les daemons qui veulent toujours être légers).
+    const contextOptions = resolveContextOptionsFor({
+      model: llm.model,
+      override: deps.agent.toolConfig?.contextProfile,
+    })
+
     while (retries <= maxRetries) {
       try {
         let response = await internalCallLLM(
@@ -74,6 +98,8 @@ export function createRunner(deps: RunnerDependencies) {
           llm,
           systemPrompt,
           deps.agent.streaming,
+          history,
+          contextOptions,
         )
 
         // Tool Loop
@@ -100,6 +126,8 @@ export function createRunner(deps: RunnerDependencies) {
             llm,
             systemPrompt,
             deps.agent.streaming,
+            history,
+            contextOptions,
           )
           toolCalls = parseToolCalls(response)
         }
