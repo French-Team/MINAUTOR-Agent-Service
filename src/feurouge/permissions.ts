@@ -11,14 +11,15 @@
  * parsé par ce module (pas de dépendance externe).
  */
 
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs'
-import { join, resolve, normalize, sep } from 'path'
+import { readFileSync, existsSync, writeFileSync, mkdirSync, realpathSync } from 'fs'
+import { join, resolve, normalize } from 'path'
 import type {
   PermissionConfig,
   PermissionDefaults,
   AgentPermission,
   AgentRegistration,
   PermissionLevel,
+  TempGrant,
 } from './types.js'
 
 // ── Chemins ──────────────────────────────────────────────
@@ -33,6 +34,24 @@ const registrations = new Map<number, AgentRegistration>()
 
 /** Les permissions parsées (rechargées via reload()) */
 let permissionsCache: PermissionConfig | null = null
+
+/** Autorisations temporaires accordées par des admins (mémoire, non persisté) */
+const tempGrants = new Map<string, TempGrant[]>()
+
+// ── Intervalle de nettoyage des grants expirées ──────────
+
+// Vérifie et nettoie les grants expirées toutes les 30 secondes
+setInterval(() => {
+  const now = Date.now()
+  for (const [agentId, grants] of tempGrants.entries()) {
+    const active = grants.filter((g) => g.expiresAt > now)
+    if (active.length === 0) {
+      tempGrants.delete(agentId)
+    } else if (active.length < grants.length) {
+      tempGrants.set(agentId, active)
+    }
+  }
+}, 30000).unref()
 
 // ── YAML Parser minimal ──────────────────────────────────
 // Gère le sous-ensemble YAML nécessaire pour notre format :
@@ -327,7 +346,89 @@ agents:
 }
 
 /**
+ * Accorde une autorisation temporaire à un agent confiné.
+ * La permission expire après durationMinutes (défaut: 5).
+ * Retourne un message décrivant le grant accordé.
+ */
+export function grantTempAccess(
+  agentId: string,
+  type: 'path' | 'command',
+  value: string,
+  grantedBy: string,
+  durationMinutes: number = 5,
+  reason?: string,
+): { ok: boolean; message: string } {
+  const expiresAt = Date.now() + durationMinutes * 60 * 1000
+  const grant: TempGrant = { agentId, type, value, expiresAt, grantedBy, reason }
+
+  const existing = tempGrants.get(agentId) ?? []
+  existing.push(grant)
+  tempGrants.set(agentId, existing)
+
+  const typeLabel = type === 'path' ? 'chemin' : 'commande'
+  const durStr = durationMinutes >= 60
+    ? `${(durationMinutes / 60).toFixed(1)}h`
+    : `${durationMinutes}min`
+  const reasonStr = reason ? ` (${reason})` : ''
+
+  return {
+    ok: true,
+    message: `Accès temporaire accordé à "${agentId}" : ${typeLabel} "${value}" pour ${durStr}${reasonStr}`,
+  }
+}
+
+/**
+ * Liste les grants actifs pour un agent (ou tous si non spécifié).
+ */
+export function listTempGrants(agentId?: string): TempGrant[] {
+  const now = Date.now()
+  if (agentId) {
+    return (tempGrants.get(agentId) ?? []).filter((g) => g.expiresAt > now)
+  }
+  const all: TempGrant[] = []
+  for (const grants of tempGrants.values()) {
+    all.push(...grants.filter((g) => g.expiresAt > now))
+  }
+  return all
+}
+
+/**
+ * Révoque tous les grants pour un agent (ou un grant spécifique par type+valeur).
+ */
+export function revokeTempGrant(
+  agentId: string,
+  type?: 'path' | 'command',
+  value?: string,
+): boolean {
+  if (!tempGrants.has(agentId)) return false
+
+  const grants = tempGrants.get(agentId)!
+  if (!type && !value) {
+    tempGrants.delete(agentId)
+    return true
+  }
+
+  const remaining = grants.filter(
+    (g) => !(g.type === type && g.value === value),
+  )
+  if (remaining.length === grants.length) return false
+
+  if (remaining.length === 0) {
+    tempGrants.delete(agentId)
+  } else {
+    tempGrants.set(agentId, remaining)
+  }
+  return true
+}
+
+
+/**
  * Enregistre un agent dans la table runtime (PID → workspace).
+ */
+/**
+ * Enregistre un agent dans la table runtime (PID → workspace).
+ * Si le niveau est « confined » et qu'aucun workspace explicite n'est fourni,
+ * l'agent est automatiquement isolé dans le sandbox (workspaces/.sandbox/).
  */
 export function registerAgent(
   agentId: string,
@@ -335,7 +436,9 @@ export function registerAgent(
   level: PermissionLevel,
   workspace?: string,
 ): void {
-  registrations.set(pid, { agentId, pid, level, workspace })
+  // Les agents confined sans workspace explicite tombent dans le sandbox
+  const resolvedWorkspace = workspace ?? (level === 'confined' ? '.sandbox' : undefined)
+  registrations.set(pid, { agentId, pid, level, workspace: resolvedWorkspace })
 }
 
 /**
@@ -343,6 +446,64 @@ export function registerAgent(
  */
 export function unregisterAgent(pid: number): void {
   registrations.delete(pid)
+}
+
+/**
+ * Retourne le workspace d'un agent à partir de son ID.
+ * Cherche la registration la plus récente. Utile pour la vérification
+ * de confinement sandbox dans checkCommand().
+ */
+export function getRegistrationWorkspace(agentId: string): string | undefined {
+  // Parcourir toutes les registrations et prendre la plus récente pour cet agent
+  let latest: AgentRegistration | undefined
+  for (const reg of registrations.values()) {
+    if (reg.agentId === agentId) {
+      if (!latest || reg.pid > latest.pid) {
+        latest = reg
+      }
+    }
+  }
+  return latest?.workspace
+}
+
+/**
+ * Résout un chemin en suivant les symlinks.
+ * Si le chemin n'existe pas (realpathSync échoue), retombe sur normalize().
+ */
+function resolveRealPath(filePath: string): string {
+  try {
+    return realpathSync(filePath)
+  } catch {
+    // Le chemin peut ne pas exister (fichier à créer, etc.)
+    return normalize(filePath)
+  }
+}
+
+/**
+ * Détermine le répertoire de travail effectif d'une commande,
+ * en tenant compte des flags qui déplacent le contexte (git -C, npm --prefix, etc.).
+ * Retourne le CWD résolu ou le CWD original si aucun flag de déplacement.
+ */
+function getDisplacedCwd(command: string, cwd: string): string {
+  // git -C <path> — déplace le répertoire de travail de git
+  const gitCMatch = command.match(/git\s+-C\s+(\S+)/)
+  if (gitCMatch) {
+    const dir = gitCMatch[1]
+    if (dir && !dir.startsWith('-') && !dir.startsWith('http') && !dir.startsWith('--')) {
+      return resolve(cwd, dir)
+    }
+  }
+
+  // npm --prefix <path> — npm opère sur le répertoire prefix
+  const npmPrefixMatch = command.match(/--prefix\s+(\S+)/)
+  if (npmPrefixMatch) {
+    const dir = npmPrefixMatch[1]
+    if (dir && !dir.startsWith('-') && !dir.startsWith('http') && !dir.startsWith('--')) {
+      return resolve(cwd, dir)
+    }
+  }
+
+  return cwd
 }
 
 /**
@@ -364,6 +525,11 @@ function extractTargetPath(command: string, cwd: string): string | null {
     /[>]>?\s+(\S+)/,
     // -o ou --out suivi d'un chemin
     /(?:-o|--out|--output)\s+(\S+)/,
+    // git flags qui déplacent le contexte : --git-dir, --work-tree
+    /git\s+--git-dir[=\s]+(\S+)/,
+    /git\s+--work-tree[=\s]+(\S+)/,
+    // git clone <url> <target-dir>
+    /git\s+clone\s+\S+\s+(\S+)/,
   ]
 
   for (const pattern of pathPatterns) {
@@ -375,7 +541,7 @@ function extractTargetPath(command: string, cwd: string): string | null {
       if (!rawPath.includes('/') && !rawPath.includes('\\') && !rawPath.includes('..')) continue
       try {
         const resolved = resolve(cwd, rawPath)
-        return normalize(resolved)
+        return resolveRealPath(resolved)
       } catch {
         continue
       }
@@ -440,7 +606,69 @@ export function checkCommand(
   const allowedPaths = agentPerm.allowedPaths
   const forbiddenPaths = agentPerm.forbiddenPaths ?? defaults?.forbiddenPaths ?? []
 
-  // 5. Vérifier les commandes interdites
+  // 5. Extraire le chemin cible pour les vérifications suivantes
+  const targetPath = extractTargetPath(command, cwd)
+
+  // 5b. Vérifier le CWD effectif : les flags comme git -C, npm --prefix déplacent
+  //     le répertoire de travail effectif de la commande. Un agent confiné ne doit
+  //     pas pouvoir utiliser ces flags pour opérer hors de son workspace.
+  const effectiveCwd = getDisplacedCwd(command, cwd)
+  const agentWorkspace = getRegistrationWorkspace(agentId)
+  if (agentWorkspace && effectiveCwd !== cwd) {
+    // La commande utilise un flag qui déplace le contexte (git -C, --prefix, etc.)
+    // Vérifier que le CWD effectif est bien dans le workspace
+    const resolvedEffective = resolveRealPath(effectiveCwd).toLowerCase()
+    const workspacePath = resolveRealPath(resolve(cwd, 'workspaces', agentWorkspace)).toLowerCase()
+    if (!resolvedEffective.startsWith(workspacePath)) {
+      return {
+        allowed: false,
+        reason: `CWD effectif "${effectiveCwd}" hors du workspace "${agentWorkspace}". L'agent ${agentId} utilise un flag de déplacement de contexte (git -C, --prefix) pour contourner son isolement.`,
+      }
+    }
+  }
+
+  // 5c. Vérification du CWD lui-même pour les agents confinés :
+  //     le CWD passé doit être dans le workspace. Empêche les escapes où le
+  //     caller aurait positionné un CWD hors du workspace avant l'appel.
+  //     Pas de condition de garde — le check est inoffensif pour les CWD valides
+  //     et bloque uniquement les CWD réellement hors limites.
+  if (agentWorkspace) {
+    const resolvedCwd = resolveRealPath(effectiveCwd).toLowerCase()
+    const workspacePath = resolveRealPath(resolve(cwd, 'workspaces', agentWorkspace)).toLowerCase()
+    // Le CWD doit être soit dans le workspace, soit dans telecom/ (logs autorisés)
+    if (!resolvedCwd.startsWith(workspacePath) &&
+        !resolvedCwd.startsWith(resolve(cwd, 'telecom').toLowerCase())) {
+      return {
+        allowed: false,
+        reason: `CWD "${effectiveCwd}" hors du workspace "${agentWorkspace}" pour l'agent ${agentId}. Agent confiné dans son espace de travail.`,
+      }
+    }
+  }
+
+  // 6. Vérifier les grants temporaires AVANT les vérifications de blocage.
+  //    Un admin qui accorde un accès temporaire doit pouvoir override les règles
+  //    de forbidden paths, allowed paths, workspace confinement, etc.
+  const activeGrants = (tempGrants.get(agentId) ?? []).filter((g) => g.expiresAt > Date.now())
+
+  // 6a. Path grant : override forbidden paths, allowed paths, workspace confinement
+  if (targetPath) {
+    const pathGrant = activeGrants.find(
+      (g) => g.type === 'path' && targetPath.toLowerCase().includes(g.value.toLowerCase()),
+    )
+    if (pathGrant) {
+      return { allowed: true, reason: `Accès temporaire accordé par ${pathGrant.grantedBy} (chemin: "${pathGrant.value}")${pathGrant.reason ? ` — ${pathGrant.reason}` : ''}` }
+    }
+  }
+
+  // 6b. Command grant : override forbidden commands, allowed commands
+  const cmdGrant = activeGrants.find(
+    (g) => g.type === 'command' && command.toLowerCase().startsWith(g.value.toLowerCase()),
+  )
+  if (cmdGrant) {
+    return { allowed: true, reason: `Commande temporairement autorisée par ${cmdGrant.grantedBy} ("${cmdGrant.value}")${cmdGrant.reason ? ` — ${cmdGrant.reason}` : ''}` }
+  }
+
+  // 7. Vérifier les commandes interdites
   const cmdLower = command.toLowerCase()
   for (const fCmd of forbiddenCommands) {
     if (fCmd.endsWith('*')) {
@@ -459,10 +687,9 @@ export function checkCommand(
     }
   }
 
-  // 6. Vérifier les chemins interdits
-  const targetPath = extractTargetPath(command, cwd)
+  // 8. Vérifier les chemins interdits
   if (targetPath) {
-    const normalizedTarget = normalize(targetPath).toLowerCase()
+    const normalizedTarget = resolveRealPath(targetPath).toLowerCase()
     for (const fPath of forbiddenPaths) {
       if (fPath === '*') {
         return {
@@ -480,10 +707,10 @@ export function checkCommand(
     }
   }
 
-  // 7. Vérifier les chemins autorisés
+  // 9. Vérifier les chemins autorisés
   if (allowedPaths && allowedPaths.length > 0 && !allowedPaths.includes('.')) {
     if (targetPath) {
-      const normalizedTarget = normalize(targetPath).toLowerCase()
+      const normalizedTarget = resolveRealPath(targetPath).toLowerCase()
       const isAllowed = allowedPaths.some((aPath) => {
         if (aPath === '*') return true
         const resolved = resolve(cwd, aPath).toLowerCase()
@@ -498,7 +725,25 @@ export function checkCommand(
     }
   }
 
-  // 8. Vérifier les commandes autorisées
+  // 10. Vérifier le confinement sandbox : si l'agent a un workspace enregistré
+  //     et que la commande cible un chemin hors de ce workspace, on bloque.
+  //     (les agents 'admin' sont déjà exclus plus haut — ils retournent avant)
+  //     Note: agentWorkspace est déjà déclaré dans la section 5b.
+  if (targetPath && agentWorkspace) {
+    const workspacePath = resolveRealPath(resolve(cwd, 'workspaces', agentWorkspace)).toLowerCase()
+    const normalizedTarget = resolveRealPath(targetPath).toLowerCase()
+    // Permettre les chemins dans le workspace, telecom/ (logs), et le CWD racine
+    if (!normalizedTarget.startsWith(workspacePath) &&
+        !normalizedTarget.includes(join('telecom', 'agents', agentId).toLowerCase().replace(/\\/g, '/')) &&
+        !normalizedTarget.startsWith(resolve(cwd, 'telecom').toLowerCase())) {
+      return {
+        allowed: false,
+        reason: `Chemin "${targetPath}" hors du workspace confiné "${agentWorkspace}" pour l'agent ${agentId}. Agent isolé dans le sandbox.`,
+      }
+    }
+  }
+
+  // 11. Vérifier les commandes autorisées
   if (allowedCommands.length > 0 && !allowedCommands.includes('*')) {
     const cmdName = command.split(/\s+/)[0]
     const isAllowed = allowedCommands.some((aCmd) => {
@@ -545,7 +790,6 @@ export function editPermission(
     let inTargetAgent = false
     let edited = false
     let agentFound = false
-    let bracketDepth = 0
 
     for (const line of lines) {
       const stripped = line.replace(/\r$/, '')

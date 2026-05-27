@@ -126,7 +126,77 @@ async function main() {
     console.log(`  ✓ R7 : via injection AGENT_RULES.md (automatique)`)
   }
 
-  // 7. Résultat
+  // 7. Permissions (FeuRouge)
+  console.log()
+  const permYamlPath = join(cwd, 'data', 'permissions', 'permissions.yaml')
+  const permYamlExists = existsSync(permYamlPath)
+  console.log(`  ${permYamlExists ? '\u2713' : '\u2717'} Permissions : permissions.yaml`)
+  if (!permYamlExists) { exitCode = 1; console.log('     \u2192 data/permissions/permissions.yaml introuvable') }
+
+  if (permYamlExists) {
+    const permRaw = readFileSync(permYamlPath, 'utf-8')
+    // \u00c9chapper les caract\u00e8res sp\u00e9ciaux regex dans l'ID (kebab-case)
+    const escapedId = agentId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    // Ancrage fin de ligne (avec flag m) pour \u00e9viter les faux positifs sur des pr\u00e9fixes d'ID
+    const hasAgentEntry = new RegExp(`id:\\s*['"]?${escapedId}['"]?\\s*$`, 'm').test(permRaw)
+    const hasWildcard =
+      permRaw.includes("id: '*'")
+      || permRaw.includes('id: "*"')
+      || /id:\s*['"]?\*['"]?\s*$/.test(permRaw)
+
+    if (hasAgentEntry) {
+      console.log(`  \u2713 Permissions : entr\u00e9e explicite pour "${agentId}"`)
+    } else if (hasWildcard) {
+      console.log(`  \u2713 Permissions : couvert par wildcard * (niveau confined par d\u00e9faut)`)
+    } else {
+      console.log(`  \u2717 Permissions : aucune entr\u00e9e pour "${agentId}" ni wildcard *`)
+      exitCode = 1
+      console.log('     \u2192 Ajoute une entr\u00e9e dans data/permissions/permissions.yaml ou un wildcard *')
+    }
+
+    // Extraire le niveau de permission depuis le YAML — ancrage fin de ligne comme hasAgentEntry
+    const entryRegex = new RegExp(
+      `id:\\s*['"]?${escapedId}['"]?\\s*$[\\s\\S]*?level:\\s*(\\S+)`,
+      'm',
+    )
+    const levelMatch = permRaw.match(entryRegex)
+    const yamlLevel = levelMatch
+      ? levelMatch[1].replace(/['"]/g, '')
+      : hasWildcard
+        ? 'confined'
+        : ''
+
+    if (yamlLevel) {
+      const validLevels = ['admin', 'restricted', 'confined', 'readonly']
+      const levelOk = validLevels.includes(yamlLevel)
+      console.log(`  ${levelOk ? '\u2713' : '\u2717'} Permissions : niveau "${yamlLevel}"`)
+      if (!levelOk) {
+        exitCode = 1
+        console.log(`     \u2192 Niveau invalide. Valeurs accept\u00e9es : ${validLevels.join(', ')}`)
+      }
+
+      // Pour confined : v\u00e9rifier workspace — ancrage fin de ligne comme hasAgentEntry
+      if (yamlLevel === 'confined') {
+        const wsRegex = new RegExp(
+          `id:\\s*['"]?${escapedId}['"]?\\s*$[\\s\\S]*?workspace:\\s*(\\S+)`,
+          'm',
+        )
+        const wsMatch = permRaw.match(wsRegex)
+        console.log(`  ${wsMatch ? '\u2713' : '\u26a0'} Permissions : workspace${!wsMatch ? ' (sandbox par d\u00e9faut)' : ''}`)
+        // Pas bloquant — le sandbox sert de fallback automatique
+      }
+    }
+
+    // V\u00e9rifier la pr\u00e9sence du champ permissions dans la d\u00e9finition .ts
+    if (agentOk) {
+      const agentContent = readFileSync(agentPath, 'utf-8')
+      const hasPermissionsField = /permissions:\s*\{/.test(agentContent)
+      console.log(`  ${hasPermissionsField ? '\u2713' : '\u26a0'} Permissions : champ d\u00e9fini dans le .ts${!hasPermissionsField ? ' (utilise permissions.yaml comme source de v\u00e9rit\u00e9)' : ''}`)
+      // Pas bloquant — le YAML est la source de v\u00e9rit\u00e9, le champ .ts est redondant
+    }
+  }
+
+  // 8. R\u00e9sultat
   if (exitCode === 0) {
     console.log(`\n${'='.repeat(50)}\n${' '.repeat(12)}✅ Agent "${agentId}" : VALIDE & CERTIFIÉ\n${'='.repeat(50)}\n`)
   } else {

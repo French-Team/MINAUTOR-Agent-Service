@@ -1,0 +1,10 @@
+# .workspace
+name: .sandbox
+created_at: 2026-05-27T05:32:48.270Z
+created_by: system
+status: active
+type: sandbox
+description: Sandbox d'isolement pour les agents sans projet
+
+# Ce dossier est isolé : les agents « confined » sans projet
+# y sont confinés. Ils ne peuvent pas accéder aux autres projets.

@@ -49,10 +49,10 @@ import { getFeuRougeClient, resetFeuRougeClient } from './feurouge/feurouge-clie
 import { handlePermissionsCommand } from './feurouge/permissions-cli.js'
 import { getPermissionsConfig, listRegistrations } from './feurouge/permissions.js'
 import { dispatchProjectCommand, handleProjectMenu } from './project/workspace-cli.js'
+import { ensureSandbox } from './project/sandbox.js'
 
 let currentEngine: Engine | null = null
 let telecomDaemon: ChildProcess | null = null
-let feurougeDaemon: ChildProcess | null = null
 
 function startTelecomDaemon(): void {
   const daemonPath = join(import.meta.dirname, 'telecom', 'service', 'telecom-daemon.js')
@@ -274,6 +274,9 @@ export async function main() {
 
   // ── Logo / bannière (FIGlet art seulement) ──
   showBanner(currentEngine!)
+
+  // ── Isolation sandbox : créer workspaces/.sandbox/ pour les agents sans projet
+  ensureSandbox()
 
   // ── Messages de démarrage ──
   logSkillLoaded()

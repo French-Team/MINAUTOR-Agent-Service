@@ -12,7 +12,7 @@
  *   node dist/feurouge/feurouge-daemon.js   (via fork depuis cli-main.ts)
  */
 
-import { existsSync, writeFileSync, unlinkSync, readFileSync } from 'fs'
+import { existsSync, writeFileSync, unlinkSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import {
   loadPermissions,
@@ -21,8 +21,8 @@ import {
   unregisterAgent,
   checkCommand,
   editPermission,
-  listRegistrations,
   getPermissionsConfig,
+  grantTempAccess,
 } from './permissions.js'
 import type {
   FeuRougeRequest,
@@ -49,8 +49,6 @@ function init(): void {
   // Écrire le PID
   const pidDir = join(process.cwd(), 'telecom')
   if (!existsSync(pidDir)) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { mkdirSync } = require('fs')
     mkdirSync(pidDir, { recursive: true })
   }
   writeFileSync(PID_FILE, String(process.pid), 'utf-8')
@@ -107,6 +105,24 @@ function handleMessage(msg: FeuRougeRequest): FeuRougeResponse | null {
         return { id: msg.id, ok: true }
       }
       return { id: msg.id, ok: false, error: `Impossible de modifier ${msg.agentId}.${msg.field}` }
+
+    case 'grant_temp_access':
+      if (!msg.agentId || !msg.grantType || !msg.value || !msg.grantedBy) {
+        return { id: msg.id, ok: false, error: 'Paramètres manquants: agentId, grantType, value, grantedBy' }
+      }
+      const grantResult = grantTempAccess(
+        msg.agentId,
+        msg.grantType,
+        msg.value,
+        msg.grantedBy,
+        msg.durationMinutes ?? 5,
+        msg.reason,
+      )
+      if (grantResult.ok) {
+        console.log(`[FeuRouge] Grant temporaire: ${grantResult.message}`)
+        return { id: msg.id, ok: true }
+      }
+      return { id: msg.id, ok: false, error: 'Échec de l\'octroi de permission temporaire' }
 
     case 'reload':
       const reloaded = loadPermissions()

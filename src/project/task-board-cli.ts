@@ -29,7 +29,7 @@ import {
   listTasks,
   countTasks,
 } from './task-board.js'
-import type { TaskBoard, TaskEntry } from './types.js'
+import type { TaskBoard } from './types.js'
 import { getProjectInfo } from './project-manager.js'
 
 const WORKSPACES_DIR = join(process.cwd(), 'workspaces')

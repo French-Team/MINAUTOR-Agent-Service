@@ -456,7 +456,11 @@ export async function handleCreate(rl: ReturnType<typeof createInterface>): Prom
     
     // A. Génération de la Skill
     try {
-      const skill = await generateSkill(assignedId, assignedName, description, llmProvider, feedback)
+      // Les nouveaux agents créés par l'utilisateur sont 'confined' par défaut
+      // via la règle wildcard '*' dans permissions.yaml. Ils tombent dans le sandbox
+      // s'ils n'ont pas de workspace explicite.
+      const wsCtx = { level: 'confined' as const, workspace: '.sandbox', isSandbox: true }
+      const skill = await generateSkill(assignedId, assignedName, description, llmProvider, feedback, wsCtx)
       skillContent = skill.content
       process.stdout.write(`\r${GREEN}✓ Skill "${skillId}" générée${RESET}\n`)
     } catch (err) {

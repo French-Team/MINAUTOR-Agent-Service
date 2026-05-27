@@ -687,10 +687,12 @@ function spawnAgent(agentId: string, msg: IntercomMessage): void {
     if (feurouge.isAlive()) {
       const perm = getAgentPermission(agentId)
       const level = perm?.level ?? 'confined'
-      feurouge.registerAgent(agentId, child.pid, level, perm?.workspace)
+      const workspace = perm?.workspace ?? (level === 'confined' ? '.sandbox' : undefined)
+      feurouge.registerAgent(agentId, child.pid, level, workspace)
         .then((ok) => {
           if (ok) {
-            console.log(`[Daemon] Agent "${agentId}" enregistré FeuRouge (PID ${child.pid}) [${level}]${perm?.workspace ? ` → ${perm.workspace}` : ''}`)
+            const wsLabel = workspace ? ` → ${workspace}` : ''
+            console.log(`[Daemon] Agent "${agentId}" enregistré FeuRouge (PID ${child.pid}) [${level}]${wsLabel}`)
           }
         })
     }

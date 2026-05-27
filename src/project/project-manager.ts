@@ -12,9 +12,10 @@
  */
 
 import { readFileSync, existsSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync } from 'fs'
-import { join, basename } from 'path'
+import { join } from 'path'
 import type { ProjectInfo, ProjectStatus } from './types.js'
-import { readTaskBoard, writeTaskBoard } from './task-board.js'
+import { writeTaskBoard } from './task-board.js'
+import { ensureSandbox } from './sandbox.js'
 
 const WORKSPACES_DIR = join(process.cwd(), 'workspaces')
 
@@ -48,6 +49,8 @@ export function ensureWorkspacesDir(): void {
   if (!existsSync(getReadmePath())) {
     createWorkspaceReadme()
   }
+  // Créer le sandbox pour les agents sans projet
+  ensureSandbox()
 }
 
 function createWorkspaceReadme(): void {

@@ -15,7 +15,7 @@
  * Usage : node dist/e2e-flow-test.js
  */
 
-import { readFileSync, unlinkSync, readdirSync, existsSync, rmSync } from 'fs'
+import { readFileSync, unlinkSync, readdirSync, existsSync } from 'fs'
 import { join } from 'path'
 import { safeExit } from './constants.js'
 import {

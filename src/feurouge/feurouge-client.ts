@@ -10,7 +10,7 @@
 import { fork, ChildProcess } from 'child_process'
 import { join } from 'path'
 import { existsSync } from 'fs'
-import type { FeuRougeRequest, FeuRougeResponse } from './types.js'
+import type { FeuRougeRequest, FeuRougeResponse, PermissionLevel } from './types.js'
 
 let clientInstance: FeuRougeClient | null = null
 
@@ -140,7 +140,7 @@ export class FeuRougeClient {
   async registerAgent(
     agentId: string,
     pid: number,
-    level: string,
+    level: PermissionLevel,
     workspace?: string,
   ): Promise<boolean> {
     if (!this.isAlive()) return false
@@ -150,7 +150,7 @@ export class FeuRougeClient {
       id: generateId(),
       agentId,
       pid,
-      level: level as any,
+      level,
       workspace,
     })
 
@@ -191,6 +191,51 @@ export class FeuRougeClient {
     })
 
     return response.ok
+  }
+
+  /**
+   * Accorde un accès temporaire à un agent confiné.
+   */
+  async grantTempAccess(
+    agentId: string,
+    grantType: 'path' | 'command',
+    value: string,
+    grantedBy: string,
+    durationMinutes?: number,
+    reason?: string,
+  ): Promise<{ ok: boolean; message: string }> {
+    if (!this.isAlive()) {
+      return { ok: false, message: 'Daemon FeuRouge non disponible' }
+    }
+
+    const response = await this.send({
+      type: 'grant_temp_access',
+      id: generateId(),
+      agentId,
+      grantType,
+      value,
+      grantedBy,
+      durationMinutes,
+      reason,
+    })
+
+    if (response.ok) {
+      const typeLabel = grantType === 'path' ? 'chemin' : 'commande'
+      const durStr = durationMinutes
+        ? durationMinutes >= 60
+          ? `${(durationMinutes / 60).toFixed(1)}h`
+          : `${durationMinutes}min`
+        : '5min'
+      return {
+        ok: true,
+        message: `Accès temporaire accordé à "${agentId}" : ${typeLabel} "${value}" pour ${durStr}${reason ? ` (${reason})` : ''}`,
+      }
+    }
+
+    return {
+      ok: false,
+      message: response.error ?? 'Échec de l\'octroi de permission temporaire',
+    }
   }
 
   /**

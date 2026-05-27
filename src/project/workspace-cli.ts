@@ -33,8 +33,6 @@ import {
   addTask,
   updateTaskStatus,
   listTasks,
-  getNextTask,
-  canAssignTask,
   countTasks,
 } from './task-board.js'
 import {

@@ -16,6 +16,9 @@ import {
   listRegistrations,
   loadPermissions,
   editPermission as localEditPermission,
+  grantTempAccess as localGrantTempAccess,
+  listTempGrants,
+  revokeTempGrant,
 } from './permissions.js'
 import { CYAN, GREEN, YELLOW, RED, GRAY, BOLD, RESET } from '../constants.js'
 
@@ -29,6 +32,12 @@ export function handlePermissionsCommand(args: string[]): Promise<boolean> {
       return handleEdit(args.slice(1))
     case 'reload':
       return handleReload()
+    case 'grant':
+      return handleGrant(args.slice(1))
+    case 'revoke':
+      return handleRevoke(args.slice(1))
+    case 'grants':
+      return handleListGrants(args.slice(1))
     case 'agents':
       return handleAgents()
     case undefined:
@@ -180,6 +189,95 @@ async function handleAgents(): Promise<boolean> {
   return true
 }
 
+async function handleGrant(args: string[]): Promise<boolean> {
+  const [agentId, type, value, minutesStr, ...reasonParts] = args
+  const reason = reasonParts.join(' ')
+
+  if (!agentId || !type || !value) {
+    console.log(`${YELLOW}Usage: !permissions grant <agent-id> path|command <value> [minutes] [raison]${RESET}`)
+    console.log(`  ${GRAY}Ex: !permissions grant mon-agent path workspaces/mon-projet/tmp/ 10 Export temporaire${RESET}`)
+    console.log(`  ${GRAY}Ex: !permissions grant mon-agent command node 5 Bug fix${RESET}`)
+    return true
+  }
+
+  if (type !== 'path' && type !== 'command') {
+    console.log(`${YELLOW}Le type doit être "path" ou "command".${RESET}`)
+    return true
+  }
+
+  const durationMinutes = parseInt(minutesStr, 10)
+  const dur = isNaN(durationMinutes) || durationMinutes <= 0 ? 5 : durationMinutes
+
+  // Essayer via le daemon d'abord
+  const client = getFeuRougeClient()
+  if (client.isAlive()) {
+    const result = await client.grantTempAccess(agentId, type, value, 'CLI', dur, reason || undefined)
+    if (result.ok) {
+      console.log(`${GREEN}✓ ${result.message}${RESET}`)
+    } else {
+      console.log(`${RED}✗ ${result.message}${RESET}`)
+    }
+    return true
+  }
+
+  // Fallback local
+  const result = localGrantTempAccess(agentId, type, value, 'CLI', dur, reason || undefined)
+  if (result.ok) {
+    console.log(`${GREEN}✓ ${result.message}${RESET}`)
+  } else {
+    console.log(`${RED}✗ ${result.message}${RESET}`)
+  }
+  return true
+}
+
+async function handleRevoke(args: string[]): Promise<boolean> {
+  const [agentId, type, ...valueParts] = args
+  const value = valueParts.join(' ')
+
+  if (!agentId) {
+    console.log(`${YELLOW}Usage: !permissions revoke <agent-id> [path|command] [value]${RESET}`)
+    return true
+  }
+
+  const ok = revokeTempGrant(
+    agentId,
+    (type === 'path' || type === 'command') ? type : undefined,
+    (type === 'path' || type === 'command') ? value : undefined,
+  )
+
+  if (ok) {
+    const detail = type && value ? ` (${type}: "${value}")` : ''
+    console.log(`${GREEN}✓ Accès temporaire révoqué pour "${agentId}"${detail}${RESET}`)
+  } else {
+    console.log(`${YELLOW}Aucun grant trouvé pour "${agentId}"${type && value ? ` (${type}: "${value}")` : ''}${RESET}`)
+  }
+  return true
+}
+
+async function handleListGrants(args: string[]): Promise<boolean> {
+  const [agentId] = args
+  const grants = listTempGrants(agentId || undefined)
+
+  if (grants.length === 0) {
+    console.log(`${YELLOW}Aucun accès temporaire actif.${RESET}`)
+    return true
+  }
+
+  console.log(`\n${BOLD}${CYAN}┌─ Accès temporaires actifs (${grants.length}) ─────────────┐${RESET}`)
+  for (const g of grants) {
+    const remaining = Math.max(0, Math.round((g.expiresAt - Date.now()) / 1000 / 60))
+    const typeLabel = g.type === 'path' ? '📁 chemin' : '⚡ commande'
+    const timeStr = remaining >= 60
+      ? `${(remaining / 60).toFixed(1)}h`
+      : `${remaining}min`
+    console.log(`  ${CYAN}${g.agentId}${RESET}`)
+    console.log(`    ${typeLabel}: "${g.value}"  ${GRAY}${timeStr} restant${RESET}`)
+    console.log(`    Accordé par: ${g.grantedBy}${g.reason ? ` (${g.reason})` : ''}`)
+  }
+  console.log(`${BOLD}${CYAN}└──────────────────────────────────────────────────┘${RESET}\n`)
+  return true
+}
+
 async function handleHelp(): Promise<boolean> {
   console.log(`\n${BOLD}${CYAN}┌─ Permissions — Commandes ──────────────────┐${RESET}`)
   console.log(`${BOLD}${CYAN}│  Gérer les permissions des agents          │${RESET}`)
@@ -190,8 +288,17 @@ async function handleHelp(): Promise<boolean> {
   console.log(`                        Modifier une permission`)
   console.log(`  ${BOLD}${CYAN}!permissions reload${RESET}    Recharger depuis le YAML`)
   console.log(`  ${BOLD}${CYAN}!permissions agents${RESET}    Lister les agents enregistrés`)
+  console.log(`  ${BOLD}${CYAN}!permissions grant <id> path|command <value> [minutes] [reason]`)
+  console.log(`                        Accorder un accès temporaire`)
+  console.log(`  ${BOLD}${CYAN}!permissions revoke <id> [path|command] [value]`)
+  console.log(`                        Révoquer un accès temporaire`)
+  console.log(`  ${BOLD}${CYAN}!permissions grants [agent-id]${RESET}`)
+  console.log(`                        Lister les accès temporaires`)
   console.log(`  ${BOLD}${CYAN}!permissions help${RESET}      Cette aide\n`)
   console.log(`  ${GRAY}Exemples :${RESET}`)
+  console.log(`    ${GRAY}!permissions grant mon-agent path workspaces/mon-projet/tmp/ 10 Export temporaire${RESET}`)
+  console.log(`    ${GRAY}!permissions grant mon-agent command node 5 Bug fix${RESET}`)
+  console.log(`    ${GRAY}!permissions revoke mon-agent command node${RESET}`)
   console.log(`    ${GRAY}!permissions edit alice level admin${RESET}`)
   console.log(`    ${GRAY}!permissions edit mon-agent allowed_commands '["cat","ls"]'${RESET}`)
   console.log(`    ${GRAY}!permissions edit mon-agent forbidden_paths '["src/","data/"]'${RESET}\n`)

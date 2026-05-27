@@ -4,13 +4,59 @@ import { createEngine, type LLMProvider } from './engine.js'
 
 const SKILLS_DIR = join(process.cwd(), 'skills')
 
-const GENERATION_PROMPT = (name: string, description: string) => `Tu es un expert en création de skills pour agents AI.
+/**
+ * Contexte workspace / permissions à injecter dans la skill générée.
+ * Permet à l'agent généré de connaître son isolat et ses droits.
+ */
+export interface WorkspaceContext {
+  /** Niveau de permission (défaut: confined pour les nouveaux agents) */
+  level: 'admin' | 'restricted' | 'confined' | 'readonly'
+  /** Workspace assigné (nom du projet ou '.sandbox' si sans projet) */
+  workspace?: string
+  /** Si vrai, l'agent est isolé dans le sandbox (aucun projet explicite) */
+  isSandbox?: boolean
+}
+
+const GENERATION_PROMPT = (
+  name: string,
+  description: string,
+  wsCtx?: WorkspaceContext,
+) => {
+  // Construire la section workspace avec des chaînes double-quotes pour les phrases
+  // contenant des apostrophes (évite les problèmes d'échappement)
+  const EMPTY = ''
+  const noWorkspace = "Aucun workspace explicite — l'agent sera isolé dans le sandbox par défaut."
+  const sandboxActive = "Sandbox actif : l'agent est confiné à workspaces/.sandbox/ et ne peut pas accéder aux autres projets."
+  const adminAccess = "L'agent a un accès complet à tous les fichiers et dossiers."
+  const confinedMsg = "L'agent est confiné à son workspace exclusivement. Chemins interdits : .agents/, data/, src/, providers.json, package.json. Commandes interdites : rm -rf, del /s."
+  const readonlyMsg = "L'agent est en lecture seule. Seules les commandes cat, ls, dir, findstr, echo, type sont autorisées."
+  const descLine = "La skill doit inclure une section ## Workspace qui décrit ces contraintes à l'agent, l'informe de son niveau de permission et lui rappelle les limites de son environnement."
+
+  const wsSection = wsCtx
+    ? `
+## Contexte workspace
+
+L'agent évolue dans un environnement isolé : niveau de permission "${wsCtx.level}".
+${wsCtx.workspace ? `Workspace assigné : "${wsCtx.workspace}".` : noWorkspace}
+${wsCtx.isSandbox ? sandboxActive : EMPTY}
+${wsCtx.level === 'admin' ? adminAccess : EMPTY}
+${wsCtx.level === 'confined' ? confinedMsg : EMPTY}
+${wsCtx.level === 'readonly' ? readonlyMsg : EMPTY}
+
+${descLine}
+`
+    : EMPTY
+
+  const wsSectionTemplate = wsCtx
+    ? `\n## Workspace\n\nDécris ici les contraintes de workspace : niveau de permission, dossier de travail, chemins interdits, commandes bloquées.\n`
+    : EMPTY
+
+  return `Tu es un expert en création de skills pour agents AI.
 
 L'utilisateur veut créer un agent avec :
 - Nom : ${name}
 - Description : ${description}
-
-Génère une skill complète au format SKILL.md pour cet agent.
+${wsSection}Génère une skill complète au format SKILL.md pour cet agent.
 
 IMPORTANT : Tu dois remplir TOUTES les sections avec du contenu concret et détaillé. NE PAS utiliser de placeholders comme {texte}. Chaque section doit contenir une description complète et utile.
 
@@ -37,8 +83,9 @@ Liste les compétences de l'agent (utilise des "-" pour chaque compétence). Soi
 ## Règles
 
 Liste les règles que l'agent doit suivre. Utilise des "-" pour chaque règle.
+${wsSectionTemplate}Réponds UNIQUEMENT avec le contenu complet du SKILL.md, sans commentaires supplémentaires. Ne laisse aucun placeholder vide.`
+}
 
-Réponds UNIQUEMENT avec le contenu complet du SKILL.md, sans commentaires supplémentaires. Ne laisse aucun placeholder vide.`
 
 export interface GenerateSkillResult {
   skillId: string
@@ -53,6 +100,7 @@ export async function generateSkill(
   description: string,
   llm: LLMProvider,
   feedback?: string,
+  workspaceContext?: WorkspaceContext,
 ): Promise<GenerateSkillResult> {
   const skillId = `skill-${agentId}`
   const skillDir = join(SKILLS_DIR, skillId)
@@ -72,7 +120,7 @@ export async function generateSkill(
   })
   engine.createSession()
 
-  let prompt = GENERATION_PROMPT(agentName, description)
+  let prompt = GENERATION_PROMPT(agentName, description, workspaceContext)
   if (feedback) {
     prompt += `\n\n### FEEDBACK DE LA TENTATIVE PRÉCÉDENTE (À CORRIGER ABSOLUMENT) :\n${feedback}\n\nMerci de régénérer le SKILL.md en corrigeant TOUS les points mentionnés dans le feedback ci-dessus.`
   }

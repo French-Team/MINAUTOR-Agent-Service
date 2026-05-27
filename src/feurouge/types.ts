@@ -40,6 +40,21 @@ export interface AgentRegistration {
   level: PermissionLevel
 }
 
+/** Autorisation temporaire accordée par un admin à un agent confiné */
+export interface TempGrant {
+  agentId: string
+  /** 'path' — accès à un chemin, 'command' — droit d'exécuter une commande */
+  type: 'path' | 'command'
+  /** Le chemin ou la commande autorisé(e) */
+  value: string
+  /** Timestamp d'expiration (Date.now() + durée) */
+  expiresAt: number
+  /** Agent qui a accordé la permission (ex: alice, orchestrateur) */
+  grantedBy: string
+  /** Raison optionnelle */
+  reason?: string
+}
+
 // ── IPC Messages (entre le CLI et le daemon feurouge) ──
 
 export interface FeuRougeCheckRequest {
@@ -83,6 +98,22 @@ export interface FeuRougePingRequest {
   id?: string
 }
 
+export interface FeuRougeGrantRequest {
+  type: 'grant_temp_access'
+  id: string
+  agentId: string
+  /** 'path' ou 'command' */
+  grantType: 'path' | 'command'
+  /** Le chemin ou la commande à autoriser */
+  value: string
+  /** Durée en minutes (défaut: 5) */
+  durationMinutes?: number
+  /** Agent qui accorde (admin requis) */
+  grantedBy: string
+  /** Raison optionnelle */
+  reason?: string
+}
+
 export type FeuRougeRequest =
   | FeuRougeCheckRequest
   | FeuRougeRegisterRequest
@@ -90,6 +121,7 @@ export type FeuRougeRequest =
   | FeuRougeEditRequest
   | FeuRougeReloadRequest
   | FeuRougePingRequest
+  | FeuRougeGrantRequest
 
 export interface FeuRougeResponse {
   id?: string
