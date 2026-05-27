@@ -5,7 +5,7 @@
 
   **L'orchestration multi-agents nouvelle génération pour TypeScript & Node.js**
 
-  [![Version](https://img.shields.io/badge/version-1.4.0-blue.svg?style=for-the-badge)](https://github.com/French-Team/MINAUTOR-Agent-Service)
+  [![Version](https://img.shields.io/badge/version-1.5.0-blue.svg?style=for-the-badge)](https://github.com/French-Team/MINAUTOR-Agent-Service)
   [![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)](LICENSE)
   [![Status](https://img.shields.io/badge/status-active-success.svg?style=for-the-badge)](https://github.com/French-Team/MINAUTOR-Agent-Service)
   [![Platform](https://img.shields.io/badge/platform-node.js-black.svg?style=for-the-badge)](https://nodejs.org/)
@@ -64,7 +64,7 @@ npm run final # Build complet avec linting automatique et lancement CLI
 - **Langage** : TypeScript (Typage strict, AST Parsing)
 - **Engine** : Multi-fournisseurs (Kilo, Gemini, OpenRouter, Ollama)
 - **CI/CD** : GitHub Actions (Linting AST, Tests Unitaires & Performance)
-- **Qualité** : ESLint, TSX, Regex Linter (Custom AST)
+- **Sécurité** : Système de permissions granulaire (Feurouge)
 
 ---
 
@@ -75,8 +75,9 @@ npm run final # Build complet avec linting automatique et lancement CLI
 - 💉 **Kits Injector & Engine API** — Injection automatique d'imports et exportations directes des fonctions de kits via le moteur.
 - 📡 **Telecom Services** :
   - `Daemon` : Surveillance active en arrière-plan.
-  - `Context Management` : Dossier `src/telecom/service/context/` dédié à la gestion modulaire des contextes (Resumer, Optimiser, Nettoyer). *Structure en cours de développement pour une meilleure extensibilité.*
+  - `Context Management` : Dossier `src/telecom/service/context/` dédié à la gestion modulaire des contextes.
 - 🎨 **Visual Identity** : Système de couches utilisateur (`src/logo/layer-user.ts`) pour une identification visuelle dynamique.
+- 🛡️ **Feurouge (Permissions)** : Système de gestion des droits et permissions d'accès (`src/feurouge/`) pour sécuriser les actions des agents et les accès fichiers.
 
 ---
 
@@ -115,8 +116,8 @@ MINAUTOR intègre des outils de validation de pointe :
 ├── kits/             # Registre et modules de kits réutilisables
 ├── src/
 │   ├── engine/       # Cœur du moteur (Executor, Guardian, Sessions, Runner)
+│   ├── feurouge/     # Système de permissions et sécurité (Client, Daemon, CLI)
 │   ├── telecom/      # Services de maintenance et gestion des contextes
-│   │   └── service/context/ # Nouveaux modules de contexte (en développement)
 │   ├── logo/         # Logique d'identité visuelle utilisateur
 │   ├── kits-injector.ts # Moteur d'injection de kits
 │   ├── lint-regex.ts    # Analyseur AST pour les Regex
