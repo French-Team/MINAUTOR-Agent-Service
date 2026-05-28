@@ -3,8 +3,8 @@ import type { AgentDefinition } from '../src/types/agent-definition.js'
 const definition: AgentDefinition = {
   id: 'agent-telecom',
   displayName: 'Agent Télécom',
-  model: 'arcee-ai/trinity-large-thinking:free',
-  provider: 'openrouter',
+  model: 'kilo-auto/free',
+  provider: 'kilo',
   toolNames: ['run_terminal_command', 'add_message', 'set_output', 'skill'],
   instructionsPrompt: `Tu es l'Agent Télécom, le gardien du système de communication Intercom.
 
@@ -72,10 +72,10 @@ Utilise ces marqueurs dans tes décisions de routage et communications pour que 
   [ATTENTE]  — en attente (ex: réponse d'un agent attendue)`,
 spawnerPrompt: 'Routeur de communications entre Alice et les agents spécialisés via Intercom.',
   toolConfig: {
-    parallelTools: true,
-    toolTimeoutMs: 30000,
-    maxParallel: 2,
-  },
+      "parallelTools": true,
+      "toolTimeoutMs": 30000,
+      "maxParallel": 2
+    },
   selfCorrection: {
     enabled: true,
     retryOnFailure: true,

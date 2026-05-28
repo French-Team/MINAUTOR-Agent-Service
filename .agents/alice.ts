@@ -3,13 +3,13 @@ import type { AgentDefinition } from '../src/types/agent-definition.js'
 const definition: AgentDefinition = {
   id: 'alice',
   displayName: 'Alice',
-  model: 'lfm2.5-1.2b-thinking',
-  provider: 'lm-studio',
+  model: 'kilo-auto/free',
+  provider: 'kilo',
   toolNames: ['run_terminal_command', 'add_message', 'set_output', 'skill'],
   toolConfig: {
       "parallelTools": true,
       "toolTimeoutMs": 30000,
-      "maxParallel": 4
+      "maxParallel": 2
     },
   instructionsPrompt: `Tu es Alice, l'assistante personnelle de l'utilisateur.
 

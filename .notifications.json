@@ -26,5 +26,12 @@
     "message": "alice → agent-telecom [debug-request]: {\"demande\":\"j'ai un bug dans le login\"}",
     "level": "info",
     "timestamp": "2026-05-27T18:49:59.489Z"
+  },
+  {
+    "id": "1779915563743-hh5h",
+    "from": "intercom",
+    "message": "alice → orchestrateur [project-list-request]: {\"demande\":\"\"}",
+    "level": "info",
+    "timestamp": "2026-05-27T20:59:23.743Z"
   }
 ]

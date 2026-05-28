@@ -729,11 +729,30 @@ function spawnAgent(agentId: string, msg: IntercomMessage): void {
     writeStatus()
   })
 
-  // Timeout de securite: tuer le processus apres 5 minutes
+  // Timeout de securite : tuer le processus apres 5 minutes
+  // On ecrit d'abord un fichier d'erreur, puis on tue le processus.
+  // Ceci est indispensable sur Windows où child.kill() ne peut pas être intercepté
+  // (TerminateProcess synchrone) et contourne les handlers SIGTERM du spawn-agent.
   setTimeout(() => {
     if (child.exitCode === null) {
+      const workspaceDir = join(cwd, 'telecom', 'agents', agentId)
+      const safeTimestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      const erreurPath = join(workspaceDir, `erreur-${safeTimestamp}.md`)
+      try {
+        if (!existsSync(workspaceDir)) mkdirSync(workspaceDir, { recursive: true })
+        writeFileSync(erreurPath, [
+          `# Erreur — ${agentId}`,
+          `**Date :** ${new Date().toISOString()}`,
+          '',
+          `**Erreur :** Processus tué par le daemon (timeout 5 min)`,
+          `**PID :** ${child.pid}`,
+          `**Duree :** 5 min`,
+          `**Instruction :** ${instruction.slice(0, 500)}`,
+        ].join('\n'), 'utf-8')
+      } catch { /* ignoré — le spawn-agent écrit aussi son propre fichier si SIGTERM est interceptable */ }
+
       child.kill()
-      console.error(`[${ts}] ${agentId} tue (timeout 5min)`)
+      console.error(`[${ts}] ${agentId} tué (timeout 5min) — erreur écrite dans ${erreurPath}`)
     }
   }, 5 * 60 * 1000)
 }

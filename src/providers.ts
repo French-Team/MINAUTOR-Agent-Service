@@ -93,17 +93,27 @@ const DEFAULT_PROVIDERS: ProvidersFile = {
 
 // ── Persistence ──────────────────────────────────────────
 
+/** Deep-clone simple helper (JSON roundtrip — safe for ProvidersFile shape) */
+function cloneDefaults(): ProvidersFile {
+  return JSON.parse(JSON.stringify(DEFAULT_PROVIDERS)) as ProvidersFile
+}
+
+/** Backup a corrupted file before repairing */
+const BACKUP_PATH = CONFIG_PATH + '.corrupted'
+
 function loadProviders(): ProvidersFile {
   if (!existsSync(CONFIG_PATH)) {
-    writeFileSync(CONFIG_PATH, JSON.stringify(DEFAULT_PROVIDERS, null, 2), 'utf-8')
-    return DEFAULT_PROVIDERS
+    writeFileSync(CONFIG_PATH, JSON.stringify(cloneDefaults(), null, 2), 'utf-8')
+    return cloneDefaults()
   }
   try {
     const content = readFileSync(CONFIG_PATH, 'utf-8')
     const data = JSON.parse(content) as ProvidersFile
     // Résilience : providers[] doit être un tableau ; filtrer les entrées null/malformées
     if (!Array.isArray(data.providers)) {
-      return DEFAULT_PROVIDERS
+      // Backup + repair the corrupted file, then return fresh defaults
+      backupAndRepair(content, 'providers[] not an array')
+      return cloneDefaults()
     }
     data.providers = data.providers.filter(p => p && typeof p === 'object')
     for (const p of data.providers) {
@@ -129,8 +139,36 @@ function loadProviders(): ProvidersFile {
       }
     }
     return data
+  } catch (err) {
+    // Backup + repair the corrupted file, then return fresh defaults
+    const corrupted = tryReadRaw()
+    backupAndRepair(corrupted, (err as Error).message)
+    return cloneDefaults()
+  }
+}
+
+/** Try to read the raw file content (best-effort) */
+function tryReadRaw(): string {
+  try { return readFileSync(CONFIG_PATH, 'utf-8') } catch { return '(unreadable)' }
+}
+
+/** Rename corrupted file → .corrupted, then write fresh defaults */
+function backupAndRepair(corruptedContent: string, reason: string): void {
+  try {
+    // Rename corrupted file to .corrupted (with timestamp suffix if already exists)
+    let backupPath = BACKUP_PATH
+    if (existsSync(backupPath)) {
+      backupPath = CONFIG_PATH + '.corrupted.' + Date.now()
+    }
+    // Copy content to backup then write defaults
+    writeFileSync(backupPath, corruptedContent, 'utf-8')
+    writeFileSync(CONFIG_PATH, JSON.stringify(cloneDefaults(), null, 2), 'utf-8')
+    console.error(`[providers] ⚠ Fichier providers.json corrompu (${reason})`)
+    console.error(`[providers]   → Sauvegardé dans ${backupPath.replace(process.cwd() + '/', '')}`)
+    console.error(`[providers]   → Fichier réinitialisé avec la configuration par défaut`)
   } catch {
-    return DEFAULT_PROVIDERS
+    // Échec du backup — on force l'écriture des defaults au moins
+    try { writeFileSync(CONFIG_PATH, JSON.stringify(cloneDefaults(), null, 2), 'utf-8') } catch { /* dernier recours */ }
   }
 }
 
