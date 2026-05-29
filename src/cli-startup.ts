@@ -8,10 +8,10 @@ import {
  * Affiche le message de chargement de la skill au démarrage.
  */
 export function logSkillLoaded(): void {
-  const welcomeSkill = loadSkill('skill-welcome')
-  if (welcomeSkill) {
-    console.log(`\n${GREEN}✓ Skill "${welcomeSkill.meta.name}" chargée${RESET}`)
-    console.log(`  ${GRAY}${welcomeSkill.meta.description}${RESET}\n`)
+  const aliceSkill = loadSkill('skill-alice')
+  if (aliceSkill) {
+    console.log(`\n${GREEN}✓ Skill "${aliceSkill.meta.name}" chargée${RESET}`)
+    console.log(`  ${GRAY}${aliceSkill.meta.description}${RESET}\n`)
   }
 }
 

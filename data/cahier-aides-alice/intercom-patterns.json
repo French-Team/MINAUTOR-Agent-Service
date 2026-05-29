@@ -1,0 +1,79 @@
+{
+  "description": "Registre des patterns de l'intercom d'Alice — mots-clés → routage intercom",
+  "source": "data/cahier-aides-alice/02-patterns/",
+  "version": "1.0",
+  "patterns": [
+    {
+      "id": "P1",
+      "name": "debug-request",
+      "keywords": ["bug", "erreur", "crash", "plante", "casse", "dysfonctionne", "ne marche pas"],
+      "minMatch": 1,
+      "subject": "debug-request",
+      "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P2",
+      "name": "analysis-request",
+      "keywords": ["analyse", "examine", "vérifie", "inspecte", "diagnostic", "regarde"],
+      "minMatch": 1,
+      "subject": "analysis-request",
+      "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P3",
+      "name": "review-request",
+      "keywords": ["review", "revue", "qualité", "ameliorer", "améliorer", "relis", "corrige", "audit"],
+      "minMatch": 1,
+      "subject": "review-request",
+      "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P4",
+      "name": "create-request",
+      "keywords": ["crée", "créé", "fais", "développe", "code", "genere", "génère", "ecris", "écris", "implemente", "implémente", "construit", "fabrique"],
+      "minMatch": 1,
+      "subject": "create-request",
+      "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P5",
+      "name": "deploy-request",
+      "keywords": ["configure", "installe", "déploie", "deploie", "setup", "init", "demarre", "lance"],
+      "minMatch": 1,
+      "subject": "deploy-request",
+      "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P6",
+      "name": "advice-request",
+      "keywords": ["idée", "idee", "suggestion", "conseil", "comment faire", "avis", "meilleur"],
+      "minMatch": 1,
+      "subject": "advice-request",
+      "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P7",
+      "name": "help-request",
+      "keywords": ["aide", "besoin", "urgent", "bloqué", "bloque", "coince", "coincé", "assistance", "depanne"],
+      "minMatch": 1,
+      "subject": "help-request",
+      "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P8",
+      "name": "agent-list-request",
+      "keywords": ["liste", "lister", "agent", "disponible", "équipe", "equipe", "voir", "catalogue", "annuaire", "qui"],
+      "minMatch": 2,
+      "subject": "agent-list-request",
+      "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P9",
+      "name": "project-request",
+      "keywords": ["projet", "projets", "workspace", "workspaces"],
+      "minMatch": 1,
+      "subject": "project-request",
+      "response": "Je transmets ta demande au service compétent."
+    }
+  ]
+}

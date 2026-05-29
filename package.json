@@ -11,10 +11,10 @@
         "start": "node dist/cli.js",
         "cli": "node dist/cli.js",
         "final": "cls && npm run build && npm start",
-        "test:unit": "node dist/unit-tests.js",
-        "test:e2e": "node dist/e2e-flow-test.js && node dist/e2e-orchestrateur-flow-test.js",
-        "test:load": "npx tsx src/load-tests.ts",
-        "test:ci": "npm run build && npm run lint && node dist/unit-tests.js && node dist/test.js",
+        "test:unit": "node dist/test/unit-tests.js",
+        "test:e2e": "node dist/test/e2e-flow-test.js && node dist/test/e2e-orchestrateur-flow-test.js",
+        "test:load": "npx tsx src/test/load-tests.ts",
+        "test:ci": "npm run build && npm run lint && node dist/test/unit-tests.js && node dist/test/test.js",
         "test:ci:full": "npm run test:ci && npm run test:e2e && npm run test:load",
         "validate:all": "node dist/validate-all.js",
         "lint": "eslint src/",
@@ -28,5 +28,8 @@
         "tsx": "^4.22.3",
         "typescript": "^5.5.0",
         "typescript-eslint": "^8.59.4"
+    },
+    "dependencies": {
+        "terminal-kit": "^3.1.2"
     }
 }

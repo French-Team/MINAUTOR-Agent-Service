@@ -1,0 +1,110 @@
+# Script Registry — Mapping patterns → scripts exécutables
+#
+# Chaque entrée associe un pattern (regex) à un script pré-écrit.
+# L'agent ne fait QUE matcher le pattern et lancer le script.
+# Aucune LLM inference — le script garantit le résultat.
+#
+# Syntaxe:
+#   - pattern: <regex>            # Pattern pour matcher la demande
+#     subject: <string>           # Subject intercom (optionnel, filtre par sujet)
+#     script: <path>              # Chemin du script à exécuter
+#     description: <string>       # Description lisible
+#     params:                     # Paramètres extraits du pattern (optionnel)
+#       - name: <string>          # Nom du paramètre
+#         from: <capture-group>  # Numéro du groupe de capture
+#
+# Ordre : premier match gagne. Mettre les patterns spécifiques AVANT les génériques.
+# IMPORTANT: les patterns utilisent des backslashes simples (\s, \S, etc.)
+
+scripts:
+  # ── Alice / Salutations ──────────────────────────
+  - pattern: "^bonjour\s+alice|^salut\s+alice|^hello\s+alice"
+    subject: "alice-presentation"
+    script: "scripts/alice/presentation.js"
+    description: "Présentation complète d'Alice (déclenché par 'bonjour alice')"
+
+  - pattern: "^bonjour|^salut|^hello|^bonsoir|^coucou"
+    subject: "alice-greeting"
+    script: "scripts/alice/greeting.js"
+    description: "Salutation simple (déclenché par 'bonjour' seul)"
+
+
+  # ── Projets ────────────────────────────────────────
+  - pattern: "liste(\s+les)?\s+projets?"
+    subject: "project-request"
+    script: "scripts/projects/list.js"
+    description: "Liste tous les projets disponibles"
+
+  - pattern: "(montre|affiche|détails?|info)\s+(le\s+)?projet\s+(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/info.js"
+    description: "Affiche les détails d'un projet"
+    params:
+      - name: project
+        from: 3
+
+  - pattern: "cr[éee]e?\s+(un\s+)?projet\s+(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/create.js"
+    description: "Crée un nouveau projet"
+    params:
+      - name: project
+        from: 3
+
+  # ── Agents ─────────────────────────────────────────
+  - pattern: "liste(\s+les)?\s+agents?"
+    subject: "agent-list-request"
+    script: "scripts/agents/list.js"
+    description: "Liste tous les agents disponibles"
+
+  - pattern: "qui\s+est(\s+ce\s+que)?\s+(\S+)"
+    subject: "agent-list-request"
+    script: "scripts/agents/info.js"
+    description: "Affiche les informations d'un agent"
+    params:
+      - name: agent
+        from: 2
+
+  # ── Aide générale ──────────────────────────────────
+  - pattern: "(aide|help|commands?|commandes|comment\s+(faire|utiliser))"
+    subject: "help-request"
+    script: "scripts/help/show.js"
+    description: "Affiche l'aide générale du système"
+
+  # ── Télécom / Système ─────────────────────────────
+  - pattern: "((status|état|resume|summary|point\s+sur\s+les\s+communications)|((montre|affiche|donne|quel\s+est)\s+(le\s+)?(status|état))|(état\s+du\s+syst[èe]me|état\s+des\s+(lieux|communications)))"
+    subject: "system-status-request"
+    script: "scripts/telecom/summary.js"
+    description: "Résumé de l'état du système telecom (intercom, routage, agents, logs)"
+
+  # ── Debug ──────────────────────────────────────────
+  - pattern: "(j'ai\s+un\s+)?bug|erreur|crash|plante|(ne\s+)?marche\s+pas"
+    subject: "debug-request"
+    script: "scripts/debug/collect.js"
+    description: "Collecte les informations de debug"
+
+  # ── Fallback génériques par sujet ──────────────────
+  - pattern: ".*"
+    subject: "analysis-request"
+    script: "scripts/analysis/triage.js"
+    description: "Analyse générique et triage de la demande"
+
+  - pattern: ".*"
+    subject: "review-request"
+    script: "scripts/review/triage.js"
+    description: "Triage d'une demande de revue de code"
+
+  - pattern: ".*"
+    subject: "create-request"
+    script: "scripts/create/triage.js"
+    description: "Triage d'une demande de création"
+
+  - pattern: ".*"
+    subject: "deploy-request"
+    script: "scripts/deploy/triage.js"
+    description: "Triage d'une demande de déploiement"
+
+  - pattern: ".*"
+    subject: "advice-request"
+    script: "scripts/advice/triage.js"
+    description: "Triage d'une demande de conseil"

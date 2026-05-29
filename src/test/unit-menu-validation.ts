@@ -13,24 +13,24 @@
 import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 
-import { safeExit, ONLINE_URLS, KEY_REQUIRED, GRAY } from './constants.js'
+import { safeExit, ONLINE_URLS, KEY_REQUIRED, GRAY } from '../constants.js'
 import {
   listProviders,
   getKnownProviders,
   isLocalProvider,
-} from './providers.js'
+} from '../providers.js'
 
 // ── Imports des handlers (vérification d'existence) ─────
-import { handleManageProvidersMenu, handleProviderActions } from './cli-providers.js'
-import { handleCreate } from './cli-create.js'
-import { handleEditAgent } from './cli-edit.js'
-import { handleProviders } from './cli-providers-advanced.js'
-import { handleListAgents, handleUseAgent } from './cli-agents.js'
-import { showMenu, showHelp } from './cli-menu.js'
-import { showSessions, showInfo } from './cli-sessions.js'
-import { handleCommandPicker } from './cli-selector.js'
-import { handleShellLine } from './cli-runner.js'
-import { showBanner } from './cli-banner.js'
+import { handleManageProvidersMenu, handleProviderActions } from '../cli-providers.js'
+import { handleCreate } from '../cli-create.js'
+import { handleEditAgent } from '../cli-edit.js'
+import { handleProviders } from '../cli-providers-advanced.js'
+import { handleListAgents, handleUseAgent } from '../cli-agents.js'
+import { showMenu, showHelp } from '../cli-menu.js'
+import { showSessions, showInfo } from '../cli-sessions.js'
+import { handleCommandPicker } from '../cli-selector.js'
+import { handleShellLine } from '../cli-runner.js'
+import { showBanner } from '../cli-banner.js'
 
 // ── ANSI ────────────────────────────────────────────────
 const RESET = '\x1b[0m'

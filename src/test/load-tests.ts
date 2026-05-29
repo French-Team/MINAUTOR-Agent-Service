@@ -2,17 +2,17 @@
  * Tests de charge et performance — Mesure le comportement sous stress
  * des composants clés du système.
  *
- * Usage : npx tsx src/load-tests.ts
+ * Usage : npx tsx src/test/load-tests.ts
  *
  * Ne fait aucun appel réseau ni sous-processus réel.
  */
 
 // ── Imports ──────────────────────────────────────────────────────────
 
-import { top15, safeExit } from './constants.js'
-import { createEngine } from './engine.js'
-import { createRunner } from './engine-runner.js'
-import type { AgentDefinition } from './types/agent-definition.js'
+import { top15, safeExit } from '../constants.js'
+import { createEngine } from '../engine.js'
+import { createRunner } from '../engine-runner.js'
+import type { AgentDefinition } from '../types/agent-definition.js'
 import {
   resolveProviderForModel,
   getNextApiKey,
@@ -21,7 +21,7 @@ import {
   removeProvider,
   listProviders,
   getProviderConfigPath,
-} from './providers.js'
+} from '../providers.js'
 import {
   sanitizeNotificationMessage,
   levelIcon,
@@ -30,9 +30,9 @@ import {
   countPendingNotifications,
   removeNotification as removeNotifyEntry,
   getNotifyPath,
-} from './notify.js'
-import { listLocalAgents, readLocalAgent } from './agents.js'
-import type { ToolCall } from './types/agent-definition.js'
+} from '../notify.js'
+import { listLocalAgents, readLocalAgent } from '../agents.js'
+import type { ToolCall } from '../types/agent-definition.js'
 
 // ── ANSI / Formatting ────────────────────────────────────────────────
 
@@ -192,7 +192,7 @@ async function loadTestProviderCRUD() {
     }, 25)
   } finally {
     // Nettoyer tous les providers CRUD- cr\u00e9\u00e9s, m\u00eame si le bench crash
-    const { listProviders } = await import('./providers.js')
+    const { listProviders } = await import('../providers.js')
     const all = listProviders()
     for (const p of all) {
       if (p && p.name && p.name.startsWith('CRUD-')) removeProvider(p.name)
@@ -533,7 +533,7 @@ async function loadTestConcurrent() {
 
   // ── Nettoyage pr\u00e9ventif : supprimer tout r\u00e9sidu d'ex\u00e9cutions pr\u00e9c\u00e9dentes \u2500\u2500
   {
-    const { listProviders } = await import('./providers.js')
+    const { listProviders } = await import('../providers.js')
     for (const p of listProviders()) {
       if (p && p.name && (p.name.startsWith('CONC-') || p.name.startsWith('CRUD-') || p.name === 'undefined' || p.name === 'LoadTest Provider' || p.name === 'ResolveTest Kilo')) {
         try { removeProvider(p.name) } catch {}
@@ -569,7 +569,7 @@ async function loadTestConcurrent() {
       }, 30)
     } finally {
       // Nettoyer tous les CONC- cr\u00e9\u00e9s, m\u00eame si le bench crash
-      const { listProviders } = await import('./providers.js')
+      const { listProviders } = await import('../providers.js')
       for (const p of listProviders()) {
         if (p && p.name && p.name.startsWith('CONC-')) removeProvider(p.name)
       }
@@ -1273,7 +1273,7 @@ async function main() {
 
   // ── Nettoyage pr\u00e9ventif global \u2500\u2500
   {
-    const { listProviders } = await import('./providers.js')
+    const { listProviders } = await import('../providers.js')
     const testPatterns = ['CONC-', 'CRUD-', 'undefined', 'LoadTest Provider', 'ResolveTest Kilo']
     for (const p of listProviders()) {
       if (p && p.name && testPatterns.some(pat => p.name.startsWith(pat) || p.name === pat)) {

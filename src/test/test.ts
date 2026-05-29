@@ -9,12 +9,12 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, rmSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { safeExit } from './constants.js'
-import { createEngine } from './engine.js'
+import { safeExit } from '../constants.js'
+import { createEngine } from '../engine.js'
 import {
   addProvider, listProviders, removeProvider, resolveProviderForModel,
   fetchModels, getProvider, isApiKeyUsed,
-} from './providers.js'
+} from '../providers.js'
 
 const RESET = '\x1b[0m'
 const GREEN = '\x1b[32m'

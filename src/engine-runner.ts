@@ -1,9 +1,9 @@
 import type { Message, ToolCall, ContextProfile } from './types/agent-definition.js'
 import type { LLMProvider } from './engine-types.js'
-import { internalCallLLM, type StreamingConfig } from './engine-llm.js'
+import { internalCallLLM, buildToolDefs, type StreamingConfig } from './engine-llm.js'
 import { parseToolCalls } from './engine-parser.js'
 import { resolveContextOptionsFor, historienResumePourLLM } from './telecom/service/context/index.js'
-import { RESET, YELLOW, RED } from './constants.js'
+import { RESET, CYAN, YELLOW, RED, GRAY, BOLD } from './constants.js'
 
 interface RunnerDependencies {
   addMessage: (role: 'user' | 'assistant', content: string) => void
@@ -14,6 +14,7 @@ interface RunnerDependencies {
   processTools: (toolCalls: ToolCall[]) => Promise<string[]>
   agent: {
     id: string
+    toolNames?: string[]
     selfCorrection?: { enabled?: boolean; maxRetries?: number; retryOnFailure?: boolean }
     streaming?: StreamingConfig
     rateLimit?: { backoffMultiplier?: number }
@@ -101,6 +102,9 @@ export function createRunner(deps: RunnerDependencies) {
     // un 1.2B reçoit un historique très court ; un Gemini Flash garde large.
     // Un agent peut forcer un profil spécifique via toolConfig.contextProfile
     // (utile pour les daemons qui veulent toujours être légers).
+    // Construire les définitions d'outils pour le tool calling natif
+    const toolDefs = deps.agent.toolNames ? buildToolDefs(deps.agent.toolNames) : undefined
+
     const contextOptions = resolveContextOptionsFor({
       model: llm.model,
       override: deps.agent.toolConfig?.contextProfile,
@@ -108,17 +112,19 @@ export function createRunner(deps: RunnerDependencies) {
 
     while (retries <= maxRetries) {
       try {
-        let response = await internalCallLLM(
+        let result = await internalCallLLM(
           currentMessage,
           llm,
           effectiveSystemPrompt,
           deps.agent.streaming,
           history,
           contextOptions,
+          toolDefs,
         )
+        let response = result.content
 
-        // Tool Loop
-        let toolCalls = parseToolCalls(response)
+        // Tool Loop : priorité aux tool_calls natifs, fallback parseToolCalls
+        let toolCalls = result.rawToolCalls ?? parseToolCalls(response)
         let loopCount = 0
         const maxLoops = 10
 
@@ -128,23 +134,54 @@ export function createRunner(deps: RunnerDependencies) {
 
           const results = await deps.processTools(toolCalls)
 
-          // Construct the next prompt with tool results
+          // ── SHORT-CIRCUIT : run_terminal_command = réponse finale ──
+          // Quand tous les outils appelés sont run_terminal_command, le modèle
+          // ne fait que DÉCLENCHER des scripts. Les scripts produisent la réponse
+          // directement — pas de retour au modèle qui résumerait.
+          // Ceci fonctionne même sans tool_call_id natif (modèles 1.2B
+          // qui ne supportent pas OpenAI function calling de façon fiable).
+          // On garde aussi hasNativeIds pour les autres agents qui utilisent
+          // le tool calling natif OpenAI.
+          // Architecture : model = entrée, script = sortie.
+          const allAreScripts = toolCalls.length > 0 && toolCalls.every(tc => tc.toolName === 'run_terminal_command')
+          const hasNativeIds = toolCalls.some(tc => tc.toolCallId)
+          if (allAreScripts || hasNativeIds) {
+            // Formater chaque résultat dans un bloc visuel
+            // avec le nom du script, box-drawing et couleurs ANSI
+            const formatted = results.map((r, i) => {
+              const rawCmd = toolCalls[i]?.input?.command
+              const cmd = typeof rawCmd === 'string' ? rawCmd : ''
+              const scriptName = cmd.split(/[/\\]/).pop() || `Script ${i + 1}`
+              const header = `${CYAN}╔${BOLD}══ ${scriptName}${RESET} ${GRAY}(${cmd})${RESET}`
+              // Indenter chaque ligne du résultat
+              const body = r
+                .trim()
+                .split('\n')
+                .map(msgLine => `${CYAN}║${RESET} ${msgLine}`)
+                .join('\n')
+              const footer = `${CYAN}╚${'═'.repeat(50)}${RESET}`
+              return `${header}\n${body}\n${footer}`
+            }).join('\n\n')
+            return formatted
+          }
+
+          // Fallback texte : tool_calls sans ID natif (parsés du texte généré)
           let toolResultsText = '\n\n### RÉSULTATS DES OUTILS :\n'
           for (let i = 0; i < toolCalls.length; i++) {
             toolResultsText += `- Outil: ${toolCalls[i].toolName}\n- Résultat: ${results[i]}\n\n`
           }
-
-          // Add to history and call LLM again
           currentMessage += `\n${response}${toolResultsText}`
-          response = await internalCallLLM(
-            'Continue sur la base des résultats ci-dessus.',
+          result = await internalCallLLM(
+            currentMessage,
             llm,
             effectiveSystemPrompt,
             deps.agent.streaming,
             history,
             contextOptions,
+            toolDefs,
           )
-          toolCalls = parseToolCalls(response)
+          response = result.content
+          toolCalls = result.rawToolCalls ?? parseToolCalls(response)
         }
 
         return response

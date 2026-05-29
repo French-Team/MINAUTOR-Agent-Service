@@ -14,9 +14,9 @@
 
 import { execSync } from 'child_process'
 import { join } from 'path'
-import { safeExit } from './constants.js'
-import { ensureWorkspacesDir, createProject, deleteProject, getProjectInfo } from './project/project-manager.js'
-import { readTaskBoard } from './project/task-board.js'
+import { safeExit } from '../constants.js'
+import { ensureWorkspacesDir, createProject, deleteProject, getProjectInfo } from '../project/project-manager.js'
+import { readTaskBoard } from '../project/task-board.js'
 
 // ── Constants ──────────────────────────────────────────
 

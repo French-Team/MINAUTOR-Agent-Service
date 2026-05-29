@@ -5,7 +5,7 @@
  */
 
 // @kit tests
-import { injectKits, injectKitsIntoCommand, scanCommandOutput, extractTargetFilePath, expandBrace, extractFindTargets, detectKitMarkers, findKit, clearRegistryCache, scanFile, computeRelativePath, generateImportLine, hasExistingImport, suggestKits, getKitNames, getKitInfo, loadRegistry } from './kits-injector.js'
+import { injectKits, injectKitsIntoCommand, scanCommandOutput, extractTargetFilePath, expandBrace, extractFindTargets, detectKitMarkers, findKit, clearRegistryCache, scanFile, computeRelativePath, generateImportLine, hasExistingImport, suggestKits, getKitNames, getKitInfo, loadRegistry } from '../kits-injector.js'
 import { writeFileSync, unlinkSync, mkdirSync, rmdirSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
 

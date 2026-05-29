@@ -1,7 +1,7 @@
 # Cahier d'Aide d'Alice — Index
 
 > Consulte ce cahier pour savoir quel pattern correspond à la demande utilisateur.
-> Utilise les scripts dans `skills/skill-welcome/scripts/` pour naviguer (voir la section 6 de ta skill).
+> Consulte la skill `skill-alice` pour le lexique des scripts disponibles.
 
 ---
 

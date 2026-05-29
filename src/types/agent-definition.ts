@@ -111,6 +111,8 @@ export interface ToolCall {
   toolName: string
   input: Record<string, unknown>
   includeToolCall?: boolean
+  /** Identifiant unique pour le tool calling natif OpenAI (tool_call_id) */
+  toolCallId?: string
 }
 
 export type TextPart = { type: 'text'; text: string }

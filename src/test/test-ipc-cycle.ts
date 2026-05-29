@@ -9,7 +9,7 @@
 import { fork } from 'child_process'
 import { join } from 'path'
 import { unlinkSync, existsSync, readFileSync, readdirSync } from 'fs'
-import { tryRouteIntercom } from './cli-intercom-router.js'
+import { tryRouteIntercom } from '../cli-intercom-router.js'
 
 const CWD = process.cwd()
 

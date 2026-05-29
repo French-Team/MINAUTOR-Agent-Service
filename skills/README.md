@@ -44,4 +44,4 @@ skills/
 
 ## Skills incluses
 
-- `skill-welcome` — Mission d'accueil pour Alice
+- `skill-alice` — Lexique des scripts Alice (salutations, présentation, routage)

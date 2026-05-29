@@ -17,14 +17,14 @@
 
 import { readFileSync, unlinkSync, readdirSync, existsSync } from 'fs'
 import { join } from 'path'
-import { safeExit } from './constants.js'
+import { safeExit } from '../constants.js'
 import {
   ensureWorkspacesDir,
   createProject,
   getProjectInfo,
   deleteProject,
   listProjects,
-} from './project/project-manager.js'
+} from '../project/project-manager.js'
 import {
   readTaskBoard,
   writeTaskBoard,
@@ -34,9 +34,9 @@ import {
   canAssignTask,
   countTasks,
   updateTask,
-} from './project/task-board.js'
-import { tryRouteIntercom, setCurrentProject } from './cli-intercom-router.js'
-import type { TaskBoard } from './project/types.js'
+} from '../project/task-board.js'
+import { tryRouteIntercom, setCurrentProject } from '../cli-intercom-router.js'
+import type { TaskBoard } from '../project/types.js'
 
 // ── Constants ──────────────────────────────────────────
 

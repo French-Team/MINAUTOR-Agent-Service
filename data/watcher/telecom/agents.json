@@ -1,0 +1,99 @@
+{
+  "updatedAt": "2026-05-29T06:08:00.601Z",
+  "totalAgents": 10,
+  "actifs": 0,
+  "totalErreurs": 0,
+  "totalLivrables": 0,
+  "agents": [
+    {
+      "id": "agent-debugger",
+      "livrables": 0,
+      "erreurs": 0,
+      "dernierLivrable": null,
+      "actif": false,
+      "actifDepuis": null,
+      "sujetActif": null
+    },
+    {
+      "id": "agent-manager",
+      "livrables": 0,
+      "erreurs": 0,
+      "dernierLivrable": null,
+      "actif": false,
+      "actifDepuis": null,
+      "sujetActif": null
+    },
+    {
+      "id": "agent-postmortem",
+      "livrables": 0,
+      "erreurs": 0,
+      "dernierLivrable": null,
+      "actif": false,
+      "actifDepuis": null,
+      "sujetActif": null
+    },
+    {
+      "id": "agent-quality",
+      "livrables": 0,
+      "erreurs": 0,
+      "dernierLivrable": null,
+      "actif": false,
+      "actifDepuis": null,
+      "sujetActif": null
+    },
+    {
+      "id": "agent-reviewer",
+      "livrables": 0,
+      "erreurs": 0,
+      "dernierLivrable": null,
+      "actif": false,
+      "actifDepuis": null,
+      "sujetActif": null
+    },
+    {
+      "id": "agent-scrutineer",
+      "livrables": 0,
+      "erreurs": 0,
+      "dernierLivrable": null,
+      "actif": false,
+      "actifDepuis": null,
+      "sujetActif": null
+    },
+    {
+      "id": "agent-superviseur",
+      "livrables": 0,
+      "erreurs": 0,
+      "dernierLivrable": null,
+      "actif": false,
+      "actifDepuis": null,
+      "sujetActif": null
+    },
+    {
+      "id": "agent-telecom",
+      "livrables": 0,
+      "erreurs": 0,
+      "dernierLivrable": null,
+      "actif": false,
+      "actifDepuis": null,
+      "sujetActif": null
+    },
+    {
+      "id": "alice",
+      "livrables": 0,
+      "erreurs": 0,
+      "dernierLivrable": null,
+      "actif": false,
+      "actifDepuis": null,
+      "sujetActif": null
+    },
+    {
+      "id": "orchestrateur",
+      "livrables": 0,
+      "erreurs": 0,
+      "dernierLivrable": null,
+      "actif": false,
+      "actifDepuis": null,
+      "sujetActif": null
+    }
+  ]
+}

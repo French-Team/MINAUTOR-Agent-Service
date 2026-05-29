@@ -18,10 +18,11 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, unlinkSync, statSync, rmdirSync, watch } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { fork } from 'node:child_process'
+import { fork, exec } from 'node:child_process'
 import { pushNotification, type NotificationLevel } from '../../notify.js'
 import { getFeuRougeClient } from '../../feurouge/feurouge-client.js'
 import { getAgentPermission } from '../../feurouge/permissions.js'
+import { matchAndExecute, type ScriptResult } from '../../script-runner.js'
 
 const cwd = process.cwd()
 const INTERCOM_DIR = join(cwd, 'telecom', 'intercom')
@@ -30,6 +31,7 @@ const MEMOIRE_DIR = join(cwd, 'telecom', 'memoire-vive')
 const POLL_INTERVAL = 1000 // 1 seconde
 const WATCH_DEBOUNCE_MS = 500 // Ignorer les doublons fs.watch sous 500ms
 const PID_FILE = join(cwd, 'telecom', 'daemon.pid')
+const WATCHER_PID_FILE = join(cwd, 'telecom', 'watcher.pid')
 const STATUS_FILE = join(cwd, 'telecom', 'daemon.status.json')
 const RESET_FILE = join(cwd, 'telecom', 'daemon.reset')
 const TRIGGER_FILE = join(cwd, 'telecom', 'daemon.trigger')
@@ -54,6 +56,88 @@ function ensureDirs(): void {
   for (const dir of [INTERCOM_DIR, ROUTED_DIR]) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   }
+}
+
+/**
+ * Nettoie l'état pré-existant d'une session antérieure du daemon.
+ * Exécuté au démarrage pour garantir un état vierge :
+ *   - vide telecom/intercom/ et telecom/routed/
+ *   - supprime telecom/daemon.status.json, watcher.pid, trigger, reset
+ *   - supprime telecom/notifications.json
+ *   - vide data/watcher/telecom/
+ */
+function cleanupOldState(): void {
+  const dirsToClean: string[] = [INTERCOM_DIR, ROUTED_DIR]
+  const filesToDelete: string[] = [
+    STATUS_FILE,
+    WATCHER_PID_FILE,
+    TRIGGER_FILE,
+    RESET_FILE,
+    join(cwd, 'telecom', 'notifications.json'),
+    join(cwd, 'telecom', 'agent-logbook.md'),
+  ]
+
+  // Nettoyer les fichiers JSON dans les dossiers
+  for (const dir of dirsToClean) {
+    if (!existsSync(dir)) continue
+    const files = readdirSync(dir).filter(f => f.endsWith('.json'))
+    for (const f of files) {
+      try { unlinkSync(join(dir, f)) } catch { /* ignoré */ }
+    }
+    console.log(`  [Nettoyage] ${dir}: ${files.length} fichier(s) supprimé(s)`)
+  }
+
+  // Nettoyer les fichiers de statut/signal
+  for (const file of filesToDelete) {
+    if (!existsSync(file)) continue
+    try {
+      unlinkSync(file)
+      const name = file.split(/[/\\]/).pop() ?? file
+      console.log(`  [Nettoyage] ${name} supprimé`)
+    } catch { /* ignoré */ }
+  }
+
+  // Nettoyer les artefacts dynamiques dans telecom/agents/*/
+  // (fichiers erreur-*, livrable-* des sessions précédentes)
+  const agentsWorkspaceDir = join(cwd, 'telecom', 'agents')
+  if (existsSync(agentsWorkspaceDir)) {
+    const agentDirs = readdirSync(agentsWorkspaceDir).filter(d => {
+      try { return statSync(join(agentsWorkspaceDir, d)).isDirectory() } catch { return false }
+    })
+    let totalDeleted = 0
+    for (const agentId of agentDirs) {
+      const agentPath = join(agentsWorkspaceDir, agentId)
+      try {
+        const files = readdirSync(agentPath).filter(f => f.startsWith('livrable-') || f.startsWith('erreur-'))
+        for (const f of files) {
+          try { unlinkSync(join(agentPath, f)); totalDeleted++ } catch { /* ignoré */ }
+        }
+      } catch { /* ignoré */ }
+    }
+    if (totalDeleted > 0) {
+      console.log(`  [Nettoyage] telecom/agents/: ${totalDeleted} fichier(s) artefact(s) supprimé(s)`)
+    }
+  }
+
+  // Nettoyer data/watcher/telecom/ s'il existe
+  const watcherDir = join(cwd, 'data', 'watcher', 'telecom')
+  if (existsSync(watcherDir)) {
+    const files = readdirSync(watcherDir).filter(f => f.endsWith('.json'))
+    for (const f of files) {
+      try { unlinkSync(join(watcherDir, f)) } catch { /* ignoré */ }
+    }
+    console.log(`  [Nettoyage] ${watcherDir}: ${files.length} fichier(s) supprimé(s)`)
+  }
+
+  // Réinitialiser les compteurs en mémoire
+  TOTAL_ROUTED = 0
+  TOTAL_SPAWNS = 0
+  TOTAL_BLOCKS = 0
+  ROUTE_HISTORY.length = 0
+  BLOCKED_COUNTS.clear()
+  resetSpawnHistory()
+
+  console.log('  [Nettoyage] État réinitialisé — démarrage vierge')
 }
 
 /**
@@ -170,8 +254,14 @@ function processMessages(): number {
         notifLevel
       )
 
-      // Spawn automatiquement l'agent destinataire
-      spawnAgent(msg.to, msg)
+      // Priorité 1 : Essayer le script-runner (pattern matching → script pré-écrit)
+      // Si un script match, on l'exécute directement sans spawner d'agent LLM.
+      // C'est plus rapide, plus fiable et moins coûteux.
+      const scriptResult = tryScriptRunner(msg)
+      if (!scriptResult) {
+        // Priorité 2 : Pas de script trouvé → fallback sur l'agent LLM
+        spawnAgent(msg.to, msg)
+      }
 
       processed++
     } catch (err) {
@@ -342,6 +432,64 @@ function buildInstruction(agentId: string, msg: IntercomMessage): string {
     `5. Si la tache depasse tes competences, renvoie un message a l'orchestrateur via intercom`,
     seedContext,
   ]).join('\n')
+}
+
+/**
+ * Essaye de matcher un message contre le registre de scripts.
+ * Si un pattern match, exécute le script et notifie le résultat.
+ * Retourne true si un script a été exécuté, false sinon (fallback LLM).
+ */
+function tryScriptRunner(msg: IntercomMessage): boolean {
+  const demande = typeof msg.payload.demande === 'string'
+    ? msg.payload.demande
+    : JSON.stringify(msg.payload)
+
+  const result = matchAndExecute(demande, msg.subject)
+
+  if (!result.matched) {
+    return false // Aucun script trouvé → fallback LLM
+  }
+
+  const ts = new Date().toISOString().slice(11, 19)
+  const emoji = result.exitCode === 0 ? '✅' : '❌'
+  const duration = result.durationMs > 1000
+    ? `${(result.durationMs / 1000).toFixed(1)}s`
+    : `${result.durationMs}ms`
+
+  console.log(`[${ts}] ${emoji} ScriptRunner: ${result.script} (${duration})`)
+
+  // Notifier le résultat
+  const scriptName = result.script?.split(/[/\\]/).pop()?.replace(/\.\w+$/, '') ?? 'script'
+  const message = result.stdout
+    ? `✅ [${scriptName}]\n${result.stdout.slice(0, 500)}`
+    : `✅ [${scriptName}] — (sortie vide)`
+
+  const level: NotificationLevel = result.exitCode === 0 ? 'conclusion' : 'avertissement'
+  pushNotification('script-runner', message, level)
+
+  // Si le script a échoué, on notifie aussi l'erreur
+  if (result.exitCode !== 0 && result.stderr) {
+    pushNotification('script-runner', `⚠️ Erreur: ${result.stderr.slice(0, 200)}`, 'urgent')
+  }
+
+  // Logger dans un fichier de trace
+  try {
+    const logDir = join(cwd, 'telecom', 'scripts')
+    if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true })
+    const logFile = join(logDir, `run-${ts.replace(/[:]/g, '-')}.log`)
+    writeFileSync(logFile, JSON.stringify({
+      timestamp: new Date().toISOString(),
+      subject: msg.subject,
+      demande,
+      script: result.script,
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    }, null, 2), 'utf-8')
+  } catch { /* log non bloquant */ }
+
+  return true
 }
 
 /** Auto-decouverte des agents depuis le dossier .agents/ */
@@ -663,7 +811,9 @@ function spawnAgent(agentId: string, msg: IntercomMessage): void {
 
   const spawnPath = join(import.meta.dirname, '..', '..', 'spawn-agent.js')
   if (!existsSync(spawnPath)) {
-    console.error(`[Daemon] ERR: spawn-agent.js introuvable (${spawnPath})`)
+    const errMsg = `spawn-agent.js introuvable (${spawnPath}) — executez 'npm run build' pour compiler`
+    console.error(`[Daemon] ERR: ${errMsg}`)
+    pushNotification('telecom-daemon', `❌ Impossible de spawn ${agentId} : ${errMsg}`, 'urgent')
     return
   }
 
@@ -761,6 +911,78 @@ function writePid(): void {
   writeFileSync(PID_FILE, String(process.pid), 'utf-8')
 }
 
+/**
+ * Lance le watcher TUI dans une fenêtre de terminal séparée.
+ * Détection automatique de la plateforme :
+ *   win32 → start cmd /c
+ *   darwin → osascript + Terminal.app
+ *   linux  → x-terminal-emulator ou xterm
+ */
+function launchWatcherConsole(): void {
+  const watcherScript = join(cwd, 'dist', 'telecom', 'service', 'telecom-watcher-console.js')
+  const title = `Telecom Watcher — PID:${process.pid} — intercom:0 routed:0`
+
+  // Vérifier que le script compilé existe avant de lancer le terminal
+  if (!existsSync(watcherScript)) {
+    console.log(`[Daemon] Watcher non lancé: script introuvable (${watcherScript})`)
+    return
+  }
+
+  switch (process.platform) {
+    case 'win32': {
+      // start crée une nouvelle fenêtre cmd avec titre et exécute node
+      // chcp 65001 force l'UTF-8 pour les caractères de bordure + couleurs ANSI
+      const cmd = `start "${title}" cmd /c "chcp 65001 >nul && node ${watcherScript}"`
+      exec(cmd, (err: Error | null) => {
+        if (err) console.error(`[Daemon] ERR lancement watcher: ${err.message}`)
+      })
+      break
+    }
+    case 'darwin': {
+      // macOS: ouvrir Terminal.app et lancer le script
+      const cmd = `osascript -e 'tell app "Terminal" to do script "node ${watcherScript}"'`
+      exec(cmd, (err: Error | null) => {
+        if (err) console.error(`[Daemon] ERR lancement watcher: ${err.message}`)
+      })
+      break
+    }
+    default: {
+      // Linux: essayer x-terminal-emulator puis xterm en fallback
+      const termCmd = `x-terminal-emulator -e "node ${watcherScript}" || xterm -e "node ${watcherScript}"`
+      exec(termCmd, (err: Error | null) => {
+        if (err) console.error(`[Daemon] ERR lancement watcher: ${err.message} — installe xterm ou x-terminal-emulator`)
+      })
+      break
+    }
+  }
+}
+
+/**
+ * Tue le watcher console et nettoie les fichiers résiduels.
+ * Lit le PID depuis telecom/watcher.pid (écrit par le watcher lui-même).
+ */
+function killWatcherConsole(): void {
+  if (!existsSync(WATCHER_PID_FILE)) return
+
+  try {
+    const raw = readFileSync(WATCHER_PID_FILE, 'utf-8').trim()
+    const pid = parseInt(raw, 10)
+    if (!isNaN(pid)) {
+      try {
+        process.kill(pid, 'SIGTERM')
+        console.log(`[Daemon] Watcher console tué (PID ${pid})`)
+      } catch {
+        // Le watcher peut déjà être mort — on ignore
+      }
+    }
+  } catch {
+    /* fichier illisible */
+  }
+
+  // Nettoyer le fichier PID quoi qu'il arrive
+  try { unlinkSync(WATCHER_PID_FILE) } catch { /* déjà supprimé */ }
+}
+
 export function showHelp(): void {
   const configPath = join(cwd, 'telecom', 'config.json')
   const agentsDir = join(cwd, '.agents')
@@ -795,6 +1017,8 @@ export function showHelp(): void {
   console.log(`        Traite les messages en attente puis quitte`)
   console.log(`    node dist/telecom/service/telecom-daemon.js --help`)
   console.log(`        Affiche cette aide`)
+  console.log(`    node dist/telecom/service/telecom-daemon.js --no-cleanup`)
+  console.log(`        Demarre le daemon en conservant l'etat pre-existant (debug)`)
   console.log(`    node dist/telecom/service/telecom-daemon.js --reset-stats`)
   console.log(`        Reinitialise les compteurs (routes, spawns, blocages)`)
   console.log('')
@@ -844,17 +1068,44 @@ function main(): void {
     process.exit(0)
   }
 
+  const noCleanup = args.includes('--no-cleanup')
+
   if (!once) {
     // Créer le dossier telecom/ avant d'écrire le PID
     mkdirSync(join(cwd, 'telecom'), { recursive: true })
-    writePid()
     console.log(`[Daemon] Démarrage (PID: ${process.pid})`)
+    if (noCleanup) {
+      console.log(`[Daemon] --no-cleanup: état pré-existant conservé`)
+    } else {
+      console.log(`[Daemon] Nettoyage de l'état pré-existant...`)
+      cleanupOldState()
+    }
+    writePid()
     console.log(`[Daemon] Surveillance: ${INTERCOM_DIR}`)
     console.log(`[Daemon] Routage vers: ${ROUTED_DIR}`)
     console.log(`[Daemon] Intervalle: ${POLL_INTERVAL}ms`)
     logTelecomConfig()
     console.log('')
     setupWatcher()
+    launchWatcherConsole()
+
+    // Signaux : tuer le watcher proprement avant de quitter
+    function daemonCleanup(): void {
+      console.log('')
+      console.log(`[Daemon] Arrêt demandé — nettoyage...`)
+      killWatcherConsole()
+      // Nettoyer les fichiers PID et status
+      try { unlinkSync(PID_FILE) } catch { /* déjà supprimé */ }
+      try { unlinkSync(STATUS_FILE) } catch { /* déjà supprimé */ }
+      console.log(`[Daemon] Daemon terminé.`)
+      process.exit(0)
+    }
+
+    process.on('SIGINT', () => daemonCleanup())
+    process.on('SIGTERM', () => daemonCleanup())
+    // SIGHUP n'existe pas sur Windows, mais ne pas l'ajouter casse les tests Unix
+    // On utilise SIGBREAK qui est l'équivalent Windows de SIGHUP (Ctrl+Break)
+    process.on('SIGBREAK', () => daemonCleanup())
   }
 
   let loopCount = 0

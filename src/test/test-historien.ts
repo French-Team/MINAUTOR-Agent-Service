@@ -8,14 +8,14 @@
 
 import { existsSync, readFileSync, unlinkSync } from 'fs'
 import { join } from 'path'
-import type { Message } from './types/agent-definition.js'
+import type { Message } from '../types/agent-definition.js'
 import {
   analyserHistorique,
   historienResumePourLLM,
   lireFichierSuivi,
   ajouterMarqueur,
   MARQUEURS,
-} from './telecom/service/context/index.js'
+} from '../telecom/service/context/index.js'
 
 const PASS = `${'\x1b[32m'}✓${'\x1b[0m'}`
 const FAIL = `${'\x1b[31m'}✗${'\x1b[0m'}`

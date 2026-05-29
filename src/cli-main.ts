@@ -1,7 +1,7 @@
 import { createInterface } from 'readline/promises'
 import { stdin, stdout, exit } from 'process'
-import { readFileSync, existsSync, unlinkSync, readdirSync } from 'fs'
-import { join } from 'path'
+import { readFileSync, existsSync, unlinkSync, readdirSync, writeFileSync, mkdirSync } from 'fs'
+import { join, dirname } from 'path'
 import { fork, ChildProcess } from 'child_process'
 
 const backgroundAgents = new Map<string, ChildProcess>()
@@ -675,9 +675,8 @@ export async function main() {
     }
 
     // Auto-injecter la skill correspondante dans le system prompt
-    // Mapping : l'agent alice utilise la skill-welcome (pas de raccourci build)
     const SKILL_MAP: Record<string, string> = {
-      alice: 'skill-welcome',
+      alice: 'skill-alice',
     }
     const skillDir = SKILL_MAP[eng.agent.id]
     const skill = skillDir ? loadSkill(skillDir) : null
@@ -689,11 +688,21 @@ export async function main() {
     // Cahier d'aide INDEX.md — SUSPENDU pour Alice (modèle 1.2B, 35+ lignes le saturent).
     // Les patterns Intercom font le travail à sa place.
 
+    // Écrire le message utilisateur pour les scripts d'Alice (handle.js lit ce fichier)
+    const aliceInputPath = join(process.cwd(), 'telecom', 'alice-input.txt')
+    try {
+      mkdirSync(dirname(aliceInputPath), { recursive: true })
+      writeFileSync(aliceInputPath, line, 'utf-8')
+    } catch { /* ignoré — fichier non bloquant */ }
+
     process.stdout.write(`\n${YELLOW}⟳${RESET} ${GRAY}${resolved.provider} / ${resolved.model}${RESET} `)
     try {
       const llmResponse = await eng.callLLM(line, resolved, systemPrompt)
       process.stdout.write(`\r${GREEN}✓${RESET}\n`)
-      eng.addMessage('assistant', llmResponse)
+      // Nettoyer les codes ANSI avant stockage dans l'historique
+      // pour éviter de polluer le contexte LLM au prochain appel
+      const plainResponse = llmResponse.replace(/\x1b\[[0-9;]*m/g, '')
+      eng.addMessage('assistant', plainResponse)
       console.log(`\n${llmResponse}\n`)
     } catch (err) {
       process.stdout.write(`\r${RED}✗${RESET}\n`)

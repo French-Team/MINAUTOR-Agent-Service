@@ -5,7 +5,7 @@
 - **Build**: `npm run build` (TypeScript compilation)
 - **Start**: `npm start` (runs CLI)
 - **Final**: `npm run final` (clean build + start CLI)
-- **Test**: `node dist/test.js` (end-to-end workflow test)
+- **Test**: `node dist/test/test.js` (end-to-end workflow test)
 - **Validate Agent**: `node dist/validate-agent.js <agent-id>`
 - **Spawn Agent**: `node dist/spawn-agent.js <agent-id> "<instruction>"` (background execution)
 
@@ -337,7 +337,7 @@ Standard set: `['run_terminal_command', 'add_message', 'set_output', 'skill']`
 ### Run Full Test
 
 ```bash
-node dist/test.js
+node dist/test/test.js
 ```
 
 Tests:

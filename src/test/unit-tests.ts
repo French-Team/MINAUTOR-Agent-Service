@@ -3,34 +3,34 @@
  * Exécution : node dist/unit-tests.js
  */
 
-import type { Engine } from './engine.js'
+import type { Engine } from '../engine.js'
 
 import type { IncomingMessage, ServerResponse } from 'http'
 
 // ── Imports ESM (obligatoire car "type": "module") ──────
 
-import { top15, safeExit } from './constants.js'
-import { DEFAULT_AGENT, getAgent } from './cli-utils.js'
-import { showMenu, showHelp } from './cli-menu.js'
-import { showBanner } from './cli-banner.js'
-import { logDaemonStarted, logSkillLoaded, logWelcomeMessage } from './cli-startup.js'
-import { handleUseAgent, handleListAgents } from './cli-agents.js'
-import { showSessions, showInfo } from './cli-sessions.js'
+import { top15, safeExit } from '../constants.js'
+import { DEFAULT_AGENT, getAgent } from '../cli-utils.js'
+import { showMenu, showHelp } from '../cli-menu.js'
+import { showBanner } from '../cli-banner.js'
+import { logDaemonStarted, logSkillLoaded, logWelcomeMessage } from '../cli-startup.js'
+import { handleUseAgent, handleListAgents } from '../cli-agents.js'
+import { showSessions, showInfo } from '../cli-sessions.js'
 
 // Vérification d'existence des exports des autres modules
-import { handleManageProvidersMenu, handleProviderActions } from './cli-providers.js'
-import { handleProviders } from './cli-providers-advanced.js'
-import { handleCommandPicker } from './cli-selector.js'
-import { handleEditAgent } from './cli-edit.js'
-import { handleShellLine } from './cli-runner.js'
-import { main as cliMain } from './cli-main.js'
+import { handleManageProvidersMenu, handleProviderActions } from '../cli-providers.js'
+import { handleProviders } from '../cli-providers-advanced.js'
+import { handleCommandPicker } from '../cli-selector.js'
+import { handleEditAgent } from '../cli-edit.js'
+import { handleShellLine } from '../cli-runner.js'
+import { main as cliMain } from '../cli-main.js'
 
 // Module moteur — engine-runner.ts
-import { createRunner } from './engine-runner.js'
-import type { ToolCall } from './types/agent-definition.js'
+import { createRunner } from '../engine-runner.js'
+import type { ToolCall } from '../types/agent-definition.js'
 
 // Module télécom — anti-boucle
-import { tryRecordSpawn, resetSpawnHistory, MAX_SPAWNS_PER_AGENT, SPAWN_WINDOW_MS, loadTelecomConfig, showHelp as daemonShowHelp, resetStats } from './telecom/service/telecom-daemon.js'
+import { tryRecordSpawn, resetSpawnHistory, MAX_SPAWNS_PER_AGENT, SPAWN_WINDOW_MS, loadTelecomConfig, showHelp as daemonShowHelp, resetStats } from '../telecom/service/telecom-daemon.js'
 
 // ── Types ────────────────────────────────────────────────
 
@@ -250,11 +250,11 @@ function testCliStartup() {
       joined.includes('Skill'),
       `lines: ${captured.slice(0, 2).join(' | ')}`
     )
-    assert('logSkillLoaded() affiche le nom "skill-welcome"',
-      joined.includes('skill-welcome'),
+    assert('logSkillLoaded() affiche le nom "skill-alice"',
+      joined.includes('skill-alice'),
     )
     assert('logSkillLoaded() affiche la description de la skill',
-      joined.includes('Instructions de base'),
+      joined.includes('Lexique des scripts Alice'),
     )
   })
 
