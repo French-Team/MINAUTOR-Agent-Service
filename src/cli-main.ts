@@ -6,7 +6,7 @@ import { fork, ChildProcess } from 'child_process'
 
 const backgroundAgents = new Map<string, ChildProcess>()
 import { loadSkill } from './skills.js'
-import { popAllNotifications, setNotificationFilter, getNotificationFilter, levelIcon, listLevels, countPendingNotifications, removeNotification, shouldShowNotification, loadNotificationHistory, cleanNotificationArchive, type NotificationLevel, type Notification } from './notify.js'
+import { popAllNotifications, setNotificationFilter, getNotificationFilter, levelIcon, listLevels, countPendingNotifications, removeNotification, loadNotificationHistory, cleanNotificationArchive, type NotificationLevel, type Notification } from './notify.js'
 import { emitKeypressEvents } from 'readline'
 import { createEngine, type Engine } from './engine.js'
 import { listLocalAgents, readLocalAgent, scaffoldAgent } from './agents.js'
@@ -46,6 +46,7 @@ import { DEFAULT_AGENT, getAgent, loadAgentFromFile } from './cli-utils.js'
 import { handleCommandPicker } from './cli-selector.js'
 import { handleShellLine } from './cli-runner.js'
 import { tryRouteIntercom, getCurrentProject } from './cli-intercom-router.js'
+import { showSuggestionMenu, showSuggestionMenuRaw, clearSuggestions } from './cli-suggestions.js'
 import { runContextTest } from './cli-context-test.js'
 import { getFeuRougeClient, resetFeuRougeClient } from './feurouge/feurouge-client.js'
 import { handlePermissionsCommand } from './feurouge/permissions-cli.js'
@@ -63,36 +64,29 @@ function startTelecomDaemon(): void {
     backgroundAgents.set('telecom-daemon', telecomDaemon)
 
     // Recevoir les notifications en temps réel via IPC
+    // Les notifications ne sont PLUS affichées dans le CLI — elles sont
+    // visibles dans la fenêtre dédiée (telecom-notification-viewer).
+    // Seul le menu interactif des suggestions (Actions rapides) est conservé.
     telecomDaemon.on('message', (msg: unknown) => {
       const data = msg as { type?: string; id?: string; from?: string; message?: string; level?: string }
       if (data?.type === 'notification' && data.id) {
-        // Vérifier le filtre actif avant d'afficher en temps réel
-        const notifLevel = (data.level ?? 'info') as NotificationLevel
-        if (!shouldShowNotification(notifLevel)) {
-          // Filtrée : la notification reste dans le fichier pour
-          // ne pas la perdre si l'utilisateur change le filtre plus tard
-          return
-        }
-
-        // Tentative de suppression de la notification du fichier.
-        // Si removeNotification retourne true, c'est que la notification
-        // était encore dans le fichier (pas encore consommée par le loop).
-        // Dans ce cas, on l'affiche en temps réel.
-        // Si false, le loop l'a déjà affichée → on ne double pas.
+        // Consommer la notification (la retirer du fichier) pour éviter
+        // qu'elle ne s'accumule — la fenêtre dédiée la lit directement
         const wasPending = removeNotification(data.id)
         if (wasPending) {
-          const icon = levelIcon(notifLevel)
-          const msgLines = (data.message || '').split('\n')
-          process.stdout.write(`\n${BOLD}${LIME}╔ Notification${RESET}\n`)
-          process.stdout.write(`${BOLD}${LIME}║  ${RESET}${icon} ${YELLOW}${data.from}${RESET}\n`)
-          for (const line of msgLines) {
-            if (line) {
-              process.stdout.write(`${BOLD}${LIME}║${RESET}    ${line}\n`)
-            } else {
-              process.stdout.write(`${BOLD}${LIME}║${RESET}\n`)
+          // Afficher le menu interactif des suggestions en direct
+          // Si le daemon a ecrit suggestions.json, on propose un choix clavier
+          // immediatement, sans attendre le prochain tour de boucle.
+          showSuggestionMenuRaw().then(cmd => {
+            if (cmd !== null) {
+              const routeResult = tryRouteIntercom(cmd)
+              if (routeResult) {
+                process.stdout.write(`\n${GREEN}> Routé : ${routeResult.subject}${RESET}\n`)
+              }
             }
-          }
-          process.stdout.write(`${BOLD}${LIME}╚${RESET}\n`)
+          }).catch(() => {
+            // ignore - le menu raw est non-bloquant
+          })
         }
       }
     })
@@ -308,32 +302,32 @@ export async function main() {
 
   while (true) {
     try {
-    // vérifier les notifications des agents en arrière-plan
-    const alerts = popAllNotifications()
-    if (alerts.length > 0) {
-      console.log(`\n${BOLD}${LIME}╔ Notifications${RESET}`)
-      for (const n of alerts) {
-        const icon = levelIcon(n.level ?? 'info')
-        const msgLines = n.message.split('\n')
-        console.log(`\n${BOLD}${LIME}║  ${RESET}${icon} ${YELLOW}${n.from}${RESET}`)
-        for (const line of msgLines) {
-          if (line) {
-            console.log(`${BOLD}${LIME}║${RESET}    ${line}`)
-          } else {
-            console.log(`${BOLD}${LIME}║${RESET}`)
-          }
-        }
-      }
-      console.log(`${BOLD}${LIME}╚${RESET}\n`)
-    }
+    // Les notifications ne sont PLUS affichées dans le CLI.
+    // Elles sont visibles dans la fenêtre dédiée (telecom-notification-viewer).
+    // On consomme juste les notifications pour éviter l'accumulation.
+    popAllNotifications()
 
-    const displayName = getDisplayName(loadUserProfile())
-    const currentProject = getCurrentProject()
-    const projectBadge = currentProject ? ` ${CYAN}◈${currentProject}${RESET}` : ''
-    const prefix = GRAY + displayName + projectBadge + RESET
-    const pending = countPendingNotifications()
-    const badge = pending > 0 ? ` ${YELLOW}[${pending}]${RESET} ` : ''
-    let line = (await rl.question(`${prefix}${badge}> `)).trim()
+    // ── Menu interactif des suggestions ──────────────────
+    // Après une notification contenant des suggestions (→ commande — Label),
+    // on affiche un menu numéroté pour exécuter la commande d'un simple chiffre.
+    const suggestionCmd = await showSuggestionMenu(rl)
+    let line: string
+    if (suggestionCmd !== null) {
+      // L'utilisateur a choisi une suggestion → on exécute cette commande
+      line = suggestionCmd
+      console.log(`${GREEN}→${RESET} ${suggestionCmd}\n`)
+    } else {
+      // Vider les suggestions périmées (si le fichier traîne)
+      clearSuggestions()
+      // Prompt normal
+      const displayName = getDisplayName(loadUserProfile())
+      const currentProject = getCurrentProject()
+      const projectBadge = currentProject ? ` ${CYAN}◈${currentProject}${RESET}` : ''
+      const prefix = GRAY + displayName + projectBadge + RESET
+      const pending = countPendingNotifications()
+      const badge = pending > 0 ? ` ${YELLOW}[${pending}]${RESET} ` : ''
+      line = (await rl.question(`${prefix}${badge}> `)).trim()
+    }
 
     if (!line) { showMenu(currentEngine!); continue }
 

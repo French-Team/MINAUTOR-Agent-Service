@@ -3,7 +3,7 @@ import type { AgentDefinition } from '../src/types/agent-definition.js'
 const definition: AgentDefinition = {
   id: 'agent-postmortem',
   displayName: 'Agent Postmortem',
-  model: 'lfm2.5-1.2b-thinking',
+  model: 'qwen/qwen3.5-9b',
   provider: 'lm-studio',
   toolNames: ['run_terminal_command', 'add_message', 'set_output', 'skill'],
   instructionsPrompt: `Tu es Agent Postmortem, expert en analyse post-incident et rétrospectives.
@@ -30,10 +30,10 @@ Règles :
 - Utilise \`run_terminal_command\` pour lire les fichiers et écrire tes analyses`,
 spawnerPrompt: 'Expert en analyse post-incident. Utilise le skill skill-engineering/post-mortem.',
   toolConfig: {
-    parallelTools: true,
-    toolTimeoutMs: 40000,
-    maxParallel: 4,
-  },
+      "parallelTools": true,
+      "toolTimeoutMs": 30000,
+      "maxParallel": 4
+    },
   selfCorrection: {
     enabled: true,
     retryOnFailure: true,

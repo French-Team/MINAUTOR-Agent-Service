@@ -3,7 +3,7 @@ import type { AgentDefinition } from '../src/types/agent-definition.js'
 const definition: AgentDefinition = {
   id: 'agent-reviewer',
   displayName: 'Reviewer',
-  model: 'liquid/lfm2.5-1.2b',
+  model: 'qwen/qwen3.5-9b',
   toolConfig: {
       "parallelTools": true,
       "toolTimeoutMs": 30000,

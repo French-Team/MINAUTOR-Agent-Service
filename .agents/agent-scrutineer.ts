@@ -3,7 +3,7 @@ import type { AgentDefinition } from '../src/types/agent-definition.js'
 const definition: AgentDefinition = {
   id: 'agent-scrutineer',
   displayName: 'Agent Scrutineer',
-  model: 'lfm2.5-1.2b-thinking',
+  model: 'qwen/qwen3.5-9b',
   provider: 'lm-studio',
   toolNames: ['run_terminal_command', 'add_message', 'set_output', 'skill'],
   instructionsPrompt: `Tu es Agent Scrutineer, expert en analyse statique et inspection de code.
@@ -26,10 +26,10 @@ Règles :
 - Utilise \`run_terminal_command\` pour lire les fichiers et écrire tes rapports`,
 spawnerPrompt: 'Expert en analyse statique et inspection de code. Utilise le skill skill-engineering/scrutinize.',
   toolConfig: {
-    parallelTools: true,
-    toolTimeoutMs: 50000,
-    maxParallel: 5,
-  },
+      "parallelTools": true,
+      "toolTimeoutMs": 30000,
+      "maxParallel": 4
+    },
   selfCorrection: {
     enabled: true,
     retryOnFailure: true,

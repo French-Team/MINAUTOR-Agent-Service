@@ -3,7 +3,7 @@ import type { AgentDefinition } from '../src/types/agent-definition.js'
 const definition: AgentDefinition = {
   id: 'agent-debugger',
   displayName: 'Agent Debugger',
-  model: 'lfm2.5-1.2b-thinking',
+  model: 'qwen/qwen3.5-9b',
   provider: 'lm-studio',
   toolNames: ['run_terminal_command', 'add_message', 'set_output', 'skill'],
   instructionsPrompt: `Tu es Agent Debugger, spécialiste en résolution de bugs et diagnostics.
@@ -29,10 +29,10 @@ Règles :
 - Utilise \`run_terminal_command\` pour lire les fichiers et écrire tes diagnostics`,
 spawnerPrompt: 'Expert en débogage systématique. Utilise le skill skill-engineering/debug-mantra.',
   toolConfig: {
-    parallelTools: true,
-    toolTimeoutMs: 50000,
-    maxParallel: 5,
-  },
+      "parallelTools": true,
+      "toolTimeoutMs": 30000,
+      "maxParallel": 4
+    },
   selfCorrection: {
     enabled: true,
     retryOnFailure: true,

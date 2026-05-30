@@ -347,7 +347,10 @@ export function matchAndExecute(
   env.SCRIPT_PATTERN = matched.entry.pattern
   env.SCRIPT_DESCRIPTION = matched.entry.description
 
-  return executeScript(matched.entry.script, env)
+  const result = executeScript(matched.entry.script, env)
+  // Transmettre les paramètres extraits dans le résultat
+  result.params = { ...matched.params }
+  return result
 }
 
 // ── CLI ────────────────────────────────────────────────

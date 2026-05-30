@@ -35,6 +35,45 @@ scripts:
     script: "scripts/projects/list.js"
     description: "Liste tous les projets disponibles"
 
+  - pattern: "(découvre|découvrir|explore|explorer|analyse|analyser)\s+(le\s+)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/decouverte.js"
+    description: "Explore la structure, dépendances et architecture du projet"
+    params:
+      - name: project
+        from: 3
+
+  - pattern: "structure\s+(du\s+)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/decouverte.js"
+    description: "Affiche la structure arborescente du projet"
+    params:
+      - name: project
+        from: 2
+
+  - pattern: "gén[èe]re?\s+(un\s+)?readme\s+(pour\s+)?(?:le\s+)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/decouverte.js"
+    description: "Génère un README technique pour le projet"
+    params:
+      - name: project
+        from: 3
+
+  - pattern: "(découvre|découvrir|explore|explorer|analyse|analyser)\s+(le\s+)?(?:projet)?"
+    subject: "project-request"
+    script: "scripts/projects/decouverte.js"
+    description: "Explore un projet (contexte actif)"
+
+  - pattern: "gén[èe]re?\s+(un\s+)?readme"
+    subject: "project-request"
+    script: "scripts/projects/decouverte.js"
+    description: "Génère un README (contexte actif)"
+
+  - pattern: "liste(\s+les)?\s+projets?"
+    subject: "project-request"
+    script: "scripts/projects/list.js"
+    description: "Liste tous les projets disponibles"
+
   - pattern: "(montre|affiche|détails?|info)\s+(le\s+)?projet\s+(\S+)"
     subject: "project-request"
     script: "scripts/projects/info.js"
@@ -42,6 +81,321 @@ scripts:
     params:
       - name: project
         from: 3
+
+  - pattern: "(commencer|menu)\s+(le\s+)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/menu.js"
+    description: "Affiche le menu de navigation du projet"
+    params:
+      - name: project
+        from: 3
+
+  - pattern: "(état|etat|statut|progression)\s+(du\s+)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/etat.js"
+    description: "État détaillé du projet (progression, tâches, domaine)"
+    params:
+      - name: project
+        from: 3
+
+  - pattern: "(continuer|travailler)\s+(sur\s+)?(?:le\s+)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/work.js"
+    description: "Affiche la prochaine tâche et guide le travail"
+    params:
+      - name: project
+        from: 3
+
+  - pattern: "prochaine\s+t[âa]che\s+(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/work.js"
+    description: "Affiche la prochaine tâche disponible"
+    params:
+      - name: project
+        from: 1
+
+  - pattern: "(?:ajoute|nouvelle)\s+(?:une|la)?\s*t[âa]che\s+\"([^\"]+)\"\s+(?:dans\s+(\S+)\s+)?(?:au\s+|pour\s+)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/add-task.js"
+    description: "Ajoute une tâche à un projet (titre entre guillemets)"
+    params:
+      - name: project
+        from: 3
+
+  - pattern: "(?:ajoute|nouvelle)\s+(?:une|la)?\s*t[âa]che\s+\"([^\"]+)\""
+    subject: "project-request"
+    script: "scripts/projects/add-task.js"
+    description: "Ajoute une tâche (projet déduit du contexte)"
+
+  # ── Modifier tâche ────────────────────────────────
+  - pattern: "(?:renomme|renommer)\s+(?:la\s+)?t[âa]che\s+(\S+)\s+en\s+\"([^\"]+)\"\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/edit-task.js"
+    description: "Renomme une tâche (avec projet)"
+    params:
+      - name: project
+        from: 3
+      - name: task
+        from: 1
+
+  - pattern: "(?:renomme|renommer)\s+(?:la\s+)?t[âa]che\s+(\S+)\s+en\s+\"([^\"]+)\""
+    subject: "project-request"
+    script: "scripts/projects/edit-task.js"
+    description: "Renomme une tâche (contexte actif)"
+    params:
+      - name: task
+        from: 1
+
+  - pattern: "(?:renomme|renommer)\s+(?:la\s+)?t[âa]che\s+en\s+cours\s+en\s+\"([^\"]+)\"\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/edit-task.js"
+    description: "Renomme la tâche en cours (avec projet)"
+    params:
+      - name: project
+        from: 2
+
+  - pattern: "(?:renomme|renommer)\s+(?:la\s+)?t[âa]che\s+en\s+cours\s+en\s+\"([^\"]+)\""
+    subject: "project-request"
+    script: "scripts/projects/edit-task.js"
+    description: "Renomme la tâche en cours (contexte actif)"
+
+  - pattern: "(?:déplace|déplacer|deplace|deplacer)\s+(?:la\s+)?t[âa]che\s+(\S+)\s+(?:vers|dans)\s+(\S+)\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/edit-task.js"
+    description: "Déplace une tâche dans un autre domaine (avec projet)"
+    params:
+      - name: project
+        from: 3
+      - name: task
+        from: 1
+      - name: area
+        from: 2
+
+  - pattern: "(?:déplace|déplacer|deplace|deplacer)\s+(?:la\s+)?t[âa]che\s+(\S+)\s+(?:vers|dans)\s+(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/edit-task.js"
+    description: "Déplace une tâche dans un autre domaine (contexte actif)"
+    params:
+      - name: task
+        from: 1
+      - name: area
+        from: 2
+
+  - pattern: "(?:déplace|déplacer|deplace|deplacer)\s+(?:la\s+)?t[âa]che\s+en\s+cours\s+(?:vers|dans)\s+(\S+)\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/edit-task.js"
+    description: "Déplace la tâche en cours dans un autre domaine (avec projet)"
+    params:
+      - name: project
+        from: 2
+      - name: area
+        from: 1
+
+  - pattern: "(?:déplace|déplacer|deplace|deplacer)\s+(?:la\s+)?t[âa]che\s+en\s+cours\s+(?:vers|dans)\s+(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/edit-task.js"
+    description: "Déplace la tâche en cours dans un autre domaine (contexte actif)"
+    params:
+      - name: area
+        from: 1
+
+  - pattern: "(?:change|modifie)\s+(?:la\s+)?description\s+(?:de\s+)?(?:la\s+)?t[âa]che\s+(\S+)\s+en\s+\"([^\"]+)\"\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/edit-task.js"
+    description: "Change la description d'une tâche (avec projet)"
+    params:
+      - name: project
+        from: 3
+      - name: task
+        from: 1
+
+  - pattern: "(?:change|modifie)\s+(?:la\s+)?description\s+(?:de\s+)?(?:la\s+)?t[âa]che\s+(\S+)\s+en\s+\"([^\"]+)\""
+    subject: "project-request"
+    script: "scripts/projects/edit-task.js"
+    description: "Change la description d'une tâche (contexte actif)"
+    params:
+      - name: task
+        from: 1
+
+  - pattern: "(?:change|modifie)\s+(?:la\s+)?description\s+(?:de\s+)?(?:la\s+)?t[âa]che\s+en\s+cours\s+en\s+\"([^\"]+)\"\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/edit-task.js"
+    description: "Change la description de la tâche en cours (avec projet)"
+    params:
+      - name: project
+        from: 2
+
+  - pattern: "(?:change|modifie)\s+(?:la\s+)?description\s+(?:de\s+)?(?:la\s+)?t[âa]che\s+en\s+cours\s+en\s+\"([^\"]+)\""
+    subject: "project-request"
+    script: "scripts/projects/edit-task.js"
+    description: "Change la description de la tâche en cours (contexte actif)"
+
+
+
+  # ── Supprimer tâche (confirmation en 2 étapes) ───────
+  # Étape 2 : confirmation de suppression (patterns AVANT les suppressions initiales)
+  - pattern: "(?:confirme|oui|valide)\s+(?:la\s+)?suppression\s+(?:de\s+)?(?:la\s+)?t[âa]che\s+(task-[\w-]+)\s+(?:dans\s+(?:le\s+)?|au\s+|du\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/delete-task.js"
+    description: "Confirme la suppression d'une tâche par ID (avec projet)"
+    params:
+      - name: project
+        from: 2
+      - name: task
+        from: 1
+
+  - pattern: "(?:confirme|oui|valide)\s+(?:la\s+)?suppression\s+(?:de\s+)?(?:la\s+)?t[âa]che\s+(task-[\w-]+)"
+    subject: "project-request"
+    script: "scripts/projects/delete-task.js"
+    description: "Confirme la suppression d'une tâche par ID (contexte actif)"
+    params:
+      - name: task
+        from: 1
+
+  - pattern: "(?:confirme|oui|valide)\s+(?:la\s+)?suppression\s+(?:de\s+)?(?:la\s+)?t[âa]che\s+en\s+cours\s+(?:dans\s+(?:le\s+)?|au\s+|du\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/delete-task.js"
+    description: "Confirme la suppression de la tâche en cours (avec projet)"
+    params:
+      - name: project
+        from: 1
+
+  - pattern: "(?:confirme|oui|valide)\s+(?:la\s+)?suppression\s+(?:de\s+)?(?:la\s+)?t[âa]che\s+en\s+cours"
+    subject: "project-request"
+    script: "scripts/projects/delete-task.js"
+    description: "Confirme la suppression de la tâche en cours (contexte actif)"
+
+  # Étape 1 : demande initiale de suppression (AFFICHE la tâche + demande confirmation)
+  - pattern: "(?:supprime|efface|retire|enlève|enleve|delete|remove)\s+(?:la\s+)?t[âa]che\s+(task-[\w-]+)\s+(?:dans\s+(?:le\s+)?|au\s+|du\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/delete-task.js"
+    description: "Supprime une tâche par ID (avec projet) — 1ère étape, demande confirmation"
+    params:
+      - name: project
+        from: 2
+      - name: task
+        from: 1
+
+  - pattern: "(?:supprime|efface|retire|enlève|enleve|delete|remove)\s+(?:la\s+)?t[âa]che\s+(task-[\w-]+)"
+    subject: "project-request"
+    script: "scripts/projects/delete-task.js"
+    description: "Supprime une tâche par ID (contexte actif) — 1ère étape, demande confirmation"
+    params:
+      - name: task
+        from: 1
+
+  - pattern: "(?:supprime|efface|retire|enlève|enleve|delete|remove)\s+(?:la\s+)?t[âa]che\s+en\s+cours\s+(?:dans\s+(?:le\s+)?|au\s+|du\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/delete-task.js"
+    description: "Supprime la tâche en cours (avec projet) — 1ère étape, demande confirmation"
+    params:
+      - name: project
+        from: 1
+
+  - pattern: "(?:supprime|efface|retire|enlève|enleve|delete|remove)\s+(?:la\s+)?t[âa]che\s+en\s+cours"
+    subject: "project-request"
+    script: "scripts/projects/delete-task.js"
+    description: "Supprime la tâche en cours (contexte actif) — 1ère étape, demande confirmation"
+    params: []
+
+
+  # ── Bloquer tâche ────────────────────────────────────
+  - pattern: "(?:(?<!d[ée])bloque|\bbloquer|\bblock)\s+(?:la\s+)?t[âa]che\s+(task-[\w-]+)\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/block-task.js"
+    description: "Bloque une tâche par ID (avec projet)"
+    params:
+      - name: project
+        from: 2
+      - name: task
+        from: 1
+
+  - pattern: "(?:(?<!d[ée])bloque|\bbloquer|\bblock)\s+(?:la\s+)?t[âa]che\s+(task-[\w-]+)"
+    subject: "project-request"
+    script: "scripts/projects/block-task.js"
+    description: "Bloque une tâche par ID (contexte actif)"
+    params:
+      - name: task
+        from: 1
+
+  - pattern: "(?:(?<!d[ée])bloque|\bbloquer|\bblock)\s+(?:la\s+)?t[âa]che\s+en\s+cours\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/block-task.js"
+    description: "Bloque la tâche en cours (avec projet)"
+    params:
+      - name: project
+        from: 1
+
+  - pattern: "(?:(?<!d[ée])bloque|\bbloquer|\bblock)\s+(?:la\s+)?t[âa]che\s+en\s+cours"
+    subject: "project-request"
+    script: "scripts/projects/block-task.js"
+    description: "Bloque la tâche en cours (contexte actif)"
+
+  # ── Débloquer tâche ──────────────────────────────────
+  - pattern: "(?:d[ée]bloque|d[ée]bloquer|unblock)\s+(?:la\s+)?t[âa]che\s+(task-[\w-]+)\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/unblock-task.js"
+    description: "Débloque une tâche par ID (avec projet)"
+    params:
+      - name: project
+        from: 2
+      - name: task
+        from: 1
+
+  - pattern: "(?:d[ée]bloque|d[ée]bloquer|unblock)\s+(?:la\s+)?t[âa]che\s+(task-[\w-]+)"
+    subject: "project-request"
+    script: "scripts/projects/unblock-task.js"
+    description: "Débloque une tâche par ID (contexte actif)"
+    params:
+      - name: task
+        from: 1
+
+  - pattern: "(?:d[ée]bloque|d[ée]bloquer|unblock)\s+(?:la\s+)?t[âa]che\s+en\s+cours\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/unblock-task.js"
+    description: "Débloque la tâche en cours (avec projet)"
+    params:
+      - name: project
+        from: 1
+
+  - pattern: "(?:d[ée]bloque|d[ée]bloquer|unblock)\s+(?:la\s+)?t[âa]che\s+en\s+cours"
+    subject: "project-request"
+    script: "scripts/projects/unblock-task.js"
+    description: "Débloque la tâche en cours (contexte actif)"
+
+
+  # ── Lister tâches (filtres domaine/statut parsés par le script) ──
+  - pattern: "liste\s+(?:toutes\s+)?(?:les\s+)?t[âa]ches"
+    subject: "project-request"
+    script: "scripts/projects/list-tasks.js"
+    description: "Liste les tâches avec filtres domaine/statut (projet parsé automatiquement)"
+
+  # ── Marquer tâche terminée ──────────────────────────
+  - pattern: "(?:marque|termine)\s+(?:la\s+)?t[âa]che\s+en\s+cours\s+(?:comme\s+)?termin[ée]e\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/done-task.js"
+    description: "Marque la tâche en cours comme terminée (avec projet)"
+    params:
+      - name: project
+        from: 1
+
+  - pattern: "(?:marque|termine)\s+(?:la\s+)?t[âa]che\s+en\s+cours\s+(?:comme\s+)?termin[ée]e"
+    subject: "project-request"
+    script: "scripts/projects/done-task.js"
+    description: "Marque la tâche en cours comme terminée (contexte actif)"
+
+  - pattern: "(?:marque|termine)\s+(?:la\s+)?t[âa]che\s+(\S+)\s+(?:comme\s+)?termin[ée]e\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
+    subject: "project-request"
+    script: "scripts/projects/done-task.js"
+    description: "Marque une tâche comme terminée (avec projet)"
+    params:
+      - name: project
+        from: 2
+
+  - pattern: "(?:marque|termine)\s+(?:la\s+)?t[âa]che\s+(\S+)\s+(?:comme\s+)?termin[ée]e"
+    subject: "project-request"
+    script: "scripts/projects/done-task.js"
+    description: "Marque une tâche comme terminée (contexte actif)"
 
   - pattern: "cr[eé]e?r?\s+(un\s+)?projet\s+\"([^\"]+)\""
     subject: "project-request"

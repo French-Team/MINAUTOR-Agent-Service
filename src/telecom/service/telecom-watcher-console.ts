@@ -44,6 +44,7 @@ const LOGBOOK_PATH = join(CWD, 'telecom', 'agent-logbook.md')
 const STATUS_FILE = join(CWD, 'telecom', 'daemon.status.json')
 const PID_FILE = join(CWD, 'telecom', 'daemon.pid')
 const WATCHER_PID_FILE = join(CWD, 'telecom', 'watcher.pid')
+const WATCHER_SHUTDOWN_FILE = join(CWD, 'telecom', 'watcher.shutdown')
 const NOTIFY_PATH = join(CWD, 'telecom', 'notifications.json')
 const RESIZE_DEBUG_PATH = join(CWD, 'telecom', 'resize-debug.log')
 const POLL_INTERVAL = 1000 // 1 seconde
@@ -1139,6 +1140,12 @@ function main(): void {
 
     // Polling périodique (1s) comme fallback
     const pollTimer = setInterval(() => {
+      // Vérifier si le daemon demande un shutdown gracieux
+      if (existsSync(WATCHER_SHUTDOWN_FILE)) {
+        try { unlinkSync(WATCHER_SHUTDOWN_FILE) } catch { /* déjà supprimé */ }
+        shutdown()
+        return
+      }
       collectAll()
     }, POLL_INTERVAL)
 

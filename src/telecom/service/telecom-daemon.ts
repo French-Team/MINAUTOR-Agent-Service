@@ -18,8 +18,9 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, unlinkSync, statSync, rmdirSync, watch } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { fork, exec } from 'node:child_process'
+import { fork, exec, spawn, execSync } from 'node:child_process'
 import { pushNotification, type NotificationLevel } from '../../notify.js'
+import { writeSuggestions, parseSuggestionsFromOutput } from '../../cli-suggestions.js'
 import { getFeuRougeClient } from '../../feurouge/feurouge-client.js'
 import { getAgentPermission } from '../../feurouge/permissions.js'
 import { matchAndExecute } from '../../script-runner.js'
@@ -32,9 +33,12 @@ const POLL_INTERVAL = 1000 // 1 seconde
 const WATCH_DEBOUNCE_MS = 500 // Ignorer les doublons fs.watch sous 500ms
 const PID_FILE = join(cwd, 'telecom', 'daemon.pid')
 const WATCHER_PID_FILE = join(cwd, 'telecom', 'watcher.pid')
+const VIEWER_PID_FILE = join(cwd, 'telecom', 'notification-viewer.pid')
 const STATUS_FILE = join(cwd, 'telecom', 'daemon.status.json')
 const RESET_FILE = join(cwd, 'telecom', 'daemon.reset')
 const TRIGGER_FILE = join(cwd, 'telecom', 'daemon.trigger')
+const WATCHER_SHUTDOWN_FILE = join(cwd, 'telecom', 'watcher.shutdown')
+const VIEWER_SHUTDOWN_FILE = join(cwd, 'telecom', 'notification-viewer.shutdown')
 const MAX_ROUTE_HISTORY = 10
 const CLEANUP_INTERVAL = 300 // Nettoyer la mémoire vive toutes les 300 itérations (~10 min)
 const MEMOIRE_TTL_MS = 60 * 60 * 1000 // 1 heure
@@ -71,8 +75,11 @@ function cleanupOldState(): void {
   const filesToDelete: string[] = [
     STATUS_FILE,
     WATCHER_PID_FILE,
+    VIEWER_PID_FILE,
     TRIGGER_FILE,
     RESET_FILE,
+    WATCHER_SHUTDOWN_FILE,
+    VIEWER_SHUTDOWN_FILE,
     join(cwd, 'telecom', 'notifications.json'),
     join(cwd, 'telecom', 'agent-logbook.md'),
   ]
@@ -85,10 +92,21 @@ function cleanupOldState(): void {
       try { unlinkSync(join(dir, f)) } catch { /* ignoré */ }
     }
     console.log(`  [Nettoyage] ${dir}: ${files.length} fichier(s) supprimé(s)`)
-  }
+  }    // Nettoyer le PID du visionneur de notifications s'il existe
+    try {
+      if (existsSync(VIEWER_PID_FILE)) {
+        const raw = readFileSync(VIEWER_PID_FILE, 'utf-8').trim()
+        const pid = parseInt(raw, 10)
+        if (!isNaN(pid)) {
+          try { process.kill(pid, 'SIGTERM') } catch { /* déjà mort */ }
+        }
+        unlinkSync(VIEWER_PID_FILE)
+        console.log(`  [Nettoyage] notification-viewer.pid supprimé (PID ${pid})`)
+      }
+    } catch { /* ignoré */ }
 
-  // Nettoyer les fichiers de statut/signal
-  for (const file of filesToDelete) {
+    // Nettoyer les fichiers de statut/signal
+    for (const file of filesToDelete) {
     if (!existsSync(file)) continue
     try {
       unlinkSync(file)
@@ -435,6 +453,248 @@ function buildInstruction(agentId: string, msg: IntercomMessage): string {
 }
 
 /**
+ * Lit le statut d'une tâche depuis .tasks.json.
+ */
+function readTaskStatus(projectName: string, taskId: string): string | null {
+  if (!projectName || !taskId) return null
+  try {
+    const tasksPath = join(cwd, 'workspaces', projectName, '.tasks.json')
+    const raw = readFileSync(tasksPath, 'utf-8')
+    const board = JSON.parse(raw) as { tasks: Array<{ id: string; status: string }> }
+    const task = board.tasks.find(t => t.id === taskId)
+    return task?.status ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Extrait le premier ID de tâche (task-xxx) depuis la sortie d'un script.
+ * Gère à la fois le format texte ("ID : task-xxx" ou "(task-xxx)")
+ * et le format JSON ({"task":{"id":"task-xxx"}}).
+ */
+function extractTaskIdFromStdout(stdout: string): string | null {
+  if (!stdout) return null
+
+  // Essayer JSON d'abord
+  try {
+    const parsed = JSON.parse(stdout.trim())
+    if (typeof parsed?.id === 'string' && /^task-/.test(parsed.id)) return parsed.id
+    if (typeof parsed?.task?.id === 'string' && /^task-/.test(parsed.task.id)) return parsed.task.id
+  } catch {
+    // Pas du JSON, continuer
+  }
+
+  // Regex : capturer le premier task-xxx dans le texte
+  const match = stdout.match(/task-[a-z0-9_-]+/)
+  if (match) return match[0]
+
+  return null
+}
+
+/**
+ * Génère des suggestions de suivi contextuelles après un script exécuté avec succès.
+ * Propose les 3-5 prochaines actions possibles selon le type de script.
+ *
+ * @param taskId - Si fourni, remplace les "..." par l'ID réel dans les suggestions
+ * @param taskStatus - Si fourni, filtre les suggestions selon le statut réel de la tâche
+ */
+function getFollowUpSuggestions(
+  scriptPath: string | undefined,
+  projectName: string,
+  demande: string,
+  taskId?: string,
+  taskStatus?: string,
+): string {
+  if (!scriptPath) return ''
+
+  const scriptName = scriptPath.split(/[/\\]/).pop()?.replace(/\.\w+$/, '') ?? ''
+  const hasProject = !!projectName
+  const proj = hasProject ? projectName : '<projet>'
+
+  let lines: string[] = []
+  lines.push('')
+  lines.push('━ Suivi suggéré ━')
+
+  // Suggestions communes à tous les scripts projet
+  const commonSuggestions: string[] = []
+  if (hasProject) {
+    commonSuggestions.push(`  → continuer "${projectName}" — Voir la prochaine tâche`)
+    commonSuggestions.push(`  → état "${projectName}" — Progression détaillée`)
+    commonSuggestions.push(`  → menu "${projectName}" — Menu de navigation`)
+  }
+
+  // Suggestions spécifiques selon le script exécuté
+  switch (scriptName) {
+    case 'menu':
+      if (hasProject) {
+        lines.push(`  → ajoute une tâche "..." dans <domaine> au projet ${projectName}`)
+      }
+      break
+
+    case 'etat':
+      if (hasProject) {
+        lines.push(`  → ajoute une tâche "..." dans <domaine> au projet ${projectName}`)
+        lines.push(`  → découvre le projet ${projectName} — Explorer la structure`)
+      }
+      break
+
+    case 'work':
+      if (hasProject) {
+        lines.push(`  → état "${projectName}" — Voir l\'avancement`)
+      }
+      break
+
+    case 'add-task': {
+      // Proposer d'ajouter une autre tâche ou de modifier la nouvelle
+      if (hasProject) {
+        lines.push(`  → renomme la tâche "..." en 'Nouveau titre' au projet ${projectName} — Renommer`)
+        lines.push(`  → déplace la tâche "..." dans <domaine> au projet ${projectName} — Déplacer`)
+        lines.push(`  → modifie la description de la tâche "..." en '...' au projet ${projectName} — Décrire`)
+        lines.push(`  → ajoute une autre tâche "..." dans <domaine> au projet ${proj} — Ajouter`)
+      }
+      break
+    }
+
+    case 'done-task': {
+      // Proposer de modifier ou continuer
+      if (hasProject) {
+        lines.push(`  → renomme la tâche "..." en 'Nouveau titre' au projet ${projectName} — Renommer`)
+        lines.push(`  → déplace la tâche "..." dans <domaine> au projet ${projectName} — Déplacer`)
+        lines.push(`  → modifie la description de la tâche "..." en '...' au projet ${projectName} — Décrire`)
+        lines.push(`  → continuer "${projectName}" — Voir la prochaine tâche`)
+        lines.push(`  → état "${projectName}" — Progression mise à jour`)
+      }
+      break
+    }
+
+    case 'edit-task': {
+      // Proposer les autres modifications possibles
+      if (hasProject) {
+        lines.push(`  → renomme la tâche "..." en 'Nouveau titre' au projet ${projectName} — Renommer`)
+        lines.push(`  → déplace la tâche "..." dans <domaine> au projet ${projectName} — Déplacer`)
+        lines.push(`  → modifie la description de la tâche "..." en '...' au projet ${projectName} — Décrire`)
+        lines.push(`  → état "${projectName}" — Voir la progression`)
+      }
+      break
+    }
+
+    case 'delete-task': {
+      // Proposer les actions après suppression (pas de taskId, la tâche est supprimée)
+      if (hasProject) {
+        lines.push(`  → ajoute une tâche "..." dans <domaine> au projet ${projectName}`)
+        lines.push(`  → état "${projectName}" — Voir la progression mise à jour`)
+      }
+      break
+    }
+
+    case 'block-task': {
+      // Proposer les actions après blocage
+      if (hasProject) {
+        lines.push(`  → renomme la tâche "..." en 'Nouveau titre' au projet ${projectName} — Renommer`)
+        lines.push(`  → déplace la tâche "..." dans <domaine> au projet ${projectName} — Déplacer`)
+        lines.push(`  → modifie la description de la tâche "..." en '...' au projet ${projectName} — Décrire`)
+        lines.push(`  → débloque la tâche "..." au projet ${projectName} — Quand le blocage est résolu`)
+        lines.push(`  → état "${projectName}" — Voir les tâches bloquées`)
+      }
+      break
+    }
+
+    case 'unblock-task': {
+      // Proposer les actions après déblocage
+      if (hasProject) {
+        lines.push(`  → renomme la tâche "..." en 'Nouveau titre' au projet ${projectName} — Renommer`)
+        lines.push(`  → déplace la tâche "..." dans <domaine> au projet ${projectName} — Déplacer`)
+        lines.push(`  → modifie la description de la tâche "..." en '...' au projet ${projectName} — Décrire`)
+        lines.push(`  → continue sur "${projectName}" — Voir la prochaine tâche disponible`)
+        lines.push(`  → état "${projectName}" — Voir la progression mise à jour`)
+      }
+      break
+    }
+
+    case 'list-tasks': {
+      // Proposer les variantes de filtrage et modification
+      // Pour list-tasks, pas de taskId unique — on garde "..."
+      if (hasProject) {
+        lines.push(`  → renomme la tâche "..." en 'Nouveau titre' au projet ${projectName} — Renommer`)
+        lines.push(`  → déplace la tâche "..." dans <domaine> au projet ${projectName} — Déplacer`)
+        lines.push(`  → modifie la description de la tâche "..." en '...' au projet ${projectName} — Décrire`)
+        lines.push(`  → liste les tâches backend du projet ${projectName} — Filtrer par domaine`)
+        lines.push(`  → liste les tâches en cours du projet ${projectName} — Filtrer par statut`)
+        lines.push(`  → liste les tâches terminées du projet ${projectName} — Voir ce qui est fait`)
+        lines.push(`  → état "${projectName}" — Progression détaillée`)
+      }
+      break
+    }
+
+    case 'decouverte': {
+      // Détecter si un README a déjà été généré via la demande
+      const hasReadme = demande.includes('readme')
+      if (!hasReadme) {
+        lines.push(`  → génère un readme pour le projet ${proj} — Documenter l\'architecture`)
+      }
+      lines.push(`  → continue sur le projet ${proj} — Voir la prochaine tâche`)
+      break
+    }
+
+    case 'list':
+      lines.push('  → menu <projet> — Voir le menu d\'un projet')
+      lines.push('  → crée un projet "<nom>" — Nouveau projet')
+      break
+
+    case 'create':
+      if (hasProject) {
+        lines.push(`  → menu "${projectName}" — Commencer à utiliser le projet`)
+      }
+      break
+
+    case 'info':
+      if (hasProject) {
+        lines.push(`  → menu "${projectName}" — Menu de navigation`)
+        lines.push(`  → découvre le projet ${projectName} — Explorer la structure`)
+      }
+      break
+
+    default:
+      // Suggestions génériques si on ne reconnaît pas le script
+      if (hasProject) {
+        lines.push(...commonSuggestions)
+      }
+      break
+  }
+
+  // Ajouter les suggestions communes si pas déjà fait
+  if (lines.length <= 2 && hasProject) {
+    lines.push(...commonSuggestions)
+  }
+
+  // Toujours proposer l'aide en dernier
+  lines.push('  → liste les projets — Voir tous les projets')
+
+  // ── Filtrage dynamique selon le statut réel de la tâche ──
+  if (taskStatus && lines.length > 1) {
+    // Si la tâche est BLOQUÉE : ajouter une suggestion de déblocage si absente
+    if (taskStatus === 'blocked' && !lines.some(l => l.includes('débloque'))) {
+      lines.splice(lines.length - 1, 0, `  → débloque la tâche "..." au projet ${proj} — Le blocage est résolu ?`)
+    }
+    // Si la tâche N'EST PAS bloquée : retirer les suggestions de déblocage
+    if (taskStatus !== 'blocked') {
+      lines = lines.filter(l => !l.includes('débloque la tâche'))
+    }
+  }
+
+  let result = lines.join('\n')
+
+  // Injecter l'ID de tâche si disponible : remplacer le premier "..." de chaque ligne
+  if (taskId) {
+    const idLabel = `\"${taskId}\"`
+    result = lines.map(line => line.replace('"..."', idLabel)).join('\n')
+  }
+
+  return result
+}
+
+/**
  * Essaye de matcher un message contre le registre de scripts.
  * Si un pattern match, exécute le script et notifie le résultat.
  * Retourne true si un script a été exécuté, false sinon (fallback LLM).
@@ -444,7 +704,13 @@ function tryScriptRunner(msg: IntercomMessage): boolean {
     ? msg.payload.demande
     : JSON.stringify(msg.payload)
 
-  const result = matchAndExecute(demande, msg.subject)
+  // Passer le projet du payload en variable d'env pour les scripts
+  const extraEnv: Record<string, string> = {}
+  if (typeof msg.payload.project === 'string' && msg.payload.project) {
+    extraEnv.SCRIPT_PROJECT = msg.payload.project
+  }
+
+  const result = matchAndExecute(demande, msg.subject, extraEnv)
 
   if (!result.matched) {
     return false // Aucun script trouvé → fallback LLM
@@ -460,9 +726,25 @@ function tryScriptRunner(msg: IntercomMessage): boolean {
 
   // Notifier le résultat
   const scriptName = result.script?.split(/[/\\]/).pop()?.replace(/\.\w+$/, '') ?? 'script'
-  const message = result.stdout
+  let message = result.stdout
     ? `✅ [${scriptName}]\n${result.stdout.slice(0, 500)}`
     : `✅ [${scriptName}] — (sortie vide)`
+
+  // Ajouter les suggestions de suivi si le script a réussi
+  if (result.exitCode === 0) {
+    const projectName = result.params?.project ?? extraEnv.SCRIPT_PROJECT ?? ''
+    const taskId = extractTaskIdFromStdout(result.stdout ?? '')
+    const taskStatus = taskId ? readTaskStatus(projectName, taskId) : null
+    const suggestionsText = getFollowUpSuggestions(result.script, projectName, demande, taskId ?? undefined, taskStatus ?? undefined)
+    if (suggestionsText) {
+      message += `\n${suggestionsText}`
+      // Écrire les suggestions structurées pour le menu interactif
+      const structured = parseSuggestionsFromOutput(suggestionsText)
+      if (structured.length > 0) {
+        writeSuggestions(structured)
+      }
+    }
+  }
 
   const level: NotificationLevel = result.exitCode === 0 ? 'conclusion' : 'avertissement'
   pushNotification('script-runner', message, level)
@@ -911,8 +1193,182 @@ function writePid(): void {
   writeFileSync(PID_FILE, String(process.pid), 'utf-8')
 }
 
+// ── Cache de détection Windows Terminal ──────────────
+let _wtAvailable: boolean | null = null
+let _wtInstallAttempted = false
+
 /**
- * Lance le watcher TUI dans une fenêtre de terminal séparée.
+ * Vérifie si wt.exe (Windows Terminal) est disponible dans le PATH.
+ * Utilise `where wt` (l'équivalent Windows de `which`).
+ * Le résultat est mis en cache pour la durée de vie du daemon.
+ */
+function canUseWindowsTerminal(): boolean {
+  if (_wtAvailable !== null) return _wtAvailable
+  if (process.platform !== 'win32') {
+    _wtAvailable = false
+    return false
+  }
+  try {
+    execSync('where wt', { encoding: 'utf8', timeout: 2000 })
+    _wtAvailable = true
+    console.log('[Daemon] Windows Terminal détecté — onglets combinés')
+  } catch {
+    _wtAvailable = false
+    console.log('[Daemon] Windows Terminal non trouvé — lancement séparé')
+  }
+  return _wtAvailable
+}
+
+/**
+ * Cherche wt.exe dans le dossier WindowsApps (hors PATH).
+ * Utilisé quand le package est installé mais pas dans le PATH du processus.
+ */
+function findWtInWindowsApps(): boolean {
+  const localAppData = process.env.LOCALAPPDATA || join(process.env.USERPROFILE || '', 'AppData', 'Local')
+  const windowsApps = join(localAppData, 'Microsoft', 'WindowsApps')
+  const wtPath = join(windowsApps, 'wt.exe')
+  try {
+    execSync(`"${wtPath}" --version`, { timeout: 2000 })
+    console.log(`[Daemon] wt.exe trouvé dans ${windowsApps}`)
+    // Invalider le cache pour les prochains appels (recherche directe)
+    _wtAvailable = null
+    return true
+  } catch {
+    console.log('[Daemon] wt.exe inaccessible dans WindowsApps')
+    return false
+  }
+}
+
+/**
+ * Installation automatique de Windows Terminal via winget (100% asynchrone).
+ *
+ * Appelée quand canUseWindowsTerminal() retourne false sur Windows.
+ * 1. Vérifie d'abord si le package est déjà installé (via exec asynchrone)
+ * 2. Si déjà installé mais pas dans le PATH → essaie de trouver wt.exe dans WindowsApps
+ * 3. Si pas installé → lance winget install --scope user --silent
+ *
+ * Ne bloque PAS le démarrage du daemon. Les notifications arrivent en temps réel.
+ */
+function tryInstallWindowsTerminal(): void {
+  if (process.platform !== 'win32' || _wtInstallAttempted) return
+  _wtInstallAttempted = true
+
+  console.log('[Daemon] Vérification de Windows Terminal...')
+
+  // Étape 1 : vérifier si le package est déjà installé (asynchrone)
+  const psCmd = [
+    'powershell', '-NoProfile', '-Command',
+    `"if (Get-AppxPackage -Name Microsoft.WindowsTerminal) { exit 0 } else { exit 1 }"`,
+  ]
+
+  exec(psCmd.join(' '), { timeout: 5000 }, (err) => {
+    if (!err) {
+      // Le package est installé → chercher wt.exe dans WindowsApps
+      console.log('[Daemon] Windows Terminal déjà installé — localisation...')
+      if (!findWtInWindowsApps()) {
+        console.log('[Daemon] WT installé mais wt.exe introuvable — utilisation du fallback cmd')
+      }
+      return
+    }
+
+    // Étape 2 : package non installé → lancer winget
+    console.log('[Daemon] Installation de Windows Terminal en arrière-plan...')
+    pushNotification('telecom-daemon', '📦 Installation de Windows Terminal en arrière-plan...', 'info')
+
+    exec([
+      'winget install',
+      '--id Microsoft.WindowsTerminal',
+      '--scope user',
+      '--silent',
+      '--accept-package-agreements',
+      '--accept-source-agreements',
+    ].join(' '), {
+      timeout: 120000, // 2 minutes max
+    }, (wingetErr, _stdout, stderr) => {
+      if (wingetErr) {
+        const msg = stderr?.trim() || wingetErr.message
+        console.error(`[Daemon] Échec installation WT: ${msg}`)
+        pushNotification('telecom-daemon', `❌ Installation Windows Terminal échouée: ${msg.slice(0, 200)}`, 'urgent')
+        return
+      }
+      console.log('[Daemon] Windows Terminal installé avec succès!')
+      pushNotification('telecom-daemon', '✅ Windows Terminal installé! Redémarre le daemon pour utiliser les onglets combinés.', 'conclusion')
+      // Invalider le cache
+      _wtAvailable = null
+      // Vérifier que wt.exe est maintenant accessible
+      findWtInWindowsApps()
+    })
+  })
+}
+
+/**
+ * Lance le watcher TUI et le visionneur de notifications.
+ * Sur Windows, si wt.exe est disponible, OUVRE LES DEUX dans UNE SEULE fenêtre
+ * Windows Terminal avec deux onglets (`wt -w -1 new-tab ... new-tab ...`).
+ * Sinon, chaque fenêtre s'ouvre séparément via `start cmd /c`.
+ *
+ * Plateformes non-Windows : lancement séparé (osascript / x-terminal-emulator).
+ */
+function launchCombinedTabs(): void {
+  // ── Windows Terminal : UNE commande, DEUX onglets ──
+  if (process.platform === 'win32' && canUseWindowsTerminal()) {
+    const watcherScript = join(cwd, 'dist', 'telecom', 'service', 'telecom-watcher-console.js')
+    const viewerScript = join(cwd, 'dist', 'telecom', 'service', 'telecom-notification-viewer.js')
+
+    // Construire les arguments wt avec les onglets disponibles
+    const args: string[] = ['-w', '-1']  // Nouvelle fenêtre
+
+    if (existsSync(watcherScript)) {
+      args.push(
+        'new-tab',
+        '--title', `Telecom Watcher — PID:${process.pid}`,
+        '-d', cwd,
+        'cmd', '/c', `chcp 65001>nul && node "${watcherScript}"`,
+      )
+      args.push(';') // Séparateur de commandes wt.exe
+    }
+    if (existsSync(viewerScript)) {
+      args.push(
+        'new-tab',
+        '--title', `Notifications Viewer — ${process.pid}`,
+        '-d', cwd,
+        'cmd', '/c', `chcp 65001>nul && node "${viewerScript}"`,
+      )
+    }
+
+    if (args.length <= 2) {
+      // Aucun script dispo (juste -w -1)
+      console.log('[Daemon] Aucun script TUI disponible — onglets WT non lancés')
+      return
+    }
+
+    const tabCount = args.filter(a => a === 'new-tab').length
+    console.log(`[Daemon] Lancement de ${tabCount} onglet(s) Windows Terminal...`)
+
+    try {
+      spawn('wt', args, { stdio: 'ignore', detached: true }).unref()
+    } catch (wtErr) {
+      console.error(`[Daemon] ERR wt.exe: ${(wtErr as Error).message} — fallback cmd`)
+      // Fallback : lancer séparément
+      launchWatcherConsole()
+      launchNotificationViewer()
+    }
+    return
+  }
+
+  // ── Fallback plateformes non-Windows ou WT indisponible ──
+  launchWatcherConsole()
+  launchNotificationViewer()
+
+  // Lancer l'installation en arrière-plan si sur Windows sans WT
+  if (process.platform === 'win32') {
+    tryInstallWindowsTerminal()
+  }
+}
+
+/**
+ * Lance le watcher TUI dans une fenêtre de terminal séparée (fallback).
+ * Utilisé quand Windows Terminal n'est pas disponible.
  * Détection automatique de la plateforme :
  *   win32 → start cmd /c
  *   darwin → osascript + Terminal.app
@@ -922,7 +1378,6 @@ function launchWatcherConsole(): void {
   const watcherScript = join(cwd, 'dist', 'telecom', 'service', 'telecom-watcher-console.js')
   const title = `Telecom Watcher — PID:${process.pid} — intercom:0 routed:0`
 
-  // Vérifier que le script compilé existe avant de lancer le terminal
   if (!existsSync(watcherScript)) {
     console.log(`[Daemon] Watcher non lancé: script introuvable (${watcherScript})`)
     return
@@ -930,8 +1385,6 @@ function launchWatcherConsole(): void {
 
   switch (process.platform) {
     case 'win32': {
-      // start crée une nouvelle fenêtre cmd avec titre et exécute node
-      // chcp 65001 force l'UTF-8 pour les caractères de bordure + couleurs ANSI
       const cmd = `start "${title}" cmd /c "chcp 65001 >nul && node ${watcherScript}"`
       exec(cmd, (err: Error | null) => {
         if (err) console.error(`[Daemon] ERR lancement watcher: ${err.message}`)
@@ -939,7 +1392,6 @@ function launchWatcherConsole(): void {
       break
     }
     case 'darwin': {
-      // macOS: ouvrir Terminal.app et lancer le script
       const cmd = `osascript -e 'tell app "Terminal" to do script "node ${watcherScript}"'`
       exec(cmd, (err: Error | null) => {
         if (err) console.error(`[Daemon] ERR lancement watcher: ${err.message}`)
@@ -947,7 +1399,6 @@ function launchWatcherConsole(): void {
       break
     }
     default: {
-      // Linux: essayer x-terminal-emulator puis xterm en fallback
       const termCmd = `x-terminal-emulator -e "node ${watcherScript}" || xterm -e "node ${watcherScript}"`
       exec(termCmd, (err: Error | null) => {
         if (err) console.error(`[Daemon] ERR lancement watcher: ${err.message} — installe xterm ou x-terminal-emulator`)
@@ -955,6 +1406,68 @@ function launchWatcherConsole(): void {
       break
     }
   }
+}
+
+/**
+ * Lance le visionneur de notifications dans une fenêtre séparée (fallback).
+ * Utilisé quand Windows Terminal n'est pas disponible.
+ * Détection automatique de la plateforme (identique à launchWatcherConsole).
+ */
+function launchNotificationViewer(): void {
+  const viewerScript = join(cwd, 'dist', 'telecom', 'service', 'telecom-notification-viewer.js')
+  const title = `Notifications Viewer — ${process.pid}`
+
+  if (!existsSync(viewerScript)) {
+    console.log(`[Daemon] Notification viewer non lancé: script introuvable (${viewerScript})`)
+    return
+  }
+
+  switch (process.platform) {
+    case 'win32': {
+      const cmd = `start "${title}" cmd /c "chcp 65001 >nul && node ${viewerScript}"`
+      exec(cmd, (err: Error | null) => {
+        if (err) console.error(`[Daemon] ERR lancement notification viewer: ${err.message}`)
+      })
+      break
+    }
+    case 'darwin': {
+      const cmd = `osascript -e 'tell app "Terminal" to do script "node ${viewerScript}"'`
+      exec(cmd, (err: Error | null) => {
+        if (err) console.error(`[Daemon] ERR lancement notification viewer: ${err.message}`)
+      })
+      break
+    }
+    default: {
+      const termCmd = `x-terminal-emulator -e "node ${viewerScript}" || xterm -e "node ${viewerScript}"`
+      exec(termCmd, (err: Error | null) => {
+        if (err) console.error(`[Daemon] ERR lancement notification viewer: ${err.message}`)
+      })
+      break
+    }
+  }
+}
+
+/**
+ * Tue le visionneur de notifications.
+ * Lit le PID depuis telecom/notification-viewer.pid.
+ */
+function killNotificationViewer(): void {
+  if (!existsSync(VIEWER_PID_FILE)) return
+
+  try {
+    const raw = readFileSync(VIEWER_PID_FILE, 'utf-8').trim()
+    const pid = parseInt(raw, 10)
+    if (!isNaN(pid)) {
+      try {
+        process.kill(pid, 'SIGTERM')
+        console.log(`[Daemon] Notification viewer tué (PID ${pid})`)
+      } catch {
+        // déjà mort
+      }
+    }
+  } catch { /* fichier illisible */ }
+
+  try { unlinkSync(VIEWER_PID_FILE) } catch { /* déjà supprimé */ }
 }
 
 /**
@@ -1087,18 +1600,38 @@ function main(): void {
     logTelecomConfig()
     console.log('')
     setupWatcher()
-    launchWatcherConsole()
+    launchCombinedTabs()
 
-    // Signaux : tuer le watcher proprement avant de quitter
+    // Garde-fou contre la double exécution de daemonCleanup (SIGTERM pendant le setTimeout)
+    let cleanupInProgress = false
+
     function daemonCleanup(): void {
+      if (cleanupInProgress) return
+      cleanupInProgress = true
+
       console.log('')
       console.log(`[Daemon] Arrêt demandé — nettoyage...`)
-      killWatcherConsole()
-      // Nettoyer les fichiers PID et status
-      try { unlinkSync(PID_FILE) } catch { /* déjà supprimé */ }
-      try { unlinkSync(STATUS_FILE) } catch { /* déjà supprimé */ }
-      console.log(`[Daemon] Daemon terminé.`)
-      process.exit(0)
+
+      // 1. Écrire les flags de shutdown gracieux (exit code 0 → WT ferme l'onglet)
+      try { writeFileSync(WATCHER_SHUTDOWN_FILE, '', 'utf-8') } catch { /* ignoré */ }
+      try { writeFileSync(VIEWER_SHUTDOWN_FILE, '', 'utf-8') } catch { /* ignoré */ }
+
+      // 2. Attendre un peu pour que watcher/viewer détectent le flag et sortent proprement
+      //    (ils vérifient à chaque cycle de polling ~1-1.5s, donc 4s est suffisant)
+      setTimeout(() => {
+        // 3. Force-kill si encore en vie (TerminateProcess — non-gracieux mais définitif)
+        killWatcherConsole()
+        killNotificationViewer()
+
+        // 4. Nettoyer les fichiers PID, status et flags
+        try { unlinkSync(PID_FILE) } catch { /* déjà supprimé */ }
+        try { unlinkSync(STATUS_FILE) } catch { /* déjà supprimé */ }
+        try { unlinkSync(WATCHER_SHUTDOWN_FILE) } catch { /* déjà supprimé */ }
+        try { unlinkSync(VIEWER_SHUTDOWN_FILE) } catch { /* déjà supprimé */ }
+
+        console.log(`[Daemon] Daemon terminé.`)
+        process.exit(0)
+      }, 4000)
     }
 
     process.on('SIGINT', () => daemonCleanup())
