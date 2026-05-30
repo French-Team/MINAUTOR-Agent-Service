@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/images/MINAUTOR_logo.png" alt="MINAUTOR Logo" width="800">
+
 # ⚡ MINAUTOR Agent Service
 
 **L'orchestration multi-agents nouvelle génération pour TypeScript & Node.js**
