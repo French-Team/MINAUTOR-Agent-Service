@@ -1,8 +1,17 @@
 {
-  "updatedAt": "2026-05-30T10:49:22.716Z",
-  "total": 0,
+  "updatedAt": "2026-05-30T13:44:15.345Z",
+  "total": 1,
   "pending": 0,
-  "read": 0,
+  "read": 1,
   "processed": 0,
-  "messages": []
+  "messages": [
+    {
+      "timestamp": "2026-05-30T13:41:02.981Z",
+      "from": "alice",
+      "to": "agent-telecom",
+      "subject": "project-request",
+      "status": "read",
+      "demande": "creer projet \"soulseek donwloader\""
+    }
+  ]
 }

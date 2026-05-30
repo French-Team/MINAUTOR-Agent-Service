@@ -43,13 +43,21 @@ scripts:
       - name: project
         from: 3
 
-  - pattern: "cr[éee]e?\s+(un\s+)?projet\s+(\S+)"
+  - pattern: "cr[eé]e?r?\s+(un\s+)?projet\s+\"([^\"]+)\""
+    subject: "project-request"
+    script: "scripts/projects/create.js"
+    description: "Crée un nouveau projet (nom entre guillemets)"
+    params:
+      - name: project
+        from: 2
+
+  - pattern: "cr[eé]e?r?\s+(un\s+)?projet\s+(\S+)"
     subject: "project-request"
     script: "scripts/projects/create.js"
     description: "Crée un nouveau projet"
     params:
       - name: project
-        from: 3
+        from: 2
 
   # ── Agents ─────────────────────────────────────────
   - pattern: "liste(\s+les)?\s+agents?"

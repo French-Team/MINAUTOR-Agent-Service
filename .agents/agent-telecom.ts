@@ -3,7 +3,7 @@ import type { AgentDefinition } from '../src/types/agent-definition.js'
 const definition: AgentDefinition = {
   id: 'agent-telecom',
   displayName: 'Agent Télécom',
-  model: 'liquid/lfm2.5-1.2b',
+  model: 'qwen/qwen3.5-9b',
   provider: 'lm-studio',
   toolNames: ['run_terminal_command', 'add_message', 'set_output', 'skill'],
   instructionsPrompt: `Tu es l'Agent Télécom, le gardien du système de communication Intercom.
