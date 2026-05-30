@@ -154,12 +154,18 @@ export function createRunner(deps: RunnerDependencies) {
               const scriptName = cmd.split(/[/\\]/).pop() || `Script ${i + 1}`
               const header = `${CYAN}╔${BOLD}══ ${scriptName}${RESET} ${GRAY}(${cmd})${RESET}`
               // Indenter chaque ligne du résultat
-              const body = r
-                .trim()
-                .split('\n')
+              const bodyLines = r.trim().split('\n')
+              const body = bodyLines
                 .map(msgLine => `${CYAN}║${RESET} ${msgLine}`)
                 .join('\n')
-              const footer = `${CYAN}╚${'═'.repeat(50)}${RESET}`
+              // Footer dynamique : largeur basée sur la ligne la plus longue du contenu
+              // (limitée à un maximum de 80 pour rester lisible)
+              const maxContentWidth = Math.min(
+                Math.max(...bodyLines.map(l => l.length), 0),
+                78,
+              )
+              const footerWidth = Math.max(maxContentWidth + 2, 20)
+              const footer = `${CYAN}╚${'═'.repeat(footerWidth)}${RESET}`
               return `${header}\n${body}\n${footer}`
             }).join('\n\n')
             return formatted

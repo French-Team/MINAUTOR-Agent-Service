@@ -45,7 +45,10 @@ jobs:
       - name: 🏗️ Build
         run: npm run build
 
-      - name: 🔍 Validate All
+      - name: 📋 CI YAML validation
+        run: npm run validate:ci-yaml
+
+      - name: 🔍 Validate All (agents + règles JSON)
         run: npm run validate:all
 
       - name: 📦 Upload build artifact
@@ -63,6 +66,9 @@ jobs:
 
       - name: 🏁 E2E tests
         run: npm run test:e2e
+
+      - name: 📚 Historien pipeline
+        run: npx tsx src/test/test-historien.ts
 
   lint:
     runs-on: ubuntu-latest
@@ -90,6 +96,63 @@ jobs:
 
       - name: 🛡️ Regex Lint
         run: npm run lint:regex
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    strategy:
+      matrix:
+        node-version: [22, 24]
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build
+        run: npm run build
+
+      - name: 📋 CI YAML validation
+        run: npm run validate:ci-yaml
+
+      - name: 🔍 Validate All (agents + règles JSON)
+        run: npm run validate:all
+
+      - name: 🧪 Unit tests
+        run: npm run test:unit
+
+      - name: 🔄 Integration tests
+        run: node dist/test/test.js
+
+      - name: 📋 Menu & Providers validation
+        run: node dist/test/unit-menu-validation.js
+
+      - name: 🧩 Kits injector
+        run: npx tsx src/test/kits-injector.test.ts
+
+      - name: 📚 Historien pipeline
+        run: npx tsx src/test/test-historien.ts
+
+      - name: 🔄 IPC cycle (daemon)
+        continue-on-error: true
+        run: npx tsx src/test/test-ipc-cycle.ts
+
+      - name: 🔄 Real cycle (CLI + daemon)
+        continue-on-error: true
+        run: npx tsx src/test/test-real-cycle.ts
+
+      - name: 🏁 E2E tests
+        continue-on-error: true
+        run: npm run test:e2e
 
   performance:
     runs-on: ubuntu-latest

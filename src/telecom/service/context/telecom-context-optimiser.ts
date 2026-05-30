@@ -10,7 +10,24 @@
  * Cette étape ne fait AUCUN appel LLM : ce sont des règles déterministes.
  * Elle se concentre sur le français (la langue principale du projet) avec
  * quelques règles anglaises de secours.
+ *
+ * Règles chargées depuis data/rules/context-optimiser.json
  */
+
+import { readFileSync, existsSync } from 'fs'
+import { join } from 'path'
+import { buildRegExp } from './regex-utils.js'
+
+interface JsonRule {
+  pattern: string
+  flags: string
+  replacement: string
+  reason: string
+}
+
+interface RuleRegistry {
+  rules: JsonRule[]
+}
 
 interface Rule {
   /** Pattern à détecter (insensible à la casse par défaut). */
@@ -21,44 +38,39 @@ interface Rule {
   reason: string
 }
 
-/**
- * Règles de réécriture appliquées séquentiellement.
- * L'ordre compte : les règles longues passent avant les courtes pour
- * éviter les conflits.
- */
-const RULES: Rule[] = [
-  // ── Politesse / courtoisie superflue (FR) ──
-  { pattern: /\bs['']il (?:te|vous) pla[iî]t\b[,.\s]*/gi, replacement: '', reason: 'politesse' },
-  { pattern: /\bsvp\b[,.\s]*/gi, replacement: '', reason: 'politesse' },
-  { pattern: /\bstp\b[,.\s]*/gi, replacement: '', reason: 'politesse' },
-  { pattern: /\bmerci(?: beaucoup| d['']avance)?\b[,.\s!]*/gi, replacement: '', reason: 'politesse' },
-  { pattern: /\bbonjour\b[,.\s!]*/gi, replacement: '', reason: 'salutation' },
-  { pattern: /\b(?:salut|coucou|hello|hi)\b[,.\s!]*/gi, replacement: '', reason: 'salutation' },
+const RULES_PATH = join(process.cwd(), 'data', 'rules', 'context-optimiser.json')
 
-  // ── Hésitations / fillers (FR) ──
-  { pattern: /\b(?:euh+|hum+|ben|bah|du coup|en fait|alors)\b[,.\s]*/gi, replacement: '', reason: 'filler' },
-  { pattern: /\bje pense que\b/gi, replacement: '', reason: 'hedging' },
-  { pattern: /\bj['']imagine que\b/gi, replacement: '', reason: 'hedging' },
+function loadRules(): Rule[] {
+  try {
+    if (!existsSync(RULES_PATH)) {
+      console.warn(`[optimiser] Fichier introuvable: ${RULES_PATH}`)
+      return []
+    }
+    const raw = readFileSync(RULES_PATH, 'utf-8')
+    const registry: RuleRegistry = JSON.parse(raw)
+    if (!Array.isArray(registry.rules)) {
+      console.warn('[optimiser] Règles invalides dans context-optimiser.json')
+      return []
+    }
+    return registry.rules.map(r => ({
+      pattern: buildRegExp(r.pattern, r.flags),
+      replacement: r.replacement,
+      reason: r.reason,
+    }))
+  } catch (err) {
+    console.warn(`[optimiser] Impossible de charger context-optimiser.json: ${(err as Error).message}`)
+    return []
+  }
+}
 
-  // ── Tournures verbeuses → impératif compact (FR) ──
-  { pattern: /\b(?:peux[- ]tu|pourrais[- ]tu|pourriez[- ]vous)\s+/gi, replacement: '', reason: 'requête→impératif' },
-  { pattern: /\bj['']aimerais (?:bien |vraiment )?(?:que tu )?/gi, replacement: 'Tâche : ', reason: 'volonté→tâche' },
-  { pattern: /\bje voudrais (?:bien |vraiment )?(?:que tu )?/gi, replacement: 'Tâche : ', reason: 'volonté→tâche' },
-  { pattern: /\bil faut (?:que tu |que )/gi, replacement: 'Tâche : ', reason: 'volonté→tâche' },
-  { pattern: /\bil faudrait (?:que tu |que )?/gi, replacement: 'Tâche : ', reason: 'volonté→tâche' },
+let _rules: Rule[] | null = null
 
-  // ── Politesse / fillers (EN, secours) ──
-  { pattern: /\bplease\b[,.\s]*/gi, replacement: '', reason: 'politesse' },
-  { pattern: /\bthank(?:s| you)(?: very much)?\b[,.\s!]*/gi, replacement: '', reason: 'politesse' },
-  { pattern: /\b(?:could|would) you(?: please)?\s+/gi, replacement: '', reason: 'requête→impératif' },
-  { pattern: /\bcan you(?: please)?\s+/gi, replacement: '', reason: 'requête→impératif' },
-  { pattern: /\bI(?: would| ['']d) like (?:you )?to\s+/gi, replacement: 'Task: ', reason: 'volonté→tâche' },
-  { pattern: /\b(?:um+|uh+|well|so|like)\b[,.\s]*/gi, replacement: '', reason: 'filler' },
-
-  // ── Compactage final ──
-  { pattern: / +([,.;:!?])/g, replacement: '$1', reason: 'ponctuation' },
-  { pattern: /([,.;:!?]){2,}/g, replacement: '$1', reason: 'ponctuation-doublée' },
-]
+function getRules(): Rule[] {
+  if (!_rules) {
+    _rules = loadRules()
+  }
+  return _rules
+}
 
 export interface OptimiserOptions {
   /** Si false, conserve les salutations (utile pour le tout premier message). */
@@ -89,7 +101,7 @@ export function optimiserDetail(input: string, options: OptimiserOptions = {}): 
   const applied: string[] = []
   let out = input
 
-  for (const rule of RULES) {
+  for (const rule of getRules()) {
     if (rule.reason === 'salutation' && options.stripGreetings === false) continue
     const before = out
     out = out.replace(rule.pattern, rule.replacement)

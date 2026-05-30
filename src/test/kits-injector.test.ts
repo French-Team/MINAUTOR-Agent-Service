@@ -1,7 +1,7 @@
 /**
  * Tests du module kits-injector
  *
- * Exécution : npx tsx src/kits-injector.test.ts
+ * Exécution : npx tsx src/test/kits-injector.test.ts
  */
 
 // @kit tests

@@ -254,7 +254,7 @@ function testCliStartup() {
       joined.includes('skill-alice'),
     )
     assert('logSkillLoaded() affiche la description de la skill',
-      joined.includes('Lexique des scripts Alice'),
+      joined.includes('Documentation du dispatcher handle.js — scripts et patterns d\'Alice'),
     )
   })
 

@@ -182,7 +182,6 @@ function classifyBlock(header: string, content: string): { importance: PatternIm
   }
 
   // 3. Header contient #Mission, #Regles -> critical
-  const headerLower = header.toLowerCase()
   if (/\b#(mission|regle|regles)\b/i.test(combined)) {
     return { importance: 'critical', source: 'section-critique' }
   }

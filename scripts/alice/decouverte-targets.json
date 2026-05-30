@@ -1,0 +1,7 @@
+{
+  "agents": 30,
+  "skills": 50,
+  "profiles": 1000,
+  "sourceLines": 15000,
+  "comment": "Cibles de progression pour la section 'Progression vers les cibles' du script decouverte.js"
+}

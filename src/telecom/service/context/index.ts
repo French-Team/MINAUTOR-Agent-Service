@@ -20,9 +20,8 @@ import type { Message, TextPart, ToolCallPart } from '../../../types/agent-defin
 import { optimiser } from './telecom-context-optimiser.js'
 import { nettoyer } from './telecom-context-nettoyer.js'
 import { resumer, type ResumerOptions } from './telecom-context-resumer.js'
-import { conserver, type Pattern, PatternImportance, ConservateurOptions } from './telecom-context-conservateur.js'
-import { composeur as _composeur, type ComposeurResult, ComposeurOptions } from './telecom-context-composeur.js'
-import { analyserHistorique, historienResumePourLLM, type RapportSuivi, type SuiviEntry } from './telecom-context-historien.js'
+import { conserver } from './telecom-context-conservateur.js'
+import { composeur as _composeur } from './telecom-context-composeur.js'
 
 export { optimiser, optimiserDetail } from './telecom-context-optimiser.js'
 export { nettoyer, gainNettoyage } from './telecom-context-nettoyer.js'

@@ -1,0 +1,81 @@
+{
+  "description": "Profils de compression de contexte par modèle LLM",
+  "version": "1.0",
+  "profiles": {
+    "tiny": {
+      "name": "tiny",
+      "description": "Modèles ≤ 1.5B (LFM2.5-1.2B, TinyLlama). Compression agressive : raisonnement dégrade vite avec un long contexte.",
+      "options": {
+        "keepRecent": 6,
+        "maxCharsPerMessage": 600,
+        "maxCharsPerSummaryLine": 120
+      }
+    },
+    "small": {
+      "name": "small",
+      "description": "Modèles 1.5-4B (Llama3.2-3B, Phi-3-mini). Compression marquée mais préserve le contexte conversationnel court.",
+      "options": {
+        "keepRecent": 10,
+        "maxCharsPerMessage": 1000,
+        "maxCharsPerSummaryLine": 160
+      }
+    },
+    "medium": {
+      "name": "medium",
+      "description": "Modèles 4-15B (Llama3-8B, Mistral-7B). Défaut sain pour la plupart des usages locaux/cloud.",
+      "options": {
+        "keepRecent": 12,
+        "maxCharsPerMessage": 1200,
+        "maxCharsPerSummaryLine": 180
+      }
+    },
+    "large": {
+      "name": "large",
+      "description": "Modèles 15B-70B ou cloud (Gemini Flash, GPT-4, Claude Sonnet). Garde large historique intact.",
+      "options": {
+        "keepRecent": 20,
+        "maxCharsPerMessage": 2400,
+        "maxCharsPerSummaryLine": 240
+      }
+    },
+    "huge": {
+      "name": "huge",
+      "description": "Modèles long-context (Gemini 2.5 Pro/Flash 1M, Claude 200k+). Compression minimale.",
+      "options": {
+        "keepRecent": 40,
+        "maxCharsPerMessage": 4000,
+        "maxCharsPerSummaryLine": 320
+      }
+    }
+  },
+  "rules": [
+    { "pattern": "gemini[-_.]?2\\.5[-_.]?(?:pro|flash)", "flags": "i", "profile": "huge", "reason": "Gemini 2.5 (1M tokens)" },
+    { "pattern": "gemini[-_.]?1\\.5", "flags": "i", "profile": "huge", "reason": "Gemini 1.5 (1M-2M tokens)" },
+    { "pattern": "claude[-_.]?(?:3|4)[-_.]?(?:opus|sonnet)", "flags": "i", "profile": "huge", "reason": "Claude 3/4 Opus/Sonnet (200k+)" },
+    { "pattern": "gpt[-_.]?4", "flags": "i", "profile": "large", "reason": "GPT-4 famille" },
+    { "pattern": "claude", "flags": "i", "profile": "large", "reason": "Claude générique" },
+    { "pattern": "llama[-_.]?3(?:\\.[12])?[-_.]?(?:70b|405b)", "flags": "i", "profile": "large", "reason": "Llama3 70B/405B" },
+    { "pattern": "qwen[-_.]?(?:2\\.5|3)", "flags": "i", "profile": "large", "reason": "Qwen 2.5/3 (souvent 128k+)" },
+    { "pattern": "trinity[-_.]?large", "flags": "i", "profile": "large", "reason": "Arcee Trinity Large" },
+    { "pattern": "deepseek[-_.]?(?:v[34]|r1)", "flags": "i", "profile": "large", "reason": "DeepSeek V3/R1" },
+    { "pattern": "(?:^|[\\/_-])(?:1\\.5b|2b|3b|3\\.8b)(?:[\\/_-]|$|[^0-9])", "flags": "i", "profile": "small", "reason": "Modèle 1.5-4B explicite" },
+    { "pattern": "llama[-_.]?3\\.2(?!.*(?:7|8|13|70)b)", "flags": "i", "profile": "small", "reason": "Llama3.2 (1B/3B par défaut)" },
+    { "pattern": "phi[-_.]?3[-_.]?mini", "flags": "i", "profile": "small", "reason": "Phi-3-mini" },
+    { "pattern": "tinyllama", "flags": "i", "profile": "small", "reason": "TinyLlama (limite haute du tiny)" },
+    { "pattern": "lfm2(?:\\.5)?[-_.]?1\\.2b", "flags": "i", "profile": "tiny", "reason": "Liquid LFM2/2.5-1.2B" },
+    { "pattern": "(?:^|[\\/_-])(?:0\\.5b|0\\.6b|1\\.2b|1b)(?:[\\/_-]|$|[^0-9])", "flags": "i", "profile": "tiny", "reason": "Modèle ≤ 1.2B explicite" },
+    { "pattern": "qwen[-_.]?(?:0\\.5|1\\.5)b", "flags": "i", "profile": "tiny", "reason": "Qwen 0.5B/1.5B" },
+    { "pattern": "smollm", "flags": "i", "profile": "tiny", "reason": "SmolLM" },
+    { "pattern": "llama[-_.]?3(?:\\.1)?[-_.]?(?:7|8)b", "flags": "i", "profile": "medium", "reason": "Llama3.x 7B/8B" },
+    { "pattern": "(?:^|[\\/_-])(?:7b|8b|13b|14b)(?:[\\/_-]|$|[^0-9])", "flags": "i", "profile": "medium", "reason": "Modèle 7-14B explicite" },
+    { "pattern": "mistral[-_.]?(?:7b|small)", "flags": "i", "profile": "medium", "reason": "Mistral 7B/Small" }
+  ],
+  "routerPatterns": [
+    { "pattern": "kilo[-_.]?auto", "flags": "i", "reason": "Kilo Gateway — routeur générique" },
+    { "pattern": "openrouter/", "flags": "i", "reason": "OpenRouter — destination inconnue" },
+    { "pattern": ":free$", "flags": "i", "reason": "OpenRouter free — destination inconnue" },
+    { "pattern": "opencode-zen/", "flags": "i", "reason": "Opencode Zen — destination inconnue" },
+    { "pattern": "^local-model$", "flags": "i", "reason": "LM Studio fallback — destination inconnue" },
+    { "pattern": "custom/", "flags": "i", "reason": "Provider custom — destination inconnue" }
+  ]
+}

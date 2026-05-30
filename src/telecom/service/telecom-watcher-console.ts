@@ -30,7 +30,6 @@ import { parseLogbookTime, parseLogbookSource, parseLogbookMessage } from './tel
 
 const require$ = createRequire(import.meta.url)
 
-// @ts-ignore — terminal-kit n'a pas de types officiels
 const termkit = require$('terminal-kit')
 
 const term = termkit.terminal
@@ -73,8 +72,7 @@ const QUADRANTS: Record<string, QuadrantData> = {
   logs: { region: { x: 0, y: 0, w: 0, h: 0 }, title: ' Logs & Notifications ', lastHash: '', lastContent: '' },
 }
 
-let startTime = Date.now()
-let daemonPid: number | null = null
+const startTime = Date.now()
 let shutdownScheduled = false
 let watchers: ReturnType<typeof watch>[] = []
 let pendingIntercomCount = 0
@@ -86,9 +84,6 @@ let lastRedAlertTime: number | null = null
 // DÉCLARÉ AVANT lastTermSize car termWidth() y accède (TDZ bug si inversé)
 let psCacheSize = { w: 80, h: 24 }
 let cycleCounter = 0
-
-let lastDetectedWidth = 80
-let lastDetectedHeight = 24
 
 // Cache léger UNIQUEMENT pour l'effacement écran (évite le flickering)
 // Les régions et le redessin sont TOUJOURS exécutés sans condition.
@@ -951,10 +946,8 @@ function checkDaemon(): boolean {
   if (pid === null) return false
   try {
     process.kill(pid, 0) // test d'existence sans tuer
-    daemonPid = pid
     return true
   } catch {
-    daemonPid = null
     return false
   }
 }

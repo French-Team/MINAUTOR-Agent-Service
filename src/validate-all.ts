@@ -14,6 +14,7 @@
 
 import { readFileSync, readdirSync, existsSync } from 'fs'
 import { join } from 'path'
+import { validateRulesAtStartup } from './validate-rules.js'
 
 const RESET = '\x1b[0m'
 const GREEN = '\x1b[32m'
@@ -101,6 +102,9 @@ function main(): void {
   const agentsDir = join(cwd, '.agents')
   const rulesPath = join(cwd, 'data', 'rules', 'AGENT_RULES.md')
 
+  // Étape 1 : validation des fichiers JSON de règles (context-optimiser, model-profiles, golden-rules...)
+  const jsonRulesOk = validateRulesAtStartup()
+
   // Verification prealable
   if (!existsSync(agentsDir)) {
     console.error(RED + 'X Dossier .agents/ introuvable' + RESET)
@@ -156,15 +160,17 @@ function main(): void {
   const passed = agentResults.filter(r => r.ok).length
   const total = agents.length
   const agentFailed = agentResults.filter(r => !r.ok).length
-  const failed = agentFailed + (rulesFileOk ? 0 : 1)
+  const failed = agentFailed + (rulesFileOk ? 0 : 1) + (jsonRulesOk ? 0 : 1)
 
   console.log(BOLD + CYAN + '════════════════════════════════════════════════════' + RESET)
   if (failed === 0) {
     console.log(BOLD + GREEN + '  [OK] ' + passed + '/' + total + ' agents - TOUTES LES REGLES D\'OR RESPECTEES' + RESET)
+    console.log(BOLD + GREEN + '  [OK] Fichiers de règles JSON valides' + RESET)
   } else {
     const detailParts: string[] = []
     if (agentFailed > 0) detailParts.push(agentFailed + '/' + total + ' agents en echec')
     if (!rulesFileOk) detailParts.push('AGENT_RULES.md manquant')
+    if (!jsonRulesOk) detailParts.push('Fichiers de règles JSON invalides')
     console.log(BOLD + RED + '  [ERR] ' + detailParts.join(', ') + RESET)
     console.log(YELLOW + '  Corrige les points listes ci-dessus' + RESET)
   }

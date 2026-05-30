@@ -47,7 +47,7 @@ Tu explores et catalogues la structure complète du projet. Tu produis des carte
 Quand tu as terminé :
 1. Écris le résultat dans telecom/papiers/agent-hecatonchires/
 2. Envoie le résultat à l'orchestrateur via intercom :
-   node dist/telecom/service/intercom-manager.js send agent-hecatonchires orchestrateur response result --payload '{"resultat":"...","demande_originale":"..."}'
+   node dist/telecom/service/intercom-manager.js send agent-hecatonchires orchestrateur response result --stdin < telecom/papiers/agent-hecatonchires/resultat.json
 
 ## Règles
 - Ne modifie jamais les fichiers du projet — exploration seule

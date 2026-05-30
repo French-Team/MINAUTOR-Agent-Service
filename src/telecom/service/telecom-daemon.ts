@@ -22,7 +22,7 @@ import { fork, exec } from 'node:child_process'
 import { pushNotification, type NotificationLevel } from '../../notify.js'
 import { getFeuRougeClient } from '../../feurouge/feurouge-client.js'
 import { getAgentPermission } from '../../feurouge/permissions.js'
-import { matchAndExecute, type ScriptResult } from '../../script-runner.js'
+import { matchAndExecute } from '../../script-runner.js'
 
 const cwd = process.cwd()
 const INTERCOM_DIR = join(cwd, 'telecom', 'intercom')

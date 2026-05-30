@@ -17,14 +17,18 @@
         "test:ci": "npm run build && npm run lint && node dist/test/unit-tests.js && node dist/test/test.js",
         "test:ci:full": "npm run test:ci && npm run test:e2e && npm run test:load",
         "validate:all": "node dist/validate-all.js",
+        "validate:rules": "npx tsx src/validate-rules.ts",
+        "validate:ci-yaml": "npx tsx src/validate-ci-yaml.ts",
         "lint": "eslint src/",
         "lint:fix": "eslint src/ --fix",
         "lint:regex": "npx tsx src/lint-regex.ts",
         "test": "npm run test:ci"
     },
     "devDependencies": {
+        "@types/js-yaml": "^4.0.9",
         "@types/node": "^22.0.0",
         "eslint": "^10.4.0",
+        "js-yaml": "^4.1.1",
         "tsx": "^4.22.3",
         "typescript": "^5.5.0",
         "typescript-eslint": "^8.59.4"

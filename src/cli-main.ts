@@ -41,10 +41,12 @@ import { showMenu, showHelp } from './cli-menu.js'
 import { showBanner } from './cli-banner.js'
 import { loadUserProfile, getDisplayName, editUserProfile } from './cli-user.js'
 import { logSkillLoaded, logDaemonStarted, logWelcomeMessage } from './cli-startup.js'
+import { validateRulesAtStartup } from './validate-rules.js'
 import { DEFAULT_AGENT, getAgent, loadAgentFromFile } from './cli-utils.js'
 import { handleCommandPicker } from './cli-selector.js'
 import { handleShellLine } from './cli-runner.js'
 import { tryRouteIntercom, getCurrentProject } from './cli-intercom-router.js'
+import { runContextTest } from './cli-context-test.js'
 import { getFeuRougeClient, resetFeuRougeClient } from './feurouge/feurouge-client.js'
 import { handlePermissionsCommand } from './feurouge/permissions-cli.js'
 import { getPermissionsConfig, listRegistrations } from './feurouge/permissions.js'
@@ -278,6 +280,21 @@ export async function main() {
   // ── Isolation sandbox : créer workspaces/.sandbox/ pour les agents sans projet
   ensureSandbox()
 
+  // ── Nettoyage synchrone des notifications résiduelles ──
+  // Le daemon nettoie aussi (cleanupOldState) mais il tourne en arrière-plan.
+  // Ce nettoyage synchrone garanti que la boucle principale ne trouvera pas
+  // de vieilles notifications de la session précédente au premier popAllNotifications().
+  const notifyFile = join(process.cwd(), 'telecom', 'notifications.json')
+  if (existsSync(notifyFile)) {
+    try {
+      writeFileSync(notifyFile, '[]', 'utf-8')
+      console.log(`${GRAY}✓ Notifications résiduelles effacées${RESET}`)
+    } catch { /* ignoré */ }
+  }
+
+  // ── Validation des fichiers de règles ──
+  validateRulesAtStartup()
+
   // ── Messages de démarrage ──
   logSkillLoaded()
   startTelecomDaemon()
@@ -369,6 +386,12 @@ export async function main() {
 
     // ── Aide ──
     if (line === '10') { showHelp(currentEngine!); continue }
+
+    // ── Tests de contexte ──
+    if (['11','12','13','14','15','16','17','18','19','20','21','22','23'].includes(line)) {
+      runContextTest(line)
+      continue
+    }
 
     // ── Quitter ──
     if (line === '0') { stopFeuRougeDaemon(); stopTelecomDaemon(); console.log(`${GRAY}Bye.${RESET}`); rl.close(); exit(0) }

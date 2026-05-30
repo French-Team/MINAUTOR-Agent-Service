@@ -151,8 +151,23 @@ export function buildToolDefs(toolNames: string[]): Array<Record<string, unknown
  * Parse les tool_calls depuis une réponse OpenAI (format natif).
  * Retourne les ToolCall avec toolCallId renseigné.
  */
+interface ToolCallResponse {
+  choices?: Array<{
+    message?: {
+      content?: string
+      tool_calls?: Array<{
+        type?: string
+        function?: { name?: string; arguments?: string }
+        id?: string
+      }>
+    }
+  }>
+  error?: string | { message: string }
+}
+
 function parseRawToolCalls(data: unknown): ToolCall[] | undefined {
-  const choices = (data as any)?.choices
+  const resp = data as ToolCallResponse | undefined
+  const choices = resp?.choices
   if (!Array.isArray(choices) || choices.length === 0) return undefined
 
   const msg = choices[0]?.message
@@ -291,10 +306,10 @@ export async function internalCallLLM(
   let content = ''
   let rawToolCalls: ToolCall[] | undefined
   try {
-    const json = JSON.parse(raw) as Record<string, unknown>
-    const err = (json as any)?.error
+    const json = JSON.parse(raw) as ToolCallResponse
+    const err = json.error as string | { message: string } | undefined
     if (err) throw new Error(typeof err === 'string' ? err : err.message)
-    content = ((json as any)?.choices?.[0]?.message?.content) || ''
+    content = json.choices?.[0]?.message?.content || ''
     rawToolCalls = parseRawToolCalls(json)
   } catch {
     // if JSON parsing or extraction fails, show raw response snippet

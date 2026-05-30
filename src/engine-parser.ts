@@ -68,7 +68,7 @@ export function parseToolCalls(text: string): ToolCall[] {
       if (typeof data.action === 'string' && data.action.length > 0) {
         const toolName = data.action
         const input: Record<string, unknown> = { ...data }
-        delete (input as any).action
+        delete input.action
         if (Object.keys(input).length > 0) {
           addCall(toolName, input)
           return true

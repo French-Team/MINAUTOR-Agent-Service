@@ -21,6 +21,7 @@
 import { execSync } from 'child_process'
 import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
+import { CYAN, GRAY, RESET } from './colors.js'
 
 const CWD = process.cwd()
 const INPUT_FILE = join(CWD, 'telecom', 'alice-input.txt')
@@ -64,12 +65,20 @@ function isSimpleGreeting(text) {
   return /^(bonjour|salut|hello|bonsoir|coucou|salutation)/i.test(text)
 }
 
-function greetingResponse() {
-  return runScript('scripts/alice/greeting.js') ?? 'Bonjour ! Comment puis-je t aider ?'
+function isDecouverte(text) {
+  return /^(decouverte|explore|explorer|découverte|structure|projet\s*complet)/i.test(text)
 }
 
-function presentationResponse() {
+function presentationProjetResponse() {
+  return runScript('scripts/alice/presentation-minautor.js') ?? 'Bienvenue sur Minautor Agents Service !'
+}
+
+function presentationAliceResponse() {
   return runScript('scripts/alice/presentation.js') ?? 'Bonjour ! Je suis Alice, votre assistante.'
+}
+
+function decouverteResponse() {
+  return runScript('scripts/alice/decouverte.js') ?? 'Analyse du projet indisponible.'
 }
 
 // ── Intercom patterns ────────────────────────────────
@@ -130,36 +139,47 @@ function main() {
     if (jsonMode) {
       console.log(JSON.stringify({ matched: false, type: 'fallback', response: 'Bonjour !' }))
     } else {
-      console.log(`[${ts}] handle.js: Bonjour !`)
+      console.log(`${GRAY}[${ts}]${RESET} handle.js: ${CYAN}Bonjour !${RESET}`)
     }
     process.exit(0)
   }
 
   // ── Cascade de matching ──────────────────────────
 
-  // 1. Greeting with name → presentation
+  // 1. Greeting with name → présentation d'Alice
   if (isGreetingWithName(userMessage)) {
-    const response = presentationResponse()
+    const response = presentationAliceResponse()
     if (jsonMode) {
-      console.log(JSON.stringify({ matched: true, type: 'presentation', response }))
+      console.log(JSON.stringify({ matched: true, type: 'presentation-alice', response }))
     } else {
-      console.log(`[${ts}] handle.js: ${response}`)
+      console.log(`${GRAY}[${ts}]${RESET} handle.js:\n${response}`)
     }
     process.exit(0)
   }
 
-  // 2. Simple greeting
+  // 2. Simple greeting → présentation du projet
   if (isSimpleGreeting(userMessage)) {
-    const response = greetingResponse()
+    const response = presentationProjetResponse()
     if (jsonMode) {
-      console.log(JSON.stringify({ matched: true, type: 'greeting', response }))
+      console.log(JSON.stringify({ matched: true, type: 'presentation-projet', response }))
     } else {
-      console.log(`[${ts}] handle.js: ${response}`)
+      console.log(`${GRAY}[${ts}]${RESET} handle.js:\n${response}`)
     }
     process.exit(0)
   }
 
-  // 3. Intercom patterns → délègue à intercom.js
+  // 3. Decouverte → exploration complète du projet
+  if (isDecouverte(userMessage)) {
+    const response = decouverteResponse()
+    if (jsonMode) {
+      console.log(JSON.stringify({ matched: true, type: 'decouverte', response }))
+    } else {
+      console.log(`${GRAY}[${ts}]${RESET} handle.js:\n${response}`)
+    }
+    process.exit(0)
+  }
+
+  // 4. Intercom patterns → délègue à intercom.js
   const patterns = loadPatterns()
   const matched = matchPattern(userMessage, patterns)
 
@@ -175,12 +195,12 @@ function main() {
         response: response || fallback,
       }))
     } else {
-      console.log(response || fallback)
+      console.log(`${CYAN}${response || fallback}${RESET}`)
     }
     process.exit(0)
   }
 
-  // 4. Fallback
+  // 5. Fallback
   if (jsonMode) {
     console.log(JSON.stringify({
       matched: false,
@@ -188,7 +208,7 @@ function main() {
       response: 'Je transmets ta demande au service compétent.',
     }))
   } else {
-    console.log('Je transmets ta demande au service compétent.')
+    console.log(`${CYAN}Je transmets ta demande au service compétent.${RESET}`)
   }
 
   process.exit(0)

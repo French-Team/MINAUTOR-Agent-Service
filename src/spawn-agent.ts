@@ -90,7 +90,7 @@ process.on('SIGINT', () => handleKillSignal('SIGINT'))
 /** Exécute une commande shell et retourne stdout+stderr */
 function runTerminalCommand(command: string, _processType?: 'SYNC' | 'BACKGROUND', timeoutSeconds?: number): Promise<string> {
   return new Promise((resolve) => {
-    const child = exec(command, {
+    exec(command, {
       cwd: process.cwd(),
       timeout: (timeoutSeconds || 30) * 1000,
       maxBuffer: 10 * 1024 * 1024,
@@ -240,7 +240,6 @@ async function main() {
     while (toolCalls.length > 0 && loopCount < maxLoops) {
       loopCount++
 
-      const toolNames = toolCalls.map(t => `${t.toolName}(${JSON.stringify(t.input).slice(0, 60)})`).join('\n')
       console.log(`[Tool Loop ${loopCount}/${maxLoops}] ${toolCalls.length} outil(s):`)
       toolCalls.forEach((t, i) => console.log(`  ${i+1}. ${t.toolName}: ${JSON.stringify(t.input).slice(0, 80)}`))
       pushNotification(

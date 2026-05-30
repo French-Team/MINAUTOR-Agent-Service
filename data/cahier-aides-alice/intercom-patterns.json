@@ -28,6 +28,14 @@
       "response": "Je transmets ta demande au service compétent."
     },
     {
+      "id": "P9",
+      "name": "project-request",
+      "keywords": ["projet", "projets", "workspace", "workspaces"],
+      "minMatch": 1,
+      "subject": "project-request",
+      "response": "Je transmets ta demande concernant les projets à l'équipe compétente."
+    },
+    {
       "id": "P4",
       "name": "create-request",
       "keywords": ["crée", "créé", "fais", "développe", "code", "genere", "génère", "ecris", "écris", "implemente", "implémente", "construit", "fabrique"],
@@ -65,14 +73,6 @@
       "keywords": ["liste", "lister", "agent", "disponible", "équipe", "equipe", "voir", "catalogue", "annuaire", "qui"],
       "minMatch": 2,
       "subject": "agent-list-request",
-      "response": "Je transmets ta demande au service compétent."
-    },
-    {
-      "id": "P9",
-      "name": "project-request",
-      "keywords": ["projet", "projets", "workspace", "workspaces"],
-      "minMatch": 1,
-      "subject": "project-request",
       "response": "Je transmets ta demande au service compétent."
     }
   ]

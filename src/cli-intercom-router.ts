@@ -11,14 +11,14 @@
  *   3. Le daemon telecom route vers agent-telecom
  *   4. Agent-telecom route vers l'orchestrateur → agent spécialisé
  *
- * Patterns basés sur data/cahier-aides-alice/02-patterns/
+ * Patterns chargés depuis data/cahier-aides-alice/intercom-patterns.json
  */
 
-import { writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'fs'
+import { writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 
-// ── Patterns ──────────────────────────────────────────
+// ── Patterns chargés depuis le JSON ─────────────────
 
 interface IntercomPattern {
   keywords: string[]
@@ -30,71 +30,47 @@ interface IntercomPattern {
   response: string
 }
 
-const PATTERNS: IntercomPattern[] = [
-  // P1 — Bug / erreur / crash
-  {
-    keywords: ['bug', 'erreur', 'crash', 'plante', 'plante', 'casse'],
-    minMatch: 1,
-    subject: 'debug-request',
-    response: 'Je transmets ta demande de debug à agent-telecom.',
-  },
-  // P2 — Analyse / inspection
-  {
-    keywords: ['analyse', 'examine', 'vérifie', 'inspecte', 'diagnostic'],
-    minMatch: 1,
-    subject: 'analysis-request',
-    response: 'Je transmets ta demande d\'analyse à agent-telecom.',
-  },
-  // P3 — Revue de code / qualité
-  {
-    keywords: ['review', 'revue', 'qualité', 'ameliorer', 'améliorer', 'relis'],
-    minMatch: 1,
-    subject: 'review-request',
-    response: 'Je transmets ta demande de review à agent-telecom.',
-  },
-  // P4 — Création / développement
-  {
-    keywords: ['crée', 'créé', 'fais', 'développe', 'code', 'genere', 'génère', 'ecris', 'écris', 'implemente', 'implémente'],
-    minMatch: 1,
-    subject: 'create-request',
-    response: 'Je transmets ta demande de création à agent-telecom.',
-  },
-  // P5 — Configuration / déploiement
-  {
-    keywords: ['configure', 'installe', 'déploie', 'deploie', 'setup', 'init'],
-    minMatch: 1,
-    subject: 'deploy-request',
-    response: 'Je transmets ta demande de déploiement à agent-telecom.',
-  },
-  // P6 — Conseil / idée
-  {
-    keywords: ['idée', 'idee', 'suggestion', 'conseil', 'comment faire'],
-    minMatch: 1,
-    subject: 'advice-request',
-    response: 'Je transmets ta demande de conseil à agent-telecom.',
-  },
-  // P7 — Aide urgente
-  {
-    keywords: ['aide', 'besoin', 'urgent', 'bloqué', 'bloque', 'coince', 'coincé'],
-    minMatch: 1,
-    subject: 'help-request',
-    response: 'Je transmets ta demande d\'aide à agent-telecom.',
-  },
-  // P8 — Liste des agents (nécessite 2 mots-clés pour éviter les faux positifs)
-  {
-    keywords: ['liste', 'lister', 'agent', 'disponible', 'équipe', 'equipe', 'voir', 'catalogue', 'annuaire', 'qui'],
-    minMatch: 2,
-    subject: 'agent-list-request',
-    response: 'Je te transmets la demande pour voir la liste des agents disponibles.',
-  },
-  // P9 — Projets / workspaces (solution de repli Intercom pour le petit modèle)
-  {
-    keywords: ['projet', 'projets', 'workspace', 'workspaces'],
-    minMatch: 1,
-    subject: 'project-request',
-    response: 'Je transmets ta demande concernant les projets à agent-telecom.',
-  },
-]
+interface PatternRegistry {
+  patterns: Array<{
+    id: string
+    name: string
+    keywords: string[]
+    minMatch: number
+    subject: string
+    response: string
+  }>
+}
+
+const PATTERNS_FILE = join(process.cwd(), 'data', 'cahier-aides-alice', 'intercom-patterns.json')
+
+function loadPatterns(): IntercomPattern[] {
+  try {
+    const raw = readFileSync(PATTERNS_FILE, 'utf-8')
+    const registry: PatternRegistry = JSON.parse(raw)
+    if (!Array.isArray(registry.patterns)) {
+      console.warn('[intercom] patterns invalide dans intercom-patterns.json')
+      return []
+    }
+    return registry.patterns.map(p => ({
+      keywords: p.keywords,
+      minMatch: p.minMatch,
+      subject: p.subject,
+      response: p.response,
+    }))
+  } catch (err) {
+    console.warn(`[intercom] Impossible de charger intercom-patterns.json: ${(err as Error).message}`)
+    return []
+  }
+}
+
+let _patterns: IntercomPattern[] | null = null
+
+function getPatterns(): IntercomPattern[] {
+  if (!_patterns) {
+    _patterns = loadPatterns()
+  }
+  return _patterns
+}
 
 // ── Projet courant ─────────────────────────────────
 
@@ -192,7 +168,7 @@ export function tryRouteIntercom(userMessage: string, projectName?: string): Rou
   const project = projectName ?? _currentProject
   const lower = userMessage.toLowerCase()
 
-  for (const pattern of PATTERNS) {
+  for (const pattern of getPatterns()) {
     let matchCount = 0
     for (const kw of pattern.keywords) {
       if (lower.includes(kw)) {

@@ -16,17 +16,19 @@
  * Si rien ne correspond, on retombe sur le profil 'medium' (défaut sain).
  *
  * Aucune dépendance externe : tout est statique et déterministe.
+ * Données chargées depuis data/model-profiles.json
  */
 
+import { readFileSync, existsSync } from 'fs'
+import { join } from 'path'
+import { buildRegExp } from './regex-utils.js'
 import type { ResumerOptions } from './telecom-context-resumer.js'
 import type { ContextProfile } from '../../../types/agent-definition.js'
 
 // ── Compile-time sync guard ──
 // Vérification bidirectionnelle : si ProfileName et ContextProfile dérivent
 // (valeurs différentes), une de ces lignes produit une erreur de type.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _profileSyncA: ContextProfile = null as unknown as ProfileName
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _profileSyncB: ProfileName = null as unknown as ContextProfile
 
 // Type structurel local pour éviter une dépendance circulaire avec index.ts
@@ -47,124 +49,162 @@ export interface ModelProfile {
   options: Required<Pick<ContextOptions, 'keepRecent' | 'maxCharsPerMessage' | 'maxCharsPerSummaryLine'>>
 }
 
-/**
- * Profils — du plus contraint au plus généreux.
- *
- * Heuristiques :
- * - keepRecent             : nombre de messages récents conservés intacts
- * - maxCharsPerMessage     : troncature d'un message conservé tel quel
- * - maxCharsPerSummaryLine : longueur max d'une ligne dans le bloc résumé
- *
- * Ordre de grandeur (1 token ≈ 4 caractères en français/anglais).
- */
-export const PROFILES: Record<ProfileName, ModelProfile> = {
-  tiny: {
-    name: 'tiny',
-    description: 'Modèles ≤ 1.5B (LFM2.5-1.2B, TinyLlama). Compression agressive : raisonnement dégrade vite avec un long contexte.',
-    options: {
-      keepRecent: 6,
-      maxCharsPerMessage: 600,
-      maxCharsPerSummaryLine: 120,
-    },
-  },
-  small: {
-    name: 'small',
-    description: 'Modèles 1.5-4B (Llama3.2-3B, Phi-3-mini). Compression marquée mais préserve le contexte conversationnel court.',
-    options: {
-      keepRecent: 10,
-      maxCharsPerMessage: 1000,
-      maxCharsPerSummaryLine: 160,
-    },
-  },
-  medium: {
-    name: 'medium',
-    description: 'Modèles 4-15B (Llama3-8B, Mistral-7B). Défaut sain pour la plupart des usages locaux/cloud.',
-    options: {
-      keepRecent: 12,
-      maxCharsPerMessage: 1200,
-      maxCharsPerSummaryLine: 180,
-    },
-  },
-  large: {
-    name: 'large',
-    description: 'Modèles 15B-70B ou cloud (Gemini Flash, GPT-4, Claude Sonnet). Garde large historique intact.',
-    options: {
-      keepRecent: 20,
-      maxCharsPerMessage: 2400,
-      maxCharsPerSummaryLine: 240,
-    },
-  },
-  huge: {
-    name: 'huge',
-    description: 'Modèles long-context (Gemini 2.5 Pro/Flash 1M, Claude 200k+). Compression minimale.',
-    options: {
-      keepRecent: 40,
-      maxCharsPerMessage: 4000,
-      maxCharsPerSummaryLine: 320,
-    },
-  },
+// ── JSON file types ──
+
+interface JsonProfile {
+  name: string
+  description: string
+  options: {
+    keepRecent: number
+    maxCharsPerMessage: number
+    maxCharsPerSummaryLine: number
+  }
 }
 
-/**
- * Règles de matching (testées dans l'ordre, première qui matche gagne).
- * Note : on matche sur le NOM du modèle (insensible à la casse), pas sur le
- * provider. Le préfixe optionnel `provider/` est tolerant.
- */
+interface JsonMatchRule {
+  pattern: string
+  flags: string
+  profile: string
+  reason: string
+}
+
+interface JsonRouterPattern {
+  pattern: string
+  flags: string
+}
+
+interface ProfilesRegistry {
+  profiles: Record<string, JsonProfile>
+  rules: JsonMatchRule[]
+  routerPatterns: JsonRouterPattern[]
+}
+
+// ── Lazy loader ──
+
+const PROFILES_PATH = join(process.cwd(), 'data', 'model-profiles.json')
+
+function loadRegistry(): ProfilesRegistry | null {
+  try {
+    if (!existsSync(PROFILES_PATH)) {
+      console.warn(`[profiles] Fichier introuvable: ${PROFILES_PATH}`)
+      return null
+    }
+    const raw = readFileSync(PROFILES_PATH, 'utf-8')
+    const registry: ProfilesRegistry = JSON.parse(raw)
+    if (!registry.profiles || !Array.isArray(registry.rules) || !Array.isArray(registry.routerPatterns)) {
+      console.warn('[profiles] Structure invalide dans model-profiles.json')
+      return null
+    }
+    return registry
+  } catch (err) {
+    console.warn(`[profiles] Impossible de charger model-profiles.json: ${(err as Error).message}`)
+    return null
+  }
+}
+
+interface LoadedData {
+  profiles: Record<ProfileName, ModelProfile>
+  rules: MatchRule[]
+  routerPatterns: RegExp[]
+}
+
 interface MatchRule {
   pattern: RegExp
   profile: ProfileName
   reason: string
 }
 
-const RULES: MatchRule[] = [
-  // ── HUGE : 1M tokens et + ──
-  { pattern: /gemini[-_.]?2\.5[-_.]?(?:pro|flash)/i, profile: 'huge', reason: 'Gemini 2.5 (1M tokens)' },
-  { pattern: /gemini[-_.]?1\.5/i, profile: 'huge', reason: 'Gemini 1.5 (1M-2M tokens)' },
-  { pattern: /claude[-_.]?(?:3|4)[-_.]?(?:opus|sonnet)/i, profile: 'huge', reason: 'Claude 3/4 Opus/Sonnet (200k+)' },
+let _data: LoadedData | null = null
 
-  // ── LARGE : 100k+ ou modèles cloud puissants ──
-  { pattern: /gemini[-_.]?(?:pro|flash)/i, profile: 'large', reason: 'Gemini générique' },
-  { pattern: /gpt[-_.]?4/i, profile: 'large', reason: 'GPT-4 famille' },
-  { pattern: /claude/i, profile: 'large', reason: 'Claude générique' },
-  { pattern: /llama[-_.]?3(?:\.[12])?[-_.]?(?:70b|405b)/i, profile: 'large', reason: 'Llama3 70B/405B' },
-  { pattern: /qwen[-_.]?(?:2\.5|3)/i, profile: 'large', reason: 'Qwen 2.5/3 (souvent 128k+)' },
-  { pattern: /trinity[-_.]?large/i, profile: 'large', reason: 'Arcee Trinity Large' },
-  { pattern: /deepseek[-_.]?(?:v[34]|r1)/i, profile: 'large', reason: 'DeepSeek V3/R1' },
+function getData(): LoadedData {
+  if (_data) return _data
 
-  // ── SMALL : 1.5-4B ──
-  // Note : la famille Llama3.2 (1B/3B) est traitée uniformément en "small"
-  // par simplicité ; le 1B serait techniquement "tiny" mais l'écart est faible.
-  { pattern: /(?:^|[\/_-])(?:1\.5b|2b|3b|3\.8b)(?:[\/_-]|$|[^0-9])/i, profile: 'small', reason: 'Modèle 1.5-4B explicite' },
-  { pattern: /llama[-_.]?3\.2(?!.*(?:7|8|13|70)b)/i, profile: 'small', reason: 'Llama3.2 (1B/3B par défaut)' },
-  { pattern: /phi[-_.]?3[-_.]?mini/i, profile: 'small', reason: 'Phi-3-mini' },
-  { pattern: /tinyllama/i, profile: 'small', reason: 'TinyLlama (limite haute du tiny)' },
+  const registry = loadRegistry()
+  if (!registry) {
+    return getFallbackData()
+  }
 
-  // ── TINY : ≤ 1.5B ──
-  { pattern: /lfm2(?:\.5)?[-_.]?1\.2b/i, profile: 'tiny', reason: 'Liquid LFM2/2.5-1.2B' },
-  { pattern: /(?:^|[\/_-])(?:0\.5b|0\.6b|1\.2b|1b)(?:[\/_-]|$|[^0-9])/i, profile: 'tiny', reason: 'Modèle ≤ 1.2B explicite' },
-  { pattern: /qwen[-_.]?(?:0\.5|1\.5)b/i, profile: 'tiny', reason: 'Qwen 0.5B/1.5B' },
-  { pattern: /smollm/i, profile: 'tiny', reason: 'SmolLM' },
+  const profiles: Record<string, ModelProfile> = {}
+  for (const [key, p] of Object.entries(registry.profiles)) {
+    profiles[key] = {
+      name: key as ProfileName,
+      description: p.description,
+      options: { ...p.options },
+    }
+  }
 
-  // ── MEDIUM : famille génériques 7B-13B ──
-  { pattern: /(?:^|[\/_-])(?:7b|8b|13b|14b)(?:[\/_-]|$|[^0-9])/i, profile: 'medium', reason: 'Modèle 7-14B explicite' },
-  { pattern: /mistral[-_.]?(?:7b|small)/i, profile: 'medium', reason: 'Mistral 7B/Small' },
-  { pattern: /llama[-_.]?3(?:\.1)?[-_.]?(?:7|8)b/i, profile: 'medium', reason: 'Llama3.x 7B/8B' },
-]
+  const rules: MatchRule[] = registry.rules.map(r => ({
+    pattern: buildRegExp(r.pattern, r.flags),
+    profile: r.profile as ProfileName,
+    reason: r.reason,
+  }))
+
+  const routerPatterns: RegExp[] = registry.routerPatterns.map(rp =>
+    buildRegExp(rp.pattern, rp.flags)
+  )
+
+  _data = {
+    profiles: profiles as Record<ProfileName, ModelProfile>,
+    rules,
+    routerPatterns,
+  }
+  return _data
+}
+
+function getFallbackData(): LoadedData {
+  _data = {
+    profiles: {
+      tiny: {
+        name: 'tiny',
+        description: 'Profil tiny (fallback)',
+        options: { keepRecent: 6, maxCharsPerMessage: 600, maxCharsPerSummaryLine: 120 },
+      },
+      small: {
+        name: 'small',
+        description: 'Profil small (fallback)',
+        options: { keepRecent: 10, maxCharsPerMessage: 1000, maxCharsPerSummaryLine: 160 },
+      },
+      medium: {
+        name: 'medium',
+        description: 'Profil medium (fallback)',
+        options: { keepRecent: 12, maxCharsPerMessage: 1200, maxCharsPerSummaryLine: 180 },
+      },
+      large: {
+        name: 'large',
+        description: 'Profil large (fallback)',
+        options: { keepRecent: 20, maxCharsPerMessage: 2400, maxCharsPerSummaryLine: 240 },
+      },
+      huge: {
+        name: 'huge',
+        description: 'Profil huge (fallback)',
+        options: { keepRecent: 40, maxCharsPerMessage: 4000, maxCharsPerSummaryLine: 320 },
+      },
+    },
+    rules: [],
+    routerPatterns: [],
+  }
+  return _data
+}
 
 /**
- * Routeurs « free » de Kilo / OpenRouter : on ne sait pas vers quel modèle
- * la requête sera dispatchée. On reste conservateur (small) plutôt que
- * gaspiller du contexte sur un petit modèle inconnu.
- *
- * IMPORTANT : ces patterns sont testés APRÈS les règles spécifiques. Sinon
- * un modèle connu suffixé ":free" (ex: gemini-2.5-flash:free) serait
- * faussement rétrogradé en "small" alors qu'on connaît sa fenêtre réelle.
+ * Profils exporté avec lazy-load depuis le JSON.
+ * Compatible avec l'ancienne interface `Record<ProfileName, ModelProfile>`.
  */
-const ROUTER_PATTERNS: RegExp[] = [
-  /kilo[-_.]?auto/i,
-  /openrouter[-_.]?auto/i,
-  /:free$/i,
-]
+export const PROFILES: Record<ProfileName, ModelProfile> = new Proxy({} as Record<ProfileName, ModelProfile>, {
+  get(_target, prop: string | symbol) {
+    const data = getData()
+    return data.profiles[prop as ProfileName]
+  },
+  has(_target, prop: string | symbol) {
+    return prop in getData().profiles
+  },
+  ownKeys() {
+    return Object.keys(getData().profiles)
+  },
+  getOwnPropertyDescriptor() {
+    return { enumerable: true, configurable: true }
+  },
+})
 
 /**
  * Résout le profil pour un nom de modèle donné.
@@ -180,41 +220,43 @@ const ROUTER_PATTERNS: RegExp[] = [
  * @returns Le profil correspondant
  */
 export function resolveProfile(model: string): ModelProfile {
-  if (!model) return PROFILES.medium
+  const data = getData()
+  if (!model) return data.profiles.medium
 
   // 1. Règles spécifiques d'abord : un modèle connu gagne sur le routeur
-  for (const rule of RULES) {
-    if (rule.pattern.test(model)) return PROFILES[rule.profile]
+  for (const rule of data.rules) {
+    if (rule.pattern.test(model)) return data.profiles[rule.profile]
   }
 
   // 2. Routeur générique inconnu → conservateur 'small'
-  for (const pat of ROUTER_PATTERNS) {
-    if (pat.test(model)) return PROFILES.small
+  for (const pat of data.routerPatterns) {
+    if (pat.test(model)) return data.profiles.small
   }
 
   // 3. Défaut : medium
-  return PROFILES.medium
+  return data.profiles.medium
 }
 
 /**
  * Variante exposant la raison du match (pour debug/observabilité).
  */
 export function resolveProfileDetail(model: string): { profile: ModelProfile; reason: string } {
-  if (!model) return { profile: PROFILES.medium, reason: 'aucun modèle fourni → medium par défaut' }
+  const data = getData()
+  if (!model) return { profile: data.profiles.medium, reason: 'aucun modèle fourni → medium par défaut' }
 
-  for (const rule of RULES) {
+  for (const rule of data.rules) {
     if (rule.pattern.test(model)) {
-      return { profile: PROFILES[rule.profile], reason: rule.reason }
+      return { profile: data.profiles[rule.profile], reason: rule.reason }
     }
   }
 
-  for (const pat of ROUTER_PATTERNS) {
+  for (const pat of data.routerPatterns) {
     if (pat.test(model)) {
-      return { profile: PROFILES.small, reason: `routeur générique ${pat.source} → small (conservateur, modèle destination inconnu)` }
+      return { profile: data.profiles.small, reason: `routeur générique ${pat.source} → small (conservateur, modèle destination inconnu)` }
     }
   }
 
-  return { profile: PROFILES.medium, reason: 'aucune règle ne matche → medium par défaut' }
+  return { profile: data.profiles.medium, reason: 'aucune règle ne matche → medium par défaut' }
 }
 
 /**
@@ -244,14 +286,15 @@ const warnedInvalidOverrides = new Set<string>()
  * typés (ex: typo "tinny" au lieu de "tiny").
  */
 export function resolveContextOptionsFor(opts: { model: string; override?: string }): ContextOptions {
+  const data = getData()
   const override = opts.override
   if (override) {
-    if (override in PROFILES) {
-      return { ...PROFILES[override as ProfileName].options }
+    if (override in data.profiles) {
+      return { ...data.profiles[override as ProfileName].options }
     }
     if (!warnedInvalidOverrides.has(override)) {
       warnedInvalidOverrides.add(override)
-      const valid = Object.keys(PROFILES).join(', ')
+      const valid = Object.keys(data.profiles).join(', ')
       console.warn(
         `⚠  contextProfile "${override}" inconnu — fallback sur la résolution par modèle. Valeurs valides : ${valid}.`,
       )

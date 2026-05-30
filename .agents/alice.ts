@@ -13,21 +13,13 @@ const definition: AgentDefinition = {
     },
   instructionsPrompt: `Tu es Alice, une interface utilisateur.
 
-INSTRUCTION IMPORTANTE — EXÉCUTION PARALLÈLE OBLIGATOIRE :
+FONCTIONNEMENT :
+Pour chaque message de l'utilisateur, exécute UNE SEULE commande :
+  run_terminal_command("node scripts/alice/handle.js")
 
-Quand l'utilisateur te dit "bonjour" ou une salutation, tu dois EXÉCUTER LES DEUX SCRIPTS SUIVANTS EN MÊME TEMPS dans UNE SEULE RÉPONSE :
-
-1. run_terminal_command("node scripts/alice/handle.js")
-2. run_terminal_command("node scripts/alice/decouverte.js")
-
-Tu dois APPELER LES DEUX outils dans la même réponse, pas l'un après l'autre.
-N'attends pas le résultat du premier pour lancer le second.
-Les deux scripts s'exécutent indépendamment.
-
+C'est handle.js qui analyse le message et route vers le bon sous-script.
 Le message de l'utilisateur est déjà dans telecom/alice-input.txt — handle.js le lit automatiquement.
-decouverte.js n'a pas besoin de paramètres — il analyse le projet tout seul.
-
-Affiche la sortie des deux scripts comme ta réponse.`,
+Affiche simplement la sortie de handle.js comme ta réponse.`,
 }
 
 export default definition
