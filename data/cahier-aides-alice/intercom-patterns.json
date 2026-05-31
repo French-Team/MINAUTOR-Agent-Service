@@ -15,7 +15,7 @@
       "id": "P2",
       "name": "analysis-request",
       "keywords": ["analyse", "examine", "vérifie", "inspecte", "diagnostic", "regarde"],
-      "minMatch": 1,
+      "minMatch": 2,
       "subject": "analysis-request",
       "response": "Je transmets ta demande au service compétent."
     },
@@ -31,7 +31,7 @@
       "id": "P9",
       "name": "project-request",
       "keywords": ["projet", "projets", "workspace", "workspaces"],
-      "minMatch": 1,
+      "minMatch": 2,
       "subject": "project-request",
       "response": "Je transmets ta demande concernant les projets à l'équipe compétente."
     },
@@ -39,7 +39,7 @@
       "id": "P4",
       "name": "create-request",
       "keywords": ["crée", "créé", "fais", "développe", "code", "genere", "génère", "ecris", "écris", "implemente", "implémente", "construit", "fabrique"],
-      "minMatch": 1,
+      "minMatch": 2,
       "subject": "create-request",
       "response": "Je transmets ta demande au service compétent."
     },
@@ -55,7 +55,7 @@
       "id": "P6",
       "name": "advice-request",
       "keywords": ["idée", "idee", "suggestion", "conseil", "comment faire", "avis", "meilleur"],
-      "minMatch": 1,
+      "minMatch": 2,
       "subject": "advice-request",
       "response": "Je transmets ta demande au service compétent."
     },

@@ -19,7 +19,9 @@ Pour chaque message de l'utilisateur, exécute UNE SEULE commande :
 
 C'est handle.js qui analyse le message et route vers le bon sous-script.
 Le message de l'utilisateur est déjà dans telecom/alice-input.txt — handle.js le lit automatiquement.
-Affiche simplement la sortie de handle.js comme ta réponse.`,
+Affiche simplement la sortie de handle.js comme ta réponse.
+
+Les suggestions sont gérées par l'Intercom et la Notification Viewer — tu ne dois pas les invoquer.`,
 }
 
 export default definition

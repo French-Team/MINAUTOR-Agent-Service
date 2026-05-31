@@ -134,12 +134,12 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
     console.log(`  Clés    : ${keyCount}\n`)
 
     console.log(`${BOLD}Actions :${RESET}`)
-    console.log(`  ${CYAN}1${RESET}. Ajouter/modifier une clé API`)
-    console.log(`  ${CYAN}2${RESET}. Configurer le modèle par défaut`)
-    console.log(`  ${CYAN}3${RESET}. Voir les clés API`)
-    console.log(`  ${CYAN}4${RESET}. Supprimer une clé API`)
-    console.log(`  ${CYAN}5${RESET}. ${provider.enabled ? 'Désactiver' : 'Activer'} ce provider`)
-    console.log(`  ${CYAN}6${RESET}. État des clés & alternateur`)
+    console.log(`  ${CYAN}101${RESET}. Ajouter/modifier une clé API`)
+    console.log(`  ${CYAN}102${RESET}. Configurer le modèle par défaut`)
+    console.log(`  ${CYAN}103${RESET}. Voir les clés API`)
+    console.log(`  ${CYAN}104${RESET}. Supprimer une clé API`)
+    console.log(`  ${CYAN}105${RESET}. ${provider.enabled ? 'Désactiver' : 'Activer'} ce provider`)
+    console.log(`  ${CYAN}106${RESET}. État des clés & alternateur`)
     console.log(`  ${CYAN}0${RESET}. Retour\n`)
 
     const choice = (await rl.question(`${CYAN}Choix${RESET} ${GRAY}>${RESET} `)).trim()
@@ -149,7 +149,7 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
       continue
     }
 
-    if (choice === '1') {
+    if (choice === '101') {
       // Ajouter/modifier une clé API
       const apiKey = (await rl.question(`${CYAN}Nouvelle clé API${RESET} ${GRAY}>${RESET} `)).trim()
       if (!apiKey) {
@@ -181,7 +181,7 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
       continue
     }
 
-    if (choice === '2') {
+    if (choice === '102') {
       // Configurer le modèle par défaut
       console.log(`\n${YELLOW}⟳ Récupération des modèles disponibles...${RESET}`)
       try {
@@ -308,7 +308,7 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
       continue
     }
 
-    if (choice === '3') {
+    if (choice === '103') {
       // Voir les clés API
       const keys = getProviderKeys(provider.name)
       if (keys.length === 0) {
@@ -329,7 +329,7 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
       continue
     }
 
-    if (choice === '4') {
+    if (choice === '104') {
       // Supprimer une clé API
       const keys = getProviderKeys(provider.name)
       if (keys.length === 0) {
@@ -357,7 +357,7 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
       continue
     }
 
-    if (choice === '5') {
+    if (choice === '105') {
       // Activer/désactiver un provider
       const newStatus = !provider.enabled
       setProviderEnabled(provider.name, newStatus)
@@ -369,7 +369,7 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
       continue
     }
 
-    if (choice === '6') {
+    if (choice === '106') {
       // Dashboard état des clés & alternateur
       const keys = getProviderKeys(provider.name)
       const statuses = getProviderKeyStatuses(provider.name)
@@ -379,7 +379,7 @@ export async function handleProviderActions(rl: ReturnType<typeof createInterfac
       if (keys.length === 0) {
         console.log(`${CYAN}│${RESET}`)
         console.log(`${CYAN}│${RESET}  ${YELLOW}Aucune clé configurée.${RESET}`)
-        console.log(`${CYAN}│${RESET}  Ajoutez une clé avec l'option ${GREEN}1${RESET}.`)
+        console.log(`${CYAN}│${RESET}  Ajoutez une clé avec l'option ${GREEN}101${RESET}.`)
       } else {
         const status = provider.enabled ? `${GREEN}✓ Activé${RESET}` : `${GRAY}✗ Désactivé${RESET}`
         console.log(`${CYAN}│${RESET}`)

@@ -1,0 +1,243 @@
+MINAUTOR Agent Service - Structure & Workflow Analysis
+===================================================
+
+OVERVIEW
+--------
+MINAUTOR is a multi-agent orchestration framework for TypeScript/Node.js.
+It enables creation of specialized agents, secure execution, LLM provider routing,
+context compression (Telecom), permission control (FeuRouge), and governance
+via the PACO protocol.
+
+CORE DIRECTORIES
+----------------
+- .agents/          : Agent definition files (.ts)
+- scripts/          : Pre‑written scripts for fast, reliable execution
+- src/              : Source code (engine, CLI, agents, providers, telecom, etc.)
+- telecom/          : Runtime data (intercom, notifications, logbook, agent workspaces)
+- data/             : Profiles, permissions, PACO registry, golden rules
+- workspaces/       : Isolated project workspaces (.tasks.json, .workspace)
+
+AGENT ALICE – ENTRY POINT
+-------------------------
+- File: .agents/alice.ts
+- ID: alice, displayName: Alice
+- Provider: lm-studio, model: qwen/qwen3.5-9b
+- Tools: only `run_terminal_command`
+- Behavior: For every user message, executes exactly one command:
+    run_terminal_command("node scripts/alice/handle.js")
+- The user message is pre‑placed by the CLI in `telecom/alice-input.txt`.
+
+HANDLE.JS – DISPATCHER
+----------------------
+- File: scripts/alice/handle.js
+- Reads the user message (from argument or telecom/alice-input.txt)
+- Performs hard‑coded matching:
+    1. Greeting with name (e.g. "bonjour alice") → runs presentation.js
+    2. Simple greeting (e.g. "bonjour") → runs presentation-minautor.js
+    3. Decouverte keyword → runs decouverte.js
+    4. Otherwise, loads patterns from `data/cahier-aides-alice/intercom-patterns.json`
+       and if a pattern matches, delegates to intercom.js.
+- If no match, falls back to a generic response.
+
+INTERCOM.JS – MESSAGE ROUTING
+-----------------------------
+- File: scripts/alice/intercom.js
+- Receives a message (from handle.js or directly)
+- Loads intercom‑patterns.json (subject → keyword list)
+- On match, writes a JSON message file to `telecom/intercom/`:
+    {
+      id: <uuid>,
+      from: "alice",
+      to: "orchestrateur",
+      type: "request",
+      subject: <matched pattern subject>,
+      payload: { demande: <user message> },
+      timestamp: <ISO>,
+      status: "pending"
+    }
+- Also writes a trigger file `telecom/daemon.trigger` to wake the daemon.
+
+TELECOM DAEMON – ROUTING & AGENT SPAWNING
+-----------------------------------------
+- File: src/telecom/service/telecom-daemon.ts (runs as a background daemon)
+- Polls `telecom/intercom/` every ~1s for files with status "pending".
+- For each pending message:
+    1. Marks status as "read" and copies to `telecom/routed/`.
+    2. Sends a notification to the CLI via `pushNotification`.
+    3. Attempts to run a pre‑written script via `matchAndExecute` (script‑runner).
+       - The script runner looks at the message subject and payload,
+         and tries to match against a registry of patterns (likely defined
+         in `data/cahier-aides-alice/02-patterns/` or similar).
+       - If a script matches, it is executed directly (fast, reliable).
+    4. If no script matches, the daemon spawns the target LLM agent
+       (specified by `msg.to`, usually "orchestrateur") using
+       `spawn-agent.js`.
+- Agent spawning includes:
+    - Anti‑loop protection (max spawns per agent per time window).
+    - Registration with FeuRouge (permission system) for the spawned PID.
+    - Building an instruction string that tells the agent what to do
+      (reading the routed message, consulting keyword‑registry, etc.).
+    - Timeout safeguard (5 min) with automatic kill and error logging.
+
+SCRIPT RUNNER – PRE‑WRITTEN SCRIPTS
+-----------------------------------
+- Function `matchAndExecute` (in src/script-runner.js) receives:
+    - user message (demande)
+    - message subject (from intercom)
+    - optional extra env (e.g. project name)
+- It checks against a set of patterns (likely loaded from
+  `data/cahier-aides-alice/02-patterns/` or similar) and if a match is found,
+  executes the corresponding script (e.g. a .js file under `scripts/`).
+- Scripts are organized by domain (e.g. scripts/alice/, scripts/telecom/,
+  scripts/projects/, etc.) and perform concrete tasks without involving an LLM.
+- On success, the daemon may post follow‑up suggestions and write structured
+  suggestions for the interactive menu.
+
+ORCHESTRATEUR – PACO COORDINATOR
+--------------------------------
+- File: .agents/orchestrateur.ts
+- ID: orchestrateur, displayName: Orchestrateur
+- Provider: lm-studio, model: qwen/qwen3.5-9b
+- Tools: run_terminal_command, add_message, set_output
+- Role: Central coordinator; must never produce code, docs, or analysis.
+- Before any action, consults the PACO keyword registry
+  (`data/protocols/keyword-registry.yaml`).
+- If a keyword matches an agent, must delegate to that agent.
+- If no match, responds: "Tâche non couverte — intervention humaine requise".
+- Monitors task board (`.tasks.json` in each workspace) and manages
+  sequential vs parallel execution per domain.
+- Communicates via intercom (sending/requesting messages) and updates
+  `tâches_en_cours.json`.
+
+TASK BOARD & WORKSPACES
+-----------------------
+- Each project lives in `workspaces/<project>/`.
+- Contains:
+    - `.workspace` YAML (metadata)
+    - `.tasks.json` array of tasks with fields: id, title, domaine, status,
+      dependsOn, etc.
+- CLI commands (via `!project ...`) allow creating, listing, showing tasks,
+  starting/completing/blocking tasks, etc.
+- The orchestrateur uses the project task board CLI
+  (`dist/project/task-board-cli.js`) to:
+    - Summary, next task, can‑assign, start, done, add, etc.
+- Enforces: same‑domain = sequential, different‑domain = parallel.
+
+NOTIFICATIONS
+-------------
+- File: `telecom/notifications.json` (shared, IPC via process.send)
+- Levels: info, questions, tache, missions, mise‑en‑place, plan, storyboard,
+  todo‑list, avertissement, warning, conclusion, urgent (12 levels).
+- CLI commands: `/notifications filter <niveau>`, `/notifications history <jours>`.
+- Background agents (daemons, timers, spawns) notify via
+  `pushNotification(source, message, level)`.
+
+PERMISSION SYSTEM – FEUROUGE
+----------------------------
+- Configuration: `data/permissions/permissions.yaml`
+- Four levels:
+    admin   : full access (programme + workspaces) – Alice, Orchestrateur
+    restricted : access to workspaces/ root – technical agents
+    confined   : access to a single project workspace (default for user agents)
+    readonly   : read‑only (cat, ls, dir only) – Superviseur
+- Mechanisms:
+    - Command validation (allowed/forbidden commands)
+    - Path validation (allowed/forbidden paths)
+    - Workspace confinement (agents confined to their project)
+    - Sandbox by default (`.sandbox/`)
+    - Temporary grants (admin can grant time‑limited access)
+    - Detection of contextual leaks (git -C, --prefix that changes CWD)
+
+KITS – AUTOMATIC IMPORT INJECTION
+---------------------------------
+- Agents declare a kit with `// @kit <name>` at the top of a file.
+- The `kits-injector` automatically adds the corresponding import.
+- Guardian checks post‑execution that the declared kit matches the
+  actually used imports (security).
+- Available kits: tests (fail‑fast), errors (centralized error handling),
+  timeout (temporal guards), validation (strict input validation),
+  logging (structured logging).
+
+SKILLS – AUTO‑GENERATED PER AGENT
+---------------------------------
+- When an agent is created, a skill file is generated:
+  `skills/skill-<id>/SKILL.md`
+- Sections: Mission, Comportement, Compétences, Règles.
+- Used by the agent at runtime via the `skill` tool.
+
+VALIDATION & QUALITY
+--------------------
+- `node dist/validate-agent.js <agent-id>` checks:
+    - Agent file structure
+    - Skill file existence & structure (4 sections)
+    - PACO team presence (Orchestrateur, Superviseur, Daemon)
+    - Provider configuration
+    - Permissions.yaml
+    - Golden rules (R1–R7) – e.g. no single‑quoted payloads,
+      kebab‑case ID, no emojis in instructions, etc.
+- `npm run validate:all` validates all agents.
+- Regex linting via `npm run lint:regex` (AST‑based).
+- CI validation for GitHub Workflows (`npm run validate:ci-yaml`).
+
+WORKFLOW SUMMARY (USER → ALICE → INTERCOM → DAEMON → AGENT)
+-----------------------------------------------------------
+1. User types a message in the CLI (e.g. "bonjour").
+2. CLI writes the message to `telecom/alice-input.txt`.
+3. CLI invokes Alice agent → Alice runs `node scripts/alice/handle.js`.
+4. handle.js:
+    - Detects greeting → runs presentation‑* script → immediate response.
+    - If not a greeting, checks decouverte → runs decouverte.js.
+    - Otherwise loads intercom patterns; if a pattern matches,
+      calls `node scripts/alice/intercom.js "<message>"`.
+5. intercom.js writes a JSON request file to `telecom/intercom/`
+   and creates `telecom/daemon.trigger`.
+6. Telecom daemon (running in background) sees the trigger or polls:
+    - Reads the pending intercom file.
+    - Copies it to `telecom/routed/` (marks as read).
+    - Attempts to run a pre‑written script via script‑runner.
+    - If no script matches, spawns the target agent (usually orchestrateur)
+      via `spawn-agent.js` with an instruction built from the message.
+7. Spawned agent (e.g. Orchestrateur) receives the instruction:
+    - Reads the routed message from `telecom/routed/<id>.json`.
+    - Consults keyword‑registry.yaml to delegate to a specialized agent.
+    - Uses the project task board CLI to check domain availability,
+      start/complete tasks, and delegate via intercom.
+8. Specialized agents (when spawned) execute their duty,
+   produce results (e.g. run a script, write files), and send a
+   response intercom message back to the orchestrateur.
+9. Orchestrateur marks the task as done, possibly starts the next task,
+   and notifies the user via the Telecom notification viewer TUI.
+10. Throughout, the Telecom Watcher Console and Notification Viewer
+    (opened in Windows Terminal tabs) display live logs and notifications.
+
+CONFIGURATION FILES OF INTEREST
+-------------------------------
+- `kilo.json` (if present) – top‑level configuration for Kilo/Agent Manager.
+- `providers.json` – LLM provider API keys and rotation settings.
+- `data/permissions/permissions.yaml` – FeuRouge rules.
+- `data/protocols/keyword-registry.yaml` – PACO keyword → agent mapping.
+- `data/cahier-aides-alice/intercom-patterns.json` – Alice → intercom routing.
+- `data/cahier-aides-alice/02-patterns/` – likely script‑runner patterns.
+- `scripts/` directories – pre‑written scripts for fast execution.
+
+EXTENSION POINTS
+----------------
+- Add new intercom patterns in `data/cahier-aides-alice/intercom-patterns.json`.
+- Add new script‑runner patterns in the appropriate patterns folder
+  and place the corresponding script under `scripts/`.
+- Add new agent profiles in `data/profiles/` and reuse during agent creation.
+- Modify PACO keyword registry to route new domains to new agents.
+- Adjust permissions.yaml to tighten or loosen agent capabilities.
+- Update kits in `kits/` and register in `kits/registry.json`.
+
+NOTES ON RELIABILITY
+--------------------
+- The design favors **pre‑written scripts** over LLM inference for
+  deterministic, fast, and inexpensive responses.
+- Only when no script matches does the system fall back to spawning an
+  LLM‑based agent (orchestrateur → specialized agents).
+- Anti‑loop protection prevents runaway spawning of the same agent.
+- Permission system (FeuRouge) sandboxs agents and validates every
+  shell command.
+- Context compression (Telecom) reduces token usage while preserving
+  essential information.

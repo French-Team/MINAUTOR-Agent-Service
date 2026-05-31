@@ -4,6 +4,10 @@
 
 # ⚡ Le Projet "MINAUTOR" ⚡
  -- Projet entierement écris en Francais par un développeur français --
+ "MINAUTOR" est actuellement en phase de développement intense. 
+ Nous travaillons d'arrache-pied pour créer une expérience exceptionnelle ! 
+ Si vous souhaitez participer à cette aventure, n'hésitez pas à nous rejoindre. 
+ Chaque contribution compte pour façonner l'avenir de "MINAUTOR".
 
 **L'orchestration multi-agents nouvelle génération pour TypeScript & Node.js**
 
@@ -491,4 +495,5 @@ MINAUTOR intègre des outils de validation et d'optimisation pour garantir la qu
 <div align="center">
   <br />
   <sub>Propulsé par <b>MINAUTOR</b> — L'excellence agentique par la structure.</sub>
+  <sub>Coder en vibecoding avec <b>freebuff</b> — Model <b>Deepseek-v4 Flash</b></sub>
 </div>

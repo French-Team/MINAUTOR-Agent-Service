@@ -30,7 +30,7 @@ import { createRunner } from '../engine-runner.js'
 import type { ToolCall } from '../types/agent-definition.js'
 
 // Module télécom — anti-boucle
-import { tryRecordSpawn, resetSpawnHistory, MAX_SPAWNS_PER_AGENT, SPAWN_WINDOW_MS, loadTelecomConfig, showHelp as daemonShowHelp, resetStats } from '../telecom/service/telecom-daemon.js'
+import { tryRecordSpawn, resetSpawnHistory, MAX_SPAWNS_PER_AGENT, SPAWN_WINDOW_MS, MAX_SCRIPT_LOGS, MAX_WATCHER_FILES, loadTelecomConfig, showHelp as daemonShowHelp, resetStats } from '../telecom/service/telecom-daemon.js'
 
 // ── Types ────────────────────────────────────────────────
 
@@ -609,10 +609,14 @@ function testLoadTelecomConfig() {
   const def = loadTelecomConfig()
   assert('maxSpawnsPerAgent par défaut = 3', def.maxSpawnsPerAgent === 3, `got ${def.maxSpawnsPerAgent}`)
   assert('spawnWindowMs par défaut = 300000', def.spawnWindowMs === 300000, `got ${def.spawnWindowMs}`)
+  assert('maxScriptLogs par défaut = 20', def.maxScriptLogs === 20, `got ${def.maxScriptLogs}`)
+  assert('maxWatcherFiles par défaut = 3', def.maxWatcherFiles === 3, `got ${def.maxWatcherFiles}`)
 
   // 2. Les constantes exportées reflètent la config (pas de fichier → défaut)
   assert('MAX_SPAWNS_PER_AGENT = 3 (depuis config défaut)', MAX_SPAWNS_PER_AGENT === 3, `got ${MAX_SPAWNS_PER_AGENT}`)
   assert('SPAWN_WINDOW_MS = 300000 (depuis config défaut)', SPAWN_WINDOW_MS === 300000, `got ${SPAWN_WINDOW_MS}`)
+  assert('MAX_SCRIPT_LOGS = 20 (depuis config défaut)', MAX_SCRIPT_LOGS === 20, `got ${MAX_SCRIPT_LOGS}`)
+  assert('MAX_WATCHER_FILES = 3 (depuis config défaut)', MAX_WATCHER_FILES === 3, `got ${MAX_WATCHER_FILES}`)
 }
 
 // ── Test: telecom-daemon.ts — tryRecordSpawn() anti-boucle ──
@@ -705,10 +709,12 @@ function testShowHelp() {
     assert('Affiche la section CONFIGURATION ANTI-BOUCLE',
       joined.includes('CONFIGURATION ANTI-BOUCLE'),
     )
-    assert('Affiche maxSpawnsPerAgent et spawnWindowMs',
+    assert('Affiche maxSpawnsPerAgent, spawnWindowMs, maxScriptLogs, maxWatcherFiles',
       joined.includes('maxSpawnsPerAgent') &&
-      joined.includes('spawnWindowMs'),
-      `lignes config: ${captured.filter(l => l.includes('spawn')).join(' | ')}`
+      joined.includes('spawnWindowMs') &&
+      joined.includes('maxScriptLogs') &&
+      joined.includes('maxWatcherFiles'),
+      `lignes config: ${captured.filter(l => l.includes('max') || l.includes('spawn')).join(' | ')}`
     )
     assert('Affiche la section COMMANDES',
       joined.includes('COMMANDES'),

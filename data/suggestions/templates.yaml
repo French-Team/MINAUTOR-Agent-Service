@@ -1,0 +1,146 @@
+# Modèles de suggestions configurables
+#
+# Chaque entrée associe un nom de script à une liste de templates.
+# Un template contient :
+#   command : la commande avec placeholders {taskId}, {project}, {area}, {description}
+#   label   : texte court affiché dans le menu interactif
+#
+# Placeholders disponibles :
+#   {taskId}      → ID réel de la tâche, ou "..." si indisponible
+#   {project}     → nom du projet réel, ou "<projet>" si indisponible
+#   {area}        → domaine réel, ou "<domaine>" si indisponible
+#   {description} → description, ou '...' par défaut
+#
+# Les sections communes et d'initialisation restent définies dans le code
+# car elles nécessitent une logique conditionnelle (projet vide, etc.).
+
+tasks:
+  menu:
+    - command: "ajoute une tâche {taskId} dans {area} au projet {project}"
+      label: "Ajouter une tâche"
+      group: "Ajout"
+
+  etat:
+    - command: "ajoute une tâche {taskId} dans {area} au projet {project}"
+      label: "Ajouter une tâche"
+      group: "Ajout"
+    - command: "découvre le projet {project}"
+      label: "Explorer la structure"
+      group: "Découverte"
+
+  work:
+    - command: 'état "{project}"'
+      label: "Voir l'avancement"
+      group: "État"
+
+  add-task:
+    - command: "renomme la tâche {taskId} en 'Nouveau titre' au projet {project}"
+      label: "Renommer"
+      group: "Modification"
+    - command: "déplace la tâche {taskId} dans {area} au projet {project}"
+      label: "Déplacer"
+      group: "Modification"
+    - command: "modifie la description de la tâche {taskId} en '{description}' au projet {project}"
+      label: "Décrire"
+      group: "Modification"
+    - command: "ajoute une autre tâche {taskId} dans {area} au projet {project}"
+      label: "Ajouter"
+      group: "Ajout"
+
+  done-task:
+    - command: "renomme la tâche {taskId} en 'Nouveau titre' au projet {project}"
+      label: "Renommer"
+      group: "Modification"
+    - command: "déplace la tâche {taskId} dans {area} au projet {project}"
+      label: "Déplacer"
+      group: "Modification"
+    - command: "modifie la description de la tâche {taskId} en '{description}' au projet {project}"
+      label: "Décrire"
+      group: "Modification"
+    - command: 'continuer "{project}"'
+      label: "Voir la prochaine tâche"
+      group: "Navigation"
+    - command: 'état "{project}"'
+      label: "Progression mise à jour"
+      group: "État"
+
+  edit-task:
+    - command: "renomme la tâche {taskId} en 'Nouveau titre' au projet {project}"
+      label: "Renommer"
+      group: "Modification"
+    - command: "déplace la tâche {taskId} dans {area} au projet {project}"
+      label: "Déplacer"
+      group: "Modification"
+    - command: "modifie la description de la tâche {taskId} en '{description}' au projet {project}"
+      label: "Décrire"
+      group: "Modification"
+    - command: 'état "{project}"'
+      label: "Voir la progression"
+      group: "État"
+
+  delete-task:
+    - command: "ajoute une tâche {taskId} dans {area} au projet {project}"
+      label: "Ajouter une tâche"
+      group: "Ajout"
+    - command: 'état "{project}"'
+      label: "Voir la progression mise à jour"
+      group: "État"
+
+  block-task:
+    - command: "renomme la tâche {taskId} en 'Nouveau titre' au projet {project}"
+      label: "Renommer"
+      group: "Modification"
+    - command: "déplace la tâche {taskId} dans {area} au projet {project}"
+      label: "Déplacer"
+      group: "Modification"
+    - command: "modifie la description de la tâche {taskId} en '{description}' au projet {project}"
+      label: "Décrire"
+      group: "Modification"
+    - command: "débloque la tâche {taskId} au projet {project}"
+      label: "Quand le blocage est résolu"
+      group: "Blocage"
+    - command: 'état "{project}"'
+      label: "Voir les tâches bloquées"
+      group: "État"
+
+  unblock-task:
+    - command: "renomme la tâche {taskId} en 'Nouveau titre' au projet {project}"
+      label: "Renommer"
+      group: "Modification"
+    - command: "déplace la tâche {taskId} dans {area} au projet {project}"
+      label: "Déplacer"
+      group: "Modification"
+    - command: "modifie la description de la tâche {taskId} en '{description}' au projet {project}"
+      label: "Décrire"
+      group: "Modification"
+    - command: 'continue sur "{project}"'
+      label: "Voir la prochaine tâche disponible"
+      group: "Navigation"
+    - command: 'état "{project}"'
+      label: "Voir la progression mise à jour"
+      group: "État"
+
+  list-tasks:
+    - command: "renomme la tâche {taskId} en 'Nouveau titre' au projet {project}"
+      label: "Renommer"
+      group: "Modification"
+    - command: "déplace la tâche {taskId} dans {area} au projet {project}"
+      label: "Déplacer"
+      group: "Modification"
+    - command: "modifie la description de la tâche {taskId} en '{description}' au projet {project}"
+      label: "Décrire"
+      group: "Modification"
+    - command: "liste les tâches {area} du projet {project}"
+      label: "Filtrer par domaine"
+      group: "Filtrage"
+    - command: "liste les tâches en cours du projet {project}"
+      label: "Filtrer par statut"
+      group: "Filtrage"
+    - command: "liste les tâches terminées du projet {project}"
+      label: "Voir ce qui est fait"
+      group: "Filtrage"
+    - command: 'état "{project}"'
+      label: "Progression détaillée"
+      group: "État"
+
+

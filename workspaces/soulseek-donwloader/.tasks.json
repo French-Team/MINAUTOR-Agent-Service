@@ -1,6 +1,6 @@
 {
   "project": "soulseek-donwloader",
-  "lastUpdated": "2026-05-30T13:41:03.403Z",
+  "lastUpdated": "2026-05-31T09:40:57.025Z",
   "tasks": [
     {
       "id": "task-mpsefl7u-1",
@@ -8,6 +8,29 @@
       "area": "general",
       "status": "todo",
       "createdAt": "2026-05-30T13:41:03.402Z"
+    },
+    {
+      "id": "task-mptk7bmt-2",
+      "title": "tester suggestion",
+      "area": "backend",
+      "status": "todo",
+      "createdAt": "2026-05-31T09:10:21.605Z"
+    },
+    {
+      "id": "task-mptkd8kb-3",
+      "title": "tester suggestion",
+      "area": "backend",
+      "status": "done",
+      "createdAt": "2026-05-31T09:14:57.563Z",
+      "completedAt": "2026-05-31T09:40:57.024Z"
+    },
+    {
+      "id": "task-mptl8d0a-4",
+      "title": "test suggestion",
+      "area": "backend",
+      "status": "done",
+      "createdAt": "2026-05-31T09:39:09.658Z",
+      "completedAt": "2026-05-31T09:40:34.141Z"
     }
   ]
 }

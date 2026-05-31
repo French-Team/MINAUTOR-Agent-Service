@@ -30,10 +30,15 @@ scripts:
 
 
   # ── Projets ────────────────────────────────────────
-  - pattern: "liste(\s+les)?\s+projets?"
+  - pattern: "(?:montre|affiche|voir?)\s+(?:moi\s+)?(?:les|mes|tous?|tes|nos|vos)?\s*projets?"
     subject: "project-request"
     script: "scripts/projects/list.js"
-    description: "Liste tous les projets disponibles"
+    description: "Liste tous les projets (variante : montre/affiche/voir)"
+
+  - pattern: "liste\s+(?:les|mes|tous?|tes|nos|vos)?\s*projets?"
+    subject: "project-request"
+    script: "scripts/projects/list.js"
+    description: "Liste tous les projets (variante : mes/tous/tes)"
 
   - pattern: "(découvre|découvrir|explore|explorer|analyse|analyser)\s+(le\s+)?(?:projet\s+)?(\S+)"
     subject: "project-request"
@@ -69,10 +74,11 @@ scripts:
     script: "scripts/projects/decouverte.js"
     description: "Génère un README (contexte actif)"
 
-  - pattern: "liste(\s+les)?\s+projets?"
+  # Variante générique : 'liste * projets' ou 'montre * projets' sans projet spécifique
+  - pattern: "(?:(?:montre|affiche|voir?)\s+(?:moi\s+)?(?:les|mes|tous?|tes|nos|vos)?\s*projets?|liste\s+(?:les|mes|tous?|tes|nos|vos)?\s*projets?)"
     subject: "project-request"
     script: "scripts/projects/list.js"
-    description: "Liste tous les projets disponibles"
+    description: "Liste tous les projets (générique)"
 
   - pattern: "(montre|affiche|détails?|info)\s+(le\s+)?projet\s+(\S+)"
     subject: "project-request"
@@ -121,6 +127,10 @@ scripts:
     params:
       - name: project
         from: 3
+      - name: area
+        from: 2
+      - name: title
+        from: 1
 
   - pattern: "(?:ajoute|nouvelle)\s+(?:une|la)?\s*t[âa]che\s+\"([^\"]+)\""
     subject: "project-request"
@@ -137,6 +147,8 @@ scripts:
         from: 3
       - name: task
         from: 1
+      - name: title
+        from: 2
 
   - pattern: "(?:renomme|renommer)\s+(?:la\s+)?t[âa]che\s+(\S+)\s+en\s+\"([^\"]+)\""
     subject: "project-request"
@@ -365,6 +377,17 @@ scripts:
 
 
   # ── Lister tâches (filtres domaine/statut parsés par le script) ──
+  # Variante : liste * tâches avec mots possessifs
+  - pattern: "liste\s+(?:toutes\s+)?(?:les|mes|tes|nos|vos)?\s*t[âa]ches"
+    subject: "project-request"
+    script: "scripts/projects/list-tasks.js"
+    description: "Liste les tâches (variante : mes/tes/toutes)"
+
+  - pattern: "(?:montre|affiche|voir?)\s+(?:moi\s+)?(?:toutes\s+)?(?:les|mes)?\s*t[âa]ches"
+    subject: "project-request"
+    script: "scripts/projects/list-tasks.js"
+    description: "Liste les tâches (variante : montre/affiche)"
+
   - pattern: "liste\s+(?:toutes\s+)?(?:les\s+)?t[âa]ches"
     subject: "project-request"
     script: "scripts/projects/list-tasks.js"
@@ -391,6 +414,8 @@ scripts:
     params:
       - name: project
         from: 2
+      - name: task
+        from: 1
 
   - pattern: "(?:marque|termine)\s+(?:la\s+)?t[âa]che\s+(\S+)\s+(?:comme\s+)?termin[ée]e"
     subject: "project-request"
@@ -414,6 +439,11 @@ scripts:
         from: 2
 
   # ── Agents ─────────────────────────────────────────
+  - pattern: "(?:montre|affiche|voir?)\s+(?:moi\s+)?(?:les|mes|tous?)?\s*agents?"
+    subject: "agent-list-request"
+    script: "scripts/agents/list.js"
+    description: "Liste les agents (variante : montre/mes)"
+
   - pattern: "liste(\s+les)?\s+agents?"
     subject: "agent-list-request"
     script: "scripts/agents/list.js"
@@ -428,7 +458,7 @@ scripts:
         from: 2
 
   # ── Aide générale ──────────────────────────────────
-  - pattern: "(aide|help|commands?|commandes|comment\s+(faire|utiliser))"
+  - pattern: "(aide|help|commands?|commandes)"
     subject: "help-request"
     script: "scripts/help/show.js"
     description: "Affiche l'aide générale du système"
@@ -439,11 +469,48 @@ scripts:
     script: "scripts/telecom/summary.js"
     description: "Résumé de l'état du système telecom (intercom, routage, agents, logs)"
 
+  # ── Analyse de patterns (maintenance) ─────────────
+  - pattern: "(?:analyse|analyze|analyse les|analyze les)\s+(?:les\s+)?patterns?"
+    subject: "system-maintenance-request"
+    script: "scripts/telecom/analyze-patterns.js"
+    description: "Analyse les patterns du registre et les échecs de matching"
+
+  - pattern: "(?:sugg[èe]re|suggestion|propose)\s+(?:un\s+)?pattern"
+    subject: "system-maintenance-request"
+    script: "scripts/telecom/analyze-patterns.js"
+    description: "Suggère un nouveau pattern pour une demande non reconnue"
+
   # ── Debug ──────────────────────────────────────────
-  - pattern: "(j'ai\s+un\s+)?bug|erreur|crash|plante|(ne\s+)?marche\s+pas"
+  - pattern: "probl[èe]me\s+(de\s+)?(connexion|connection|r[ée]seau|serveur|api|authentification|login|session)"
     subject: "debug-request"
     script: "scripts/debug/collect.js"
-    description: "Collecte les informations de debug"
+    description: "Problème de connexion, réseau ou authentification"
+
+  - pattern: "(ne\s+)?(le\s+)?(marche|fonctionne)\s+pas|ne\s+r[ée]pond\s+pas|[çc]a\s+marche\s+pas|(ne\s+)?s'affiche\s+pas"
+    subject: "debug-request"
+    script: "scripts/debug/collect.js"
+    description: "Fonctionnement défaillant ou non-affichage"
+
+  - pattern: "(j'ai\s+un\s+)?bug|erreur|crash|plante"
+    subject: "debug-request"
+    script: "scripts/debug/collect.js"
+    description: "Bug, erreur ou crash signalé"
+
+  # ── Aide étendue ────────────────────────────────────
+  - pattern: "(?:comment\s+(?:faire|utiliser|configurer|installer|d[ée]marrer|cr[ée]er|trouver)|[àa]\s+quoi\s+sert|c'est\s+quoi|c'est\s+comment)"
+    subject: "help-request"
+    script: "scripts/help/show.js"
+    description: "Questions d'utilisation (comment faire, à quoi sert)"
+
+  - pattern: "(?:besoin\s+d[']aide|j'ai\s+besoin\s+d[']aide)"
+    subject: "help-request"
+    script: "scripts/help/show.js"
+    description: "Demande d'aide explicite (besoin d'aide, j'ai besoin d'aide)"
+
+  - pattern: "(?:pourrais\s+tu|peux\s+tu)\s+(?:m[']|me|nous)\s*aider"
+    subject: "help-request"
+    script: "scripts/help/show.js"
+    description: "Demande polie d'aide (pourrais-tu, peux-tu)"
 
   # ── Fallback génériques par sujet ──────────────────
   - pattern: ".*"

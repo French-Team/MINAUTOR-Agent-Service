@@ -19,7 +19,7 @@
  */
 
 import { createRequire } from 'node:module'
-import { readFileSync, writeFileSync, existsSync, watch, unlinkSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 
 const require$ = createRequire(import.meta.url)
@@ -28,12 +28,13 @@ const term = termkit.terminal
 
 // ── Constantes ──
 const CWD = process.cwd()
-const NOTIFY_PATH = join(CWD, 'telecom', 'notifications.json')
+const ARCHIVE_DIR = join(CWD, 'telecom', 'notifications')
 const PID_FILE = join(CWD, 'telecom', 'daemon.pid')
 const VIEWER_PID_FILE = join(CWD, 'telecom', 'notification-viewer.pid')
 const VIEWER_SHUTDOWN_FILE = join(CWD, 'telecom', 'notification-viewer.shutdown')
 const POLL_INTERVAL = 1500 // 1.5 secondes
 const DAEMON_CHECK_INTERVAL = 5000 // 5 secondes
+const ARCHIVE_FALLBACK_DAYS = 3 // jours d'archives à charger en fallback
 
 interface Notification {
   id: string
@@ -67,7 +68,26 @@ function levelIcon(level: string): string {
 // ── État ──
 let knownIds = new Set<string>()
 let shutdownScheduled = false
-let watchers: ReturnType<typeof watch>[] = []
+
+// ── Cache mtime des archives (évite de relire les fichiers inchangés) ──
+const archiveMtimes = new Map<string, number>()
+
+// ── Session : ne charger que les notifications produites APRÈS le démarrage ──
+const sessionStartTime = Date.now()
+
+// ── Compteur de notifications non encore affichées ──
+let newCount = 0
+
+// ── Anti-flicker / dimensions ──
+let lastTermSize = { w: 80, h: 24 }
+let lastTitleHash = ''
+let lastStatusHash = ''
+let forceRedraw = false
+let psCacheSize = { w: 80, h: 24 }
+let cycleCounter = 0
+
+// ── Région du contenu ──
+let contentRegion = { x: 1, y: 1, w: 78, h: 22 }
 
 // ── Historique scrollable ──
 let allHistory: Notification[] = []
@@ -78,13 +98,52 @@ const MAX_HISTORY = 500
 // ── Helpers ──
 
 function termWidth(): number {
+  if (process.platform === 'win32' && psCacheSize.w > 0) {
+    return psCacheSize.w
+  }
   const w = process.stdout.columns ?? term.width
   return (typeof w === 'number' && w > 0 && isFinite(w)) ? Math.floor(w) : 80
 }
 
 function termHeight(): number {
+  if (process.platform === 'win32' && psCacheSize.h > 0) {
+    return psCacheSize.h
+  }
   const h = process.stdout.rows ?? term.height
   return (typeof h === 'number' && h > 0 && isFinite(h)) ? Math.floor(h) : 24
+}
+
+/**
+ * Récupère la taille réelle de la console Windows via PowerShell.
+ * Contourne le problème où process.stdout.columns/rows sont figés.
+ */
+function getWindowsConsoleSize(): { w: number; h: number } {
+  try {
+    const { execSync } = require$('node:child_process')
+    const cmd = 'powershell -noprofile -command "(Get-Host).UI.RawUI.WindowSize.Width; (Get-Host).UI.RawUI.WindowSize.Height"'
+    const raw = execSync(cmd, { timeout: 3000, encoding: 'utf-8' }).trim()
+    const parts = raw.split(/\r?\n/).map((s: string) => parseInt(s.trim(), 10)).filter((n: number) => !isNaN(n) && n > 0)
+    if (parts.length >= 2) {
+      return { w: Math.floor(parts[0]), h: Math.floor(parts[1]) }
+    }
+  } catch {
+    /* PowerShell peut echouer si pas disponible */
+  }
+  return { w: 0, h: 0 }
+}
+
+/**
+ * Rafraîchit le cache PowerShell tous les 3 cycles.
+ */
+function refreshWindowsSize(): void {
+  if (process.platform !== 'win32') return
+  cycleCounter++
+  if (cycleCounter === 1 || cycleCounter % 3 === 0) {
+    const real = getWindowsConsoleSize()
+    if (real.w > 0 && real.h > 0) {
+      psCacheSize = { w: real.w, h: real.h }
+    }
+  }
 }
 
 function formatUptime(seconds: number): string {
@@ -157,25 +216,60 @@ function truncateWidth(text: string, maxCols: number): string {
 
 // ── Données ──
 
-function loadNotifications(): Notification[] {
-  if (!existsSync(NOTIFY_PATH)) return []
-  try {
-    const raw = readFileSync(NOTIFY_PATH, 'utf-8').trim()
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((n: unknown): n is Notification =>
-      n !== null && typeof n === 'object' && typeof (n as Record<string, unknown>).id === 'string'
-    )
-  } catch {
-    return []
+/**
+ * Charge les notifications depuis les archives telecom/notifications/YYYY-MM-DD.json.
+ * Le viewer utilise UNIQUEMENT les archives car pushNotification() écrit
+ * systématiquement dans les DEUX fichiers (notifications.json + archive).
+ * L'archive est la source fiable : jamais effacée par le CLI.
+ * @param days - Nombre de jours en arrière à charger (aujourd'hui inclus)
+ */
+function loadArchivedNotifications(days: number): Notification[] {
+  if (!existsSync(ARCHIVE_DIR)) return []
+
+  const results: Notification[] = []
+  const now = new Date()
+
+  for (let d = 0; d < days; d++) {
+    const date = new Date(now)
+    date.setDate(date.getDate() - d)
+    const dateKey = date.toISOString().slice(0, 10)
+    const archivePath = join(ARCHIVE_DIR, `${dateKey}.json`)
+
+    if (!existsSync(archivePath)) {
+      // Fichier supprimé entre-temps → nettoyer le cache
+      archiveMtimes.delete(archivePath)
+      continue
+    }
+
+    // Vérifier le mtime avant de lire — sauter si inchangé
+    try {
+      const mtimeMs = statSync(archivePath).mtimeMs
+      const cached = archiveMtimes.get(archivePath)
+      if (cached !== undefined && mtimeMs <= cached) continue
+      archiveMtimes.set(archivePath, mtimeMs)
+    } catch {
+      // stat peut échouer (fichier supprimé entre existsSync et statSync)
+      archiveMtimes.delete(archivePath)
+      continue
+    }
+
+    try {
+      const raw = readFileSync(archivePath, 'utf-8').trim()
+      if (!raw) continue
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) continue
+      const valid = parsed.filter((n: unknown): n is Notification =>
+        n !== null && typeof n === 'object' && typeof (n as Record<string, unknown>).id === 'string'
+      )
+      results.push(...valid)
+    } catch {
+      continue
+    }
   }
+
+  return results
 }
 
-/**
- * Construit le texte à afficher dans la zone de notification.
- * Header résumé + chaque notification formatée (timestamp, icône, source, message).
- */
 /**
  * Construit les lignes de texte à afficher depuis un tableau d'historique.
  * Header résumé + chaque notification formatée (timestamp, icône, source, message).
@@ -225,17 +319,89 @@ function buildDisplayLines(history: Notification[]): string[] {
 
 
 
+// ── Layout / Redimensionnement ──
+
+/**
+ * Recalcule la région de contenu en fonction de la taille actuelle du terminal.
+ */
+function recalcRegions(): void {
+  const tw = termWidth()
+  const th = termHeight()
+  contentRegion = {
+    x: 1,
+    y: 1,
+    w: Math.max(4, tw - 2),
+    h: Math.max(3, th - 3),
+  }
+}
+
+/**
+ * Dessine la bordure autour de la zone de contenu.
+ *   ┌──────────────────┐
+ *   │                  │
+ *   └──────────────────┘
+ */
+function drawBorder(): void {
+  const r = contentRegion
+  const { x, y, w, h } = r
+  if (w < 4 || h < 3) return
+
+  const RESET = '\x1b[0m'
+  const BORDER = '\x1b[36m'  // Cyan
+  const hLine = '─'.repeat(w - 2)
+
+  for (let row = 0; row < h; row++) {
+    term.moveTo(x, y + row)
+    if (row === 0) {
+      term(BORDER + '┌' + hLine + '┐' + RESET)
+    } else if (row === h - 1) {
+      term(BORDER + '└' + hLine + '┘' + RESET)
+    } else {
+      term(BORDER + '│' + ' '.repeat(Math.max(0, w - 2)) + '│' + RESET)
+    }
+  }
+}
+
+/**
+ * Vérifie si la taille du terminal a changé et redessine si nécessaire.
+ */
+function checkResize(): void {
+  const tw = termWidth()
+  const th = termHeight()
+  const sizeChanged = (tw !== lastTermSize.w || th !== lastTermSize.h)
+
+  if (!sizeChanged && !forceRedraw) return
+  forceRedraw = false
+
+  lastTermSize = { w: tw, h: th }
+  lastTitleHash = ''
+  lastStatusHash = ''
+
+  try { term.eraseDisplay() } catch { /* ignorer */ }
+
+  recalcRegions()
+  drawBorder()
+  drawTitleBar()
+  drawStatusBar()
+  // Le contenu est redessiné par le collectAll() appelant
+}
+
 // ── Rendu ──
 
 /**
- * Dessine la barre de titre (ligne 0)
+ * Dessine la barre de titre (ligne 0) avec anti-flicker (hash).
  */
 function drawTitleBar(): void {
   const tw = termWidth()
   const daemonAlive = checkDaemon()
   const uptime = Math.floor((Date.now() - startTime) / 1000)
-  const status = daemonAlive ? 'Daemon: actif' : 'Daemon: mort'
 
+  const th = termHeight()
+  const hash = `${tw}:${th}:${daemonAlive}:${uptime}`
+  if (hash === lastTitleHash) return
+  lastTitleHash = hash
+
+  const status = daemonAlive ? 'Daemon: actif' : 'Daemon: mort'
   const title = ` Notifications — ${status} | Uptime: ${formatUptime(uptime)} `
   const padded = title.length >= tw
     ? title.slice(0, tw)
@@ -247,23 +413,61 @@ function drawTitleBar(): void {
 }
 
 /**
- * Dessine la zone de contenu (lignes 1 à th-2) avec support du scroll.
+ * Dessine une scrollbar verticale sur le côté droit de la zone de contenu.
+ * @param innerH - Hauteur intérieure de la zone de contenu
+ */
+function drawScrollbar(innerH: number): void {
+  if (maxScrollLines <= 0 || innerH < 2) return
+
+  const r = contentRegion
+  const { x, y, w } = r
+  const scrollbarCol = x + w - 2  // dernière colonne à l'intérieur de la bordure
+
+  // Taille du pouce proportionnelle à la part visible
+  const totalLines = innerH + maxScrollLines
+  const thumbSize = Math.max(1, Math.round(innerH * innerH / totalLines))
+
+  // Position du pouce (0 = tout en haut, innerH - thumbSize = tout en bas)
+  const maxThumbTop = innerH - thumbSize
+  const thumbPos = maxScrollLines > 0
+    ? Math.round((scrollOffset / maxScrollLines) * maxThumbTop)
+    : 0
+
+  const RESET = '\x1b[0m'
+  const THUMB = '\x1b[37m'    // blanc
+  const TRACK = '\x1b[90m'     // gris foncé
+
+  for (let row = 0; row < innerH; row++) {
+    term.moveTo(scrollbarCol, y + 1 + row)
+    if (row >= thumbPos && row < thumbPos + thumbSize) {
+      term(THUMB + '█' + RESET)
+    } else {
+      term(TRACK + '│' + RESET)
+    }
+  }
+}
+
+/**
+ * Dessine la zone de contenu (dans contentRegion, entre la bordure) avec support du scroll.
  * @param lines - Toutes les lignes de l'historique (buildDisplayLines)
  * @param offset - Nombre de lignes à sauter depuis le début (scroll)
  */
 function drawContent(lines: string[], offset: number): void {
-  const tw = termWidth()
-  const th = termHeight()
-  const contentHeight = th - 3 // titre + status + bordure de status
-  if (contentHeight < 2) return
+  const r = contentRegion
+  const { x, y, w, h } = r
+  const innerH = h - 2  // à l'intérieur de la bordure (haut + bas)
+  if (innerH < 1) return
 
-  const maxCols = tw - 2
+  // Réserver 1 colonne pour la scrollbar
+  const maxCols = w - 3
+  if (maxCols < 1) return
+
   const RESET = '\x1b[0m'
   const BG_DARK = '\x1b[48;5;236m'
 
-  for (let row = 0; row < contentHeight; row++) {
+  for (let row = 0; row < innerH; row++) {
     const lineIdx = offset + row
-    term.moveTo(1, 1 + row)
+    term.moveTo(x + 1, y + 1 + row)
     if (lineIdx < lines.length) {
       const line = lines[lineIdx].replace(/%/g, '%%')
       const lineW = visibleWidth(line)
@@ -280,10 +484,31 @@ function drawContent(lines: string[], offset: number): void {
       term(' '.repeat(maxCols))
     }
   }
+
+  // Scrollbar par-dessus la dernière colonne
+  drawScrollbar(innerH)
 }
 
 /**
- * Dessine la barre d'état (dernière ligne) avec indicateur de scroll.
+ * Saute à une position de scroll et redessine le contenu + barres.
+ * Utilisé par le clavier (flèches), la molette, et le clic sur la scrollbar.
+ */
+function scrollTo(newOffset: number): void {
+  const clamped = Math.max(0, Math.min(maxScrollLines, newOffset))
+  if (clamped === scrollOffset) return
+  scrollOffset = clamped
+  const lines = buildDisplayLines(allHistory)
+  drawContent(lines, scrollOffset)
+  drawStatusBar()
+  newCount = 0
+  const total = allHistory.length
+  const daemonStatus = checkDaemon() ? 'actif' : 'mort'
+  const scrollHint = scrollOffset > 0 ? ` \u2191${scrollOffset}` : ''
+  term('\x1b]0;' + `Notifications Viewer — ${total} notifications — daemon ${daemonStatus}${scrollHint}` + '\x07')
+}
+
+/**
+ * Dessine la barre d'état (dernière ligne) avec anti-flicker (hash).
  * Utilise allHistory pour le décompte (inclut les notifications consommées).
  */
 function drawStatusBar(): void {
@@ -297,7 +522,13 @@ function drawStatusBar(): void {
   const urgent = levels.get('urgent') ?? 0
   const warning = levels.get('avertissement') ?? 0
 
+  const th = termHeight()
+  const hash = `${tw}:${th}:${total}:${urgent}:${warning}:${scrollOffset}:${newCount}`
+  if (hash === lastStatusHash) return
+  lastStatusHash = hash
+
   let status = ` Total: ${total}`
+  if (newCount > 0) status += ` | 🆕 ${newCount} nouvelle${newCount > 1 ? 's' : ''}`
   if (urgent > 0) status += ` | 🔴 ${urgent} urgent`
   if (warning > 0) status += ` | 🟡 ${warning} avertissement`
   status += ` | 📜 ${scrollOffset === 0 ? 'fin' : `${scrollOffset}↑`}`
@@ -340,17 +571,33 @@ function checkDaemon(): boolean {
 
 function collectAll(): void {
   try {
-    const fresh = loadNotifications()
-    let hasNew = false
+    // Vérifier redimensionnement (anti-flicker) + rafraîchir la taille Windows
+    checkResize()
+    refreshWindowsSize()
 
-    // Fusionner les nouvelles notifications dans l'historique
-    for (const n of fresh) {
+    // Charger les archives des derniers jours
+    // L'archive est la source unique : pushNotification() écrit toujours dans les deux
+    // fichiers (live + archive), mais le CLI vide notifications.json. L'archive persiste.
+    const archived = loadArchivedNotifications(ARCHIVE_FALLBACK_DAYS)
+
+    // Filtrer : ne garder que les notifications postérieures au démarrage du viewer
+    // (les archives des sessions précédentes sont ignorées)
+    const allSources = archived
+    let addedThisCycle = 0
+
+    for (const n of allSources) {
       if (!knownIds.has(n.id)) {
         knownIds.add(n.id)
+        // Ignorer les notifications antérieures au démarrage (ancienne session)
+        // ou avec un timestamp invalide (corrompu)
+        const notifTime = new Date(n.timestamp).getTime()
+        if (Number.isNaN(notifTime) || notifTime < sessionStartTime) continue
         allHistory.push(n)
-        hasNew = true
+        addedThisCycle++
       }
     }
+
+    if (addedThisCycle > 0) newCount += addedThisCycle
 
     // Tronquer si trop grand
     if (allHistory.length > MAX_HISTORY) {
@@ -361,7 +608,7 @@ function collectAll(): void {
     allHistory.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
 
     const lines = buildDisplayLines(allHistory)
-    const contentHeight = termHeight() - 3
+    const contentHeight = contentRegion.h - 2  // hauteur intérieure entre les bordures
     maxScrollLines = Math.max(0, lines.length - contentHeight)
 
     // Auto-scroll : si on était tout en bas (scrollOffset === 0),
@@ -375,6 +622,7 @@ function collectAll(): void {
     drawContent(lines, scrollOffset)
     drawTitleBar()
     drawStatusBar()
+    newCount = 0
     const total = allHistory.length
     const daemonStatus = checkDaemon() ? 'actif' : 'mort'
     const scrollHint = scrollOffset > 0 ? ` ↑${scrollOffset}` : ''
@@ -389,12 +637,9 @@ function shutdown(): void {
   shutdownScheduled = true
 
   try { unlinkSync(VIEWER_PID_FILE) } catch { /* déjà supprimé */ }
-  for (const w of watchers) {
-    try { w.close() } catch { /* ignore */ }
-  }
-  watchers = []
 
   try {
+    term.grabInput(false)
     term.hideCursor(false)
     term.fullscreen(false)
     term.styleReset()
@@ -403,29 +648,20 @@ function shutdown(): void {
   process.exit(0)
 }
 
-function setupFileWatcher(): void {
-  for (const w of watchers) {
-    try { w.close() } catch { /* ignore */ }
-  }
-  watchers = []
-
-  try {
-    const telecomDir = join(CWD, 'telecom')
-    if (existsSync(telecomDir)) {
-      const w = watch(telecomDir, { recursive: false }, () => {
-        // Forcer le rafraîchissement à la prochaine collecte
-      })
-      watchers.push(w)
-    }
-  } catch { /* fs.watch pas disponible */ }
-}
-
 // ── Initialisation ──
 
 function initUI(): void {
   try {
     term.fullscreen(true)
     term.hideCursor(true)
+    term.grabInput({ mouse: 'button' })
+
+    // Marquer la taille initiale + dessiner le cadre et la barre de titre
+    lastTermSize = { w: termWidth(), h: termHeight() }
+    recalcRegions()
+    drawBorder()
+    drawTitleBar()
+    drawStatusBar()
 
     // Premier rendu (remplit allHistory depuis le fichier)
     collectAll()
@@ -443,45 +679,73 @@ function initUI(): void {
           return
         }
 
-        // ── Gestion du scroll ──
-        const contentHeight = termHeight() - 3
-        let newOffset = scrollOffset
-
-        switch (name) {
-          case 'UP':
-            if (scrollOffset > 0) newOffset = scrollOffset - 1
-            break
-          case 'DOWN':
-            if (scrollOffset < maxScrollLines) newOffset = scrollOffset + 1
-            break
-          case 'PAGE_UP':
-            newOffset = Math.max(0, scrollOffset - contentHeight)
-            break
-          case 'PAGE_DOWN':
-            newOffset = Math.min(maxScrollLines, scrollOffset + contentHeight)
-            break
-          case 'HOME':
-            newOffset = 0
-            break
-          case 'END':
-            newOffset = maxScrollLines
-            break
-          default:
-            return // pas une touche de scroll → rien à redessiner
+        // ── Touche 'r' : force un redessin complet ──
+        if (name === 'r' || name === 'R') {
+          lastTitleHash = lastStatusHash = ''
+          forceRedraw = true
+          try { term.eraseDisplay() } catch { /* ignorer */ }
+          collectAll()
+          return
         }
 
-        if (newOffset !== scrollOffset) {
-          scrollOffset = newOffset
-          const lines = buildDisplayLines(allHistory)
-          drawContent(lines, scrollOffset)
-          drawStatusBar()
-          const total = allHistory.length
-          const daemonStatus = checkDaemon() ? 'actif' : 'mort'
-          const scrollHint = scrollOffset > 0 ? ` ↑${scrollOffset}` : ''
-          term('\x1b]0;' + `Notifications Viewer — ${total} notifications — daemon ${daemonStatus}${scrollHint}` + '\x07')
+        // ── Gestion du scroll ──
+        if (name === 'UP') {
+          if (scrollOffset > 0) scrollTo(scrollOffset - 1)
+          return
+        }
+        if (name === 'DOWN') {
+          if (scrollOffset < maxScrollLines) scrollTo(scrollOffset + 1)
+          return
+        }
+        if (name === 'PAGE_UP') {
+          const contentHeight = contentRegion.h - 2
+          scrollTo(scrollOffset - contentHeight)
+          return
+        }
+        if (name === 'PAGE_DOWN') {
+          const contentHeight = contentRegion.h - 2
+          scrollTo(scrollOffset + contentHeight)
+          return
+        }
+        if (name === 'HOME') {
+          scrollTo(0)
+          return
+        }
+        if (name === 'END') {
+          scrollTo(maxScrollLines)
+          return
         }
       })
     } catch { /* pas de clavier */ }
+
+    try {
+      term.on('mouse', (name: string, data: { x: number; y: number }) => {
+        // ── Molette : 3 lignes par cran ──
+        if (name === 'MOUSE_WHEEL_UP') {
+          if (scrollOffset > 0) scrollTo(scrollOffset - 3)
+          return
+        }
+        if (name === 'MOUSE_WHEEL_DOWN') {
+          if (scrollOffset < maxScrollLines) scrollTo(scrollOffset + 3)
+          return
+        }
+
+        // ── Clic gauche sur la scrollbar : saut proportionnel ──
+        if (name !== 'MOUSE_LEFT_BUTTON_PRESSED') return
+        const r = contentRegion
+        const scrollbarCol = r.x + r.w - 2
+        if (data.x !== scrollbarCol) return
+        const innerH = r.h - 2
+        if (maxScrollLines <= 0 || innerH < 2) return
+
+        const trackTop = r.y + 1
+        const relativeY = data.y - trackTop
+        if (relativeY < 0 || relativeY >= innerH) return
+
+        const ratio = Math.max(0, Math.min(1, relativeY / (innerH - 1)))
+        scrollTo(Math.round(ratio * maxScrollLines))
+      })
+    } catch { /* pas de souris */ }
   } catch (err) {
     logCrash('initUI', err)
     throw err
@@ -522,9 +786,6 @@ function main(): void {
       writeFileSync(VIEWER_PID_FILE, String(process.pid), 'utf-8')
     } catch { /* non bloquant */ }
 
-    collectAll()
-    setupFileWatcher()
-
     const pollTimer = setInterval(() => {
       // Vérifier si le daemon demande un shutdown gracieux
       if (existsSync(VIEWER_SHUTDOWN_FILE)) {
@@ -563,18 +824,18 @@ function main(): void {
  * Utilisé pour les messages de shutdown/daemon mort.
  */
 function updateContent(msg: string): void {
-  const th = termHeight()
-  const tw = termWidth()
-  const contentHeight = th - 3
-  if (contentHeight < 2) return
+  const r = contentRegion
+  const { x, y, w, h } = r
+  const innerH = h - 2  // à l'intérieur de la bordure (haut + bas)
+  if (innerH < 1) return
 
   const lines = msg.split('\n')
-  const maxCols = tw - 2
+  const maxCols = w - 2  // à l'intérieur de la bordure
   const RESET = '\x1b[0m'
   const BG_DARK = '\x1b[48;5;236m'
 
-  for (let row = 0; row < contentHeight; row++) {
-    term.moveTo(1, 1 + row)
+  for (let row = 0; row < innerH; row++) {
+    term.moveTo(x + 1, y + 1 + row)
     if (row < lines.length) {
       const line = lines[row].replace(/%/g, '%%')
       const lineW = visibleWidth(line)

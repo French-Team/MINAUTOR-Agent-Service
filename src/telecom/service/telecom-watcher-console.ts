@@ -5,11 +5,10 @@
  * Usage:
  *   node dist/telecom/service/telecom-watcher-console.js
  *
- * Affiche 4 quadrants en temps réel (lecture seule) :
- *   Q1 (TL) : Intercom — messages en attente/routés
- *   Q2 (TR) : Routage — routages et statistiques du daemon
- *   Q3 (BL) : Agents — spawns, livrables, erreurs
- *   Q4 (BR) : Logs — logbook et notifications
+ * Affiche 3 quadrants en temps réel (lecture seule) :
+ *   Q1 (TL) : Communications — Intercom + Routage (fusionnés)
+ *   Q2 (BL) : Agents — spawns, livrables, erreurs
+ *   Q3 (BR) : Logs — logbook et notifications
  *
  * Rafraîchissement : fs.watch + polling 1s.
  * Détection de mort du daemon parent via telecom/daemon.pid.
@@ -67,8 +66,7 @@ interface QuadrantData {
 
 // ── État global ──
 const QUADRANTS: Record<string, QuadrantData> = {
-  intercom: { region: { x: 0, y: 0, w: 0, h: 0 }, title: ' Intercom ', lastHash: '', lastContent: '' },
-  routing: { region: { x: 0, y: 0, w: 0, h: 0 }, title: ' Routage ', lastHash: '', lastContent: '' },
+  comms: { region: { x: 0, y: 0, w: 0, h: 0 }, title: ' Communications ', lastHash: '', lastContent: '' },
   agents: { region: { x: 0, y: 0, w: 0, h: 0 }, title: ' Agents ', lastHash: '', lastContent: '' },
   logs: { region: { x: 0, y: 0, w: 0, h: 0 }, title: ' Logs & Notifications ', lastHash: '', lastContent: '' },
 }
@@ -93,8 +91,7 @@ let lastTermSize = { w: termWidth(), h: termHeight() }
 
 // ── Thèmes de couleurs des quadrants ──
 const QUADRANT_THEMES: Record<string, { border: string; bg: string }> = {
-  intercom: { border: '\x1b[34m', bg: '\x1b[48;5;17m' },  // Bleu
-  routing:  { border: '\x1b[32m', bg: '\x1b[48;5;22m' },  // Vert
+  comms:  { border: '\x1b[36m', bg: '\x1b[48;5;24m' },  // Cyan (fusion Intercom + Routage)
   agents:   { border: '\x1b[33m', bg: '\x1b[48;5;94m' },  // Orange/Jaune
   logs:     { border: '\x1b[36m', bg: '\x1b[48;5;24m' },  // Cyan/Teal
 }
@@ -134,12 +131,12 @@ function checkResize(): void {
 
   // Redessiner toutes les bordures aux nouvelles dimensions
   recalcRegions()
-  for (const id of ['intercom', 'routing', 'agents', 'logs'] as const) {
+  for (const id of ['comms', 'agents', 'logs'] as const) {
     drawQuadrantBorder(id)
   }
 
   // Réécrire les contenus existants aux nouvelles dimensions
-  for (const id of ['intercom', 'routing', 'agents', 'logs'] as const) {
+  for (const id of ['comms', 'agents', 'logs'] as const) {
     if (QUADRANTS[id].lastContent) {
       writeQuadrantContent(id, QUADRANTS[id].lastContent)
     }
@@ -226,45 +223,51 @@ function termHeight(): number {
 // ── Dessin des quadrants ──
 
 /**
- * Calcule les régions des 4 quadrants en grille 2 colonnes × 2 lignes.
+ * Calcule les régions des 3 quadrants :
+ *   - Top : Communications (Intercom + Routage fusionnés) — pleine largeur
+ *   - Bottom-left : Agents
+ *   - Bottom-right : Logs
  *
  * Layout :
- *   ┌─ Intercom ──┐ ┌── Routage ──┐
- *   │              │ │              │
- *   ├── Agents ───┤ ├─ Logs & Notif┤
- *   │              │ │              │
- *   └──────────────┘ └──────────────┘
- *
- * Chaque quadrant est ~2× plus large qu'avant grâce aux 2 colonnes
- * au lieu de 4, ce qui laisse suffisamment de place pour voir les
- * sujets et messages en entier.
- * Les positions Y sont réparties sur 2 lignes (rowGap=1 entre les lignes).
+ *   ┌──── Communications (Intercom + Routage) ────┐
+ *   │                                               │
+ *   ├──── Agents ────┤ ├──── Logs & Notifications ─┤
+ *   │                 │ │                            │
+ *   └─────────────────┘ └────────────────────────────┘
  */
 function recalcRegions(): void {
   const tw = termWidth()
   const th = termHeight()
 
-  // 2 colonnes au lieu de 4 → chaque quadrant est ~2× plus large
+  // 2 colonnes pour la ligne du bas (Agents | Logs)
   const layout = computeColumnLayout(tw, th, 2)
 
-  // Répartir la hauteur disponible sur 2 lignes
   const rowGap = 1
-  const rowHeight = Math.floor((layout.columnHeight - rowGap) / 2)
+  const topHeight = Math.floor((layout.columnHeight - rowGap) * 0.5)
+  const bottomHeight = layout.columnHeight - topHeight - rowGap
 
-  const grid: Array<{ id: string; row: number; col: number }> = [
-    { id: 'intercom', row: 0, col: 0 },
-    { id: 'routing',  row: 0, col: 1 },
-    { id: 'agents',   row: 1, col: 0 },
-    { id: 'logs',     row: 1, col: 1 },
-  ]
+  // Top : Communications — pleine largeur
+  QUADRANTS.comms.region = {
+    x: 1,                            // MARGIN = 1
+    y: 1,
+    w: Math.max(4, tw - 2),          // pleine largeur - marges
+    h: Math.max(3, topHeight),
+  }
 
-  for (const pos of grid) {
-    QUADRANTS[pos.id].region = {
-      x: layout.columns[pos.col].x,
-      y: 1 + pos.row * (rowHeight + rowGap),
-      w: layout.columns[pos.col].w,
-      h: rowHeight,
-    }
+  // Bottom-left : Agents
+  QUADRANTS.agents.region = {
+    x: layout.columns[0].x,
+    y: 1 + topHeight + rowGap,
+    w: layout.columns[0].w,
+    h: Math.max(3, bottomHeight),
+  }
+
+  // Bottom-right : Logs
+  QUADRANTS.logs.region = {
+    x: layout.columns[1].x,
+    y: 1 + topHeight + rowGap,
+    w: layout.columns[1].w,
+    h: Math.max(3, bottomHeight),
   }
 }
 
@@ -636,12 +639,13 @@ function bold(text: string): string {
   return '\x1b[1m' + text + '\x1b[22m'
 }
 
-function collectIntercomData(): string {
+function collectCommsData(): string {
   const lines: string[] = []
   let pending = 0
   let read = 0
   let processed = 0
 
+  // 1. Intercom — messages entrants
   if (existsSync(INTERCOM_DIR)) {
     const files = readdirSync(INTERCOM_DIR).filter(f => f.endsWith('.json')).sort()
     for (const f of files) {
@@ -667,14 +671,10 @@ function collectIntercomData(): string {
           processed++
         }
 
-        const demande = msg.payload?.demande
-          ? (typeof msg.payload.demande === 'string' ? msg.payload.demande.slice(0, 60) : '')
-          : ''
         const sujet = (msg.subject || '').slice(0, 20)
         const fromColored = col((msg.from || '?').padEnd(12), color)
         const toColored = (msg.to || '?').padEnd(12)
-        const demandePart = demande ? ` ${sujet} | ${col(demande.slice(0, 40), color)}` : ` ${sujet}`
-        lines.push(`${icon} ${time} ${fromColored}→ ${toColored}${demandePart}`)
+        lines.push(` ${icon} ${time} ${fromColored}→ ${toColored} ${sujet}`)
       } catch {
         /* ignorer */
       }
@@ -683,17 +683,8 @@ function collectIntercomData(): string {
 
   pendingIntercomCount = pending
 
-  const pendingCol = pending > 0 ? col(String(pending), 'yellow') : String(pending)
-  const readCol = read > 0 ? col(String(read), 'green') : String(read)
-  const processedCol = col(String(processed), 'dim')
-  const colHeaders = `${bold('Heure'.padEnd(8))} ${bold('De'.padEnd(12))} ${bold('Statut'.padEnd(6))} ${bold('Sujet'.padEnd(22))}`
-  const header = `[Total: ${lines.length} | En atte: ${pendingCol} | Lus: ${readCol} | Tr: ${processedCol}]`
-  return header + '\n' + colHeaders + (lines.length > 0 ? '\n' + lines.join('\n') : '\n(aucun message)')
-}
-
-function collectRoutingData(): string {
-  const lines: string[] = []
-
+  // 2. Routages — messages routés (sous les intercom)
+  const routingLines: string[] = []
   if (existsSync(ROUTED_DIR)) {
     const files = readdirSync(ROUTED_DIR).filter(f => f.endsWith('.json')).sort()
     for (const f of files) {
@@ -701,26 +692,43 @@ function collectRoutingData(): string {
         const raw = readFileSync(join(ROUTED_DIR, f), 'utf-8')
         const msg = JSON.parse(raw)
         const time = (msg.timestamp || '').slice(11, 19)
-        lines.push(` ${time} ${(msg.from || '?').padEnd(12)}→ ${(msg.to || '?').padEnd(12)} ${(msg.subject || '').slice(0, 25)}`)
+        routingLines.push(` ${time} ${(msg.from || '?').padEnd(12)}→ ${(msg.to || '?').padEnd(12)} ${(msg.subject || '').slice(0, 25)}`)
       } catch {
         /* ignorer */
       }
     }
   }
 
+  // 3. Stats du daemon
   let stats = ''
   if (existsSync(STATUS_FILE)) {
     try {
       const raw = readFileSync(STATUS_FILE, 'utf-8')
       const status = JSON.parse(raw)
-      stats = ` Msg:${status.totalMessagesRouted ?? '?'} Spawn:${status.totalSpawns ?? '?'} Bloc:${status.totalBlocks ?? '?'} Ag:${status.agentCount ?? '?'}`
+      const pendingCol = pending > 0 ? col(String(pending), 'yellow') : String(pending)
+      stats = `[Msg:${status.totalMessagesRouted ?? '?'} Spawn:${status.totalSpawns ?? '?'} Bloc:${status.totalBlocks ?? '?'} Ag:${status.agentCount ?? '?'}] [En att: ${pendingCol} | Lus: ${read} | Tr: ${processed}]`
     } catch {
-      /* ignorer */
+      const pendingCol = pending > 0 ? col(String(pending), 'yellow') : String(pending)
+      stats = `[Total: ${lines.length} | En att: ${pendingCol} | Lus: ${read} | Tr: ${processed}]`
     }
   }
 
-  const colHeaders = `${bold('Heure'.padEnd(8))} ${bold('De'.padEnd(12))} ${bold('Sujet'.padEnd(25))}`
-  return (stats ? stats + '\n' : '') + colHeaders + (lines.length > 0 ? '\n' + lines.join('\n') : '\n(aucun routage)')
+  // Assemblage
+  let output = stats
+
+  if (lines.length > 0) {
+    output += '\n' + bold('─ Intercom ─'.padEnd(40)) + '\n' + lines.join('\n')
+  }
+
+  if (routingLines.length > 0) {
+    output += '\n' + bold('─ Routages ─'.padEnd(40)) + '\n' + routingLines.join('\n')
+  }
+
+  if (lines.length === 0 && routingLines.length === 0) {
+    output += '\n(aucune communication)'
+  }
+
+  return output
 }
 
 function collectAgentsData(): string {
@@ -862,8 +870,7 @@ function collectAll(): void {
 
     checkResize() // recalcule régions + redessine bordures et contenus
 
-    updateQuadrant('intercom', collectIntercomData())
-    updateQuadrant('routing', collectRoutingData())
+    updateQuadrant('comms', collectCommsData())
     updateQuadrant('agents', collectAgentsData())
     updateQuadrant('logs', collectLogsData())
 
@@ -1029,7 +1036,7 @@ function initUI(): void {
     recalcRegions()
     // Synchroniser le cache avec l'état réel après fullscreen
     lastTermSize = { w: termWidth(), h: termHeight() }
-    for (const id of ['intercom', 'routing', 'agents', 'logs'] as const) {
+    for (const id of ['comms', 'agents', 'logs'] as const) {
       drawQuadrantBorder(id)
     }
 
@@ -1059,7 +1066,7 @@ function initUI(): void {
           if (real.w > 0 && real.h > 0) psCacheSize = real
           // Invalider TOUS les caches pour forcer le redessin complet
           lastTitleHash = lastStatusHash = lastSecondaryHash = ''
-          QUADRANTS.intercom.lastHash = QUADRANTS.routing.lastHash = QUADRANTS.agents.lastHash = QUADRANTS.logs.lastHash = ''
+          QUADRANTS.comms.lastHash = QUADRANTS.agents.lastHash = QUADRANTS.logs.lastHash = ''
           forceRedraw = true  // ← force le redessin des bordures dans checkResize()
           try { term.eraseDisplay() } catch { /* ignorer */ }
           collectAll()

@@ -60,24 +60,23 @@ function testMenuStructure() {
 
   const content = readFileSync(mainPath, 'utf-8')
 
-  // Vérifier que les 10 touches (0-9) ont un handler
+  // Vérifier que les touches 3-chiffres (101-501) + 'aide'/'fin' ont un handler
   const menuHandlers: { key: string; expectedHandler: string }[] = [
-    { key: '1', expectedHandler: 'handleManageProvidersMenu' },
-    { key: '2', expectedHandler: 'editUserProfile' },
-    { key: '3', expectedHandler: 'handleCreate' },
-    { key: '4', expectedHandler: 'handleListAgents' },
-    { key: '5', expectedHandler: 'handleEditAgent' },
-    { key: '6', expectedHandler: 'handleSkillsMenu' },
-    { key: '7', expectedHandler: 'handleStartSession' },
-    { key: '8', expectedHandler: 'showSessions' },
-    { key: '9', expectedHandler: 'showIntercomStatus' },
-    { key: '10', expectedHandler: 'showHelp' },
-    { key: '0', expectedHandler: 'exit' },
+    { key: '101', expectedHandler: 'handleManageProvidersMenu' },
+    { key: '102', expectedHandler: 'editUserProfile' },
+    { key: '201', expectedHandler: 'handleCreate' },
+    { key: '202', expectedHandler: 'handleListAgents' },
+    { key: '203', expectedHandler: 'handleEditAgent' },
+    { key: '204', expectedHandler: 'handleSkillsMenu' },
+    { key: '301', expectedHandler: 'handleStartSession' },
+    { key: '302', expectedHandler: 'showSessions' },
+    { key: '401', expectedHandler: 'showIntercomStatus' },
+    { key: '501', expectedHandler: 'handleTestSubmenu' },
+    { key: 'aide', expectedHandler: 'showHelp' },
+    { key: 'fin', expectedHandler: 'exit' },
   ]
 
   for (const { key, expectedHandler } of menuHandlers) {
-    // Chercher `if (line === '${key}')` suivi de l'appel au handler
-    // Exemple : `if (line === '1') {\n      await handleManageProvidersMenu(rl)`
     const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const regex = new RegExp(`line\\s*===?\\s*['"]${escapedKey}['"][\\s\\S]{0,100}${expectedHandler}`)
     const found = regex.test(content)
@@ -86,9 +85,9 @@ function testMenuStructure() {
     )
   }
 
-  // Vérifier le nombre total de if (line === 'N') dans la section menu
-  const lineMatches = content.match(/line\s*===\s*['"]\d{1,2}['"]/g) || []
-  assert('11 touches de menu (0-10) définies', lineMatches.length === 11,
+  // Vérifier le nombre total de if (line === 'N') dans la section menu (3-chiffres + 'aide'/'fin')
+  const lineMatches = content.match(/line\s*===\s*['"]\d{3}['"]/g) || []
+  assert('10 touches de menu 3-chiffres (101-501) définies', lineMatches.length === 10,
     `trouvé ${lineMatches.length} : [${lineMatches.join(', ')}]`
   )
 }
@@ -234,42 +233,45 @@ function testMenuDisplayVsActions() {
   const menuPath = join(process.cwd(), 'src', 'cli-menu.ts')
   const menuContent = readFileSync(menuPath, 'utf-8')
 
-  // Extraire les touches numériques du menu affiché : 1-10 et 0
-  const displayMatches = menuContent.match(/\b(?:10|[1-9])\b|(?<!\d)0(?!\d)/g) || []
-  const displayKeys = displayMatches
-    .map(s => s.trim())
-    .filter(s => /^(?:10|[0-9])$/.test(s))
+  // Extraire les touches numériques 3-chiffres du menu affiché : 101-501
+  const displayMatches = menuContent.match(/\b\d{3}\b/g) || []
+  const displayKeys = [...new Set(displayMatches.map(s => s.trim()))]
 
-  // Les touches 0-10 doivent toutes être dans le menu
-  const expectedDisplay = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '0']
+  // Les touches 101-501 doivent toutes être dans le menu
+  const expectedDisplay = ['101', '102', '201', '202', '203', '204', '301', '302', '401', '501']
   for (const key of expectedDisplay) {
     assert(`Menu affiché contient la touche "${key}"`,
-      displayKeys.includes(key) === true,
+      displayKeys.includes(key),
       `Touche "${key}" absente de cli-menu.ts. Touches trouvées : [${displayKeys.join(', ')}]`
     )
   }
 
+  // Vérifier la présence des entrées textuelles 'aide' et 'fin'
+  assert('Menu affiché contient "aide"',
+    menuContent.includes('aide'),
+    'Entrée "aide" absente de cli-menu.ts'
+  )
+  assert('Menu affiché contient "fin"',
+    menuContent.includes('fin'),
+    'Entrée "fin" absente de cli-menu.ts'
+  )
+
   // Vérifier que le menu affiché a une étiquette pour chaque option
-  // Exemple : `1.  Providers & clés API`
+  // Format : `${CYAN}101${RESET}. Providers & clés API`
   const labelChecks: { key: string; expectedLabel: string }[] = [
-    { key: '1', expectedLabel: 'Providers' },
-    { key: '2', expectedLabel: 'Mon profil' },
-    { key: '3', expectedLabel: 'Créer' },
-    { key: '4', expectedLabel: 'Voir les agents' },
-    { key: '5', expectedLabel: 'Éditer' },
-    { key: '6', expectedLabel: 'Skills' },
-    { key: '7', expectedLabel: 'Démarrer' },
-    { key: '8', expectedLabel: 'Gérer les sessions' },
-    { key: '9', expectedLabel: 'Status' },
-    { key: '10', expectedLabel: 'Commandes' },
-    { key: '0', expectedLabel: 'Quitter' },
+    { key: '101', expectedLabel: 'Providers' },
+    { key: '102', expectedLabel: 'Mon profil' },
+    { key: '201', expectedLabel: 'Créer' },
+    { key: '202', expectedLabel: 'Voir les agents' },
+    { key: '203', expectedLabel: 'Éditer' },
+    { key: '204', expectedLabel: 'Skills' },
+    { key: '301', expectedLabel: 'Démarrer' },
+    { key: '302', expectedLabel: 'Gérer les sessions' },
+    { key: '401', expectedLabel: 'Status' },
+    { key: '501', expectedLabel: 'Banc de tests' },
   ]
 
   for (const { key, expectedLabel } of labelChecks) {
-    // Dans cli-menu.ts, le format de chaque ligne est :
-    //   `${CYAN}N${RESET}.  Label`
-    // Le regex cherche : N + ${ ... } + . + whitespace + Label
-    // On échappe ${} avec $${} pour éviter l'interpolation dans le template literal
     const escapedKey = key.replace(/[.*+?^$${}()|[\]\\]/g, '\\$&')
     const escapedLabel = expectedLabel.replace(/[.*+?^$${}()|[\]\\]/g, '\\$&')
     const regexStr = `${escapedKey}\\x24\\{.*?\\}\\.\\s*${escapedLabel}`
@@ -279,6 +281,14 @@ function testMenuDisplayVsActions() {
       `Pattern "${regex}" non trouvé dans cli-menu.ts`
     )
   }
+
+  // Vérifier la présence des entrées textuelles 'aide' et 'fin'
+  assert(`Menu affiché : entrée "aide"`, /aide\$/.test(menuContent) || menuContent.includes('aide'),
+    `Entrée "aide" absente de cli-menu.ts`
+  )
+  assert(`Menu affiché : entrée "fin"`, /fin\$/.test(menuContent) || menuContent.includes('fin'),
+    `Entrée "fin" absente de cli-menu.ts`
+  )
 }
 
 // ── 6. Provider display capturé — vérification de cohérence ──

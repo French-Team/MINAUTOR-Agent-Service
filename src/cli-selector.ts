@@ -33,6 +33,9 @@ const SECTIONS: PickerSection[] = [
       { cmd: '/agents', label: 'Voir les agents' },
       { cmd: '/use <id>', label: 'Charger un agent' },
       { cmd: '/load <path>', label: 'Charger depuis un fichier' },
+      { cmd: '!spawn <id> <instruction>', label: 'Lancer un agent en arrière-plan' },
+      { cmd: '!spawn timer-man <interval>', label: 'Daemon timer longue durée' },
+      { cmd: '!suggestions', label: 'Suggestions contextuelles dynamiques' },
     ],
   },
   {
@@ -58,6 +61,20 @@ const SECTIONS: PickerSection[] = [
     ],
   },
   {
+    title: '🔒 Permissions',
+    items: [
+      { cmd: '/permissions', label: 'Voir l\'état des permissions' },
+      { cmd: '/permissions show <agent>', label: 'Règles d\'un agent' },
+      { cmd: '/permissions edit <agent>', label: 'Modifier les règles' },
+      { cmd: '/permissions reload', label: 'Recharger la configuration' },
+      { cmd: '!permissions', label: 'Commandes permissions depuis le prompt' },
+      { cmd: '!permissions agents', label: 'Lister les agents enregistrés' },
+      { cmd: '!permissions grant <id> path|cmd <value> [min] [raison]', label: 'Accès temporaire' },
+      { cmd: '!permissions revoke <id> [path|cmd] [value]', label: 'Révoquer accès' },
+      { cmd: '!permissions grants [id]', label: 'Voir les accès temporaires' },
+    ],
+  },
+  {
     title: '🧠 Skills',
     items: [
       { cmd: '/skills', label: 'Lister les skills' },
@@ -76,9 +93,16 @@ const SECTIONS: PickerSection[] = [
       { cmd: '!project init <nom>', label: 'Initialiser un dossier existant' },
       { cmd: '!project tasks <nom> [area]', label: 'Tâches d\'un projet' },
       { cmd: '!project task <nom> add <area> <titre>', label: 'Ajouter une tâche' },
+      { cmd: '!project task <nom> done|start <id>', label: 'Màj statut tâche' },
       { cmd: '!project archive <nom>', label: 'Archiver un projet' },
       { cmd: '!project delete <nom>', label: 'Supprimer un projet' },
       { cmd: '/tasks <project>', label: 'Raccourci : tâches d\'un projet' },
+    ],
+  },
+  {
+    title: '🧪 Banc de tests',
+    items: [
+      { cmd: '/test', label: 'Tests de contexte & routeurs génériques' },
     ],
   },
   {
@@ -86,6 +110,8 @@ const SECTIONS: PickerSection[] = [
     items: [
       { cmd: '/help', label: 'Aide / commandes' },
       { cmd: '/menu', label: 'Afficher le menu principal' },
+      { cmd: 'aide', label: 'Aide / commandes (raccourci menu)' },
+      { cmd: 'fin', label: 'Quitter (raccourci menu)' },
       { cmd: '/exit', label: 'Quitter' },
     ],
   },

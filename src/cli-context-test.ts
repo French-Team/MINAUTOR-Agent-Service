@@ -259,7 +259,6 @@ function showRouterSummary(): void {
   // Pied de tableau
   console.log(`  ${GRAY}──  ${'─'.repeat(70)}${RESET}`)
   console.log(`  ${BOLD}${routeurs.length} routeur(s) actif(s)${RESET}  →  ${YELLOW}tous → profil small (conservateur)${RESET}`)
-  console.log(`  ${GRAY}Pour tester un routeur individuellement : ${BOLD}16-21${RESET}`)
-  console.log(`  ${GRAY}Pour tester les profils de compression : ${BOLD}11-15${RESET}\n`)
+  console.log(`  ${GRAY}Tests disponibles dans le sous-menu ${BOLD}Banc de tests${RESET} ${GRAY}(501 — menu principal)${RESET}\n`)
   console.log(`${BOLD}${CYAN}════════════════════════════════════════════${RESET}\n`)
 }

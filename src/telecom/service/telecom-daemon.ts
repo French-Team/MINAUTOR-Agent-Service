@@ -20,10 +20,13 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { fork, exec, spawn, execSync } from 'node:child_process'
 import { pushNotification, type NotificationLevel } from '../../notify.js'
-import { writeSuggestions, parseSuggestionsFromOutput } from '../../cli-suggestions.js'
+import { writeSuggestions, parseSuggestionsFromOutput, sortSuggestionsByFrequency } from '../../cli-suggestions.js'
 import { getFeuRougeClient } from '../../feurouge/feurouge-client.js'
 import { getAgentPermission } from '../../feurouge/permissions.js'
-import { matchAndExecute } from '../../script-runner.js'
+import { matchAndExecute, executeScript } from '../../script-runner.js'
+import { fuzzyMatch, countRejectedDemandes } from '../../fuzzy-matcher.js'
+import { readTaskBoard } from '../../project/task-board.js'
+import { renderSuggestionTemplates, type TemplateContext } from '../../suggestion-templates.js'
 
 const cwd = process.cwd()
 const INTERCOM_DIR = join(cwd, 'telecom', 'intercom')
@@ -156,6 +159,9 @@ function cleanupOldState(): void {
   resetSpawnHistory()
 
   console.log('  [Nettoyage] État réinitialisé — démarrage vierge')
+
+  // Purger les logs de scripts périmés
+  purgeScriptLogs()
 }
 
 /**
@@ -199,6 +205,65 @@ function cleanMemoireVive(): void {
   }
 }
 
+/**
+ * Purge les logs run-*.log dans telecom/scripts/ en conservant
+ * uniquement les MAX_SCRIPT_LOGS fichiers les plus récents.
+ * Se base sur la date de modification du fichier pour l'ordre chronologique.
+ */
+function purgeScriptLogs(): void {
+  const logDir = join(cwd, 'telecom', 'scripts')
+  if (!existsSync(logDir)) return
+
+  const files = readdirSync(logDir)
+    .filter(f => f.startsWith('run-') && f.endsWith('.log'))
+    .map(f => {
+      try {
+        return { name: f, mtime: statSync(join(logDir, f)).mtimeMs }
+      } catch { return null }
+    })
+    .filter((f): f is { name: string; mtime: number } => f !== null)
+    .sort((a, b) => a.mtime - b.mtime) // Plus ancien en premier
+
+  if (files.length <= MAX_SCRIPT_LOGS) return
+
+  const toDelete = files.slice(0, files.length - MAX_SCRIPT_LOGS)
+  for (const f of toDelete) {
+    try { unlinkSync(join(logDir, f.name)) } catch { /* ignoré */ }
+  }
+
+  const ts = new Date().toISOString().slice(11, 19)
+  console.log(`[${ts}] Purge: ${toDelete.length} log(s) supprimé(s) dans telecom/scripts/ (max ${MAX_SCRIPT_LOGS})`)
+}
+
+/**
+ * Purge les fichiers JSON dans data/watcher/telecom/ en conservant
+ * uniquement les MAX_WATCHER_FILES fichiers les plus récents (par mtime).
+ */
+function purgeWatcherData(): void {
+  const watcherDir = join(cwd, 'data', 'watcher', 'telecom')
+  if (!existsSync(watcherDir)) return
+
+  const files = readdirSync(watcherDir)
+    .filter(f => f.endsWith('.json'))
+    .map(f => {
+      try {
+        return { name: f, mtime: statSync(join(watcherDir, f)).mtimeMs }
+      } catch { return null }
+    })
+    .filter((f): f is { name: string; mtime: number } => f !== null)
+    .sort((a, b) => a.mtime - b.mtime) // Plus ancien en premier
+
+  if (files.length <= MAX_WATCHER_FILES) return
+
+  const toDelete = files.slice(0, files.length - MAX_WATCHER_FILES)
+  for (const f of toDelete) {
+    try { unlinkSync(join(watcherDir, f.name)) } catch { /* ignoré */ }
+  }
+
+  const ts = new Date().toISOString().slice(11, 19)
+  console.log(`[${ts}] Purge: ${toDelete.length} fichier(s) supprimé(s) dans data/watcher/telecom/ (max ${MAX_WATCHER_FILES})`)
+}
+
 /** Garder max 3 fichiers par dossier, supprimer les plus anciens */
 function rotateDir(dir: string): void {
   if (!existsSync(dir)) return
@@ -211,7 +276,7 @@ function rotateDir(dir: string): void {
   }
 }
 
-function processMessages(): number {
+async function processMessages(): Promise<number> {
   ensureDirs()
 
   if (!existsSync(INTERCOM_DIR)) return 0
@@ -275,7 +340,7 @@ function processMessages(): number {
       // Priorité 1 : Essayer le script-runner (pattern matching → script pré-écrit)
       // Si un script match, on l'exécute directement sans spawner d'agent LLM.
       // C'est plus rapide, plus fiable et moins coûteux.
-      const scriptResult = tryScriptRunner(msg)
+      const scriptResult = await tryScriptRunner(msg)
       if (!scriptResult) {
         // Priorité 2 : Pas de script trouvé → fallback sur l'agent LLM
         spawnAgent(msg.to, msg)
@@ -349,9 +414,15 @@ function buildInstruction(agentId: string, msg: IntercomMessage): string {
     return base.concat([
       '',
       `1. Lis le message dans telecom/routed/${msg.id}.json`,
-      `2. Analyse la demande (type, urgence, agent cible)`,
-      `3. Route-la vers l'orchestrateur via intercom`,
-      `4. Tu ne fais jamais le travail toi-meme — tu transmets toujours`,
+      `2. Analyse la demande — le regex strict ET le fuzzy matching ont echoue`,
+      `3. Consulte telecom/logs/fuzzy-matches.log pour voir les echecs recents similaires`,
+      `4. Consulte data/scripts/registry.yaml pour comprendre les patterns existants`,
+      `5. PROPOSE des ameliorations :`,
+      `   a. Ajouter des variantes de patterns dans registry.yaml`,
+      `   b. Ajuster les patterns existants trop stricts`,
+      `   c. Ajouter des synonymes et mots-cles`,
+      `6. Tu n'EXECUTES PAS la demande toi-meme — tu proposes des ameliorations`,
+      `7. Utilise run_terminal_command pour modifier les fichiers si necessaire`,
       seedContext,
     ]).join('\n')
   }
@@ -505,6 +576,7 @@ function getFollowUpSuggestions(
   demande: string,
   taskId?: string,
   taskStatus?: string,
+  params?: Record<string, string>,
 ): string {
   if (!scriptPath) return ''
 
@@ -512,11 +584,33 @@ function getFollowUpSuggestions(
   const hasProject = !!projectName
   const proj = hasProject ? projectName : '<projet>'
 
+  // ── Détection de projet vide ──
+  let isProjectEmpty = false
+  if (hasProject) {
+    try {
+      const board = readTaskBoard(projectName)
+      isProjectEmpty = board.tasks.length === 0
+    } catch {
+      isProjectEmpty = true
+    }
+  }
+
   let lines: string[] = []
   lines.push('')
   lines.push('━ Suivi suggéré ━')
 
-  // Suggestions communes à tous les scripts projet
+  // ── Suggestions d'initialisation pour projet vide ──
+  if (isProjectEmpty) {
+    lines.push(`  ── Initialisation ──`)
+    lines.push(`  → définis les objectifs du projet "${projectName}" — Définir la vision`)
+    lines.push(`  → choisis un langage / un framework pour ${projectName} — Choisir la stack`)
+    lines.push(`  → crée un README initial pour ${projectName} — Documenter le projet`)
+    lines.push(`  → liste les fonctionnalités principales de ${projectName} — Fonctionnalités`)
+    lines.push(`  → configure l\'environnement de développement pour ${projectName} — Configuration`)
+    lines.push('')
+  }
+
+  // ── Suggestions communes ──
   const commonSuggestions: string[] = []
   if (hasProject) {
     commonSuggestions.push(`  → continuer "${projectName}" — Voir la prochaine tâche`)
@@ -525,157 +619,93 @@ function getFollowUpSuggestions(
   }
 
   // Suggestions spécifiques selon le script exécuté
-  switch (scriptName) {
-    case 'menu':
-      if (hasProject) {
-        lines.push(`  → ajoute une tâche "..." dans <domaine> au projet ${projectName}`)
-      }
-      break
-
-    case 'etat':
-      if (hasProject) {
-        lines.push(`  → ajoute une tâche "..." dans <domaine> au projet ${projectName}`)
-        lines.push(`  → découvre le projet ${projectName} — Explorer la structure`)
-      }
-      break
-
-    case 'work':
-      if (hasProject) {
-        lines.push(`  → état "${projectName}" — Voir l\'avancement`)
-      }
-      break
-
-    case 'add-task': {
-      // Proposer d'ajouter une autre tâche ou de modifier la nouvelle
-      if (hasProject) {
-        lines.push(`  → renomme la tâche "..." en 'Nouveau titre' au projet ${projectName} — Renommer`)
-        lines.push(`  → déplace la tâche "..." dans <domaine> au projet ${projectName} — Déplacer`)
-        lines.push(`  → modifie la description de la tâche "..." en '...' au projet ${projectName} — Décrire`)
-        lines.push(`  → ajoute une autre tâche "..." dans <domaine> au projet ${proj} — Ajouter`)
-      }
-      break
+  // Note : si le projet est vide, on saute ces suggestions (elles ne sont pas pertinentes
+  // sans tâche existante — les suggestions d'initialisation sont déjà affichées ci-dessus)
+  if (!isProjectEmpty) {
+    // Contexte pour le rendu des templates
+    const templateContext: TemplateContext = {
+      taskId: taskId,
+      project: projectName,
+      area: params?.area,
+      title: params?.title,
+      name: params?.name,
     }
 
-    case 'done-task': {
-      // Proposer de modifier ou continuer
-      if (hasProject) {
-        lines.push(`  → renomme la tâche "..." en 'Nouveau titre' au projet ${projectName} — Renommer`)
-        lines.push(`  → déplace la tâche "..." dans <domaine> au projet ${projectName} — Déplacer`)
-        lines.push(`  → modifie la description de la tâche "..." en '...' au projet ${projectName} — Décrire`)
-        lines.push(`  → continuer "${projectName}" — Voir la prochaine tâche`)
-        lines.push(`  → état "${projectName}" — Progression mise à jour`)
+    // Essayer d'abord les templates externes (data/suggestions/templates.yaml)
+    const templateLines = renderSuggestionTemplates(scriptName, templateContext)
+
+    if (templateLines.length > 0) {
+      // Templates trouvés → les utiliser directement
+      lines.push(...templateLines)
+    } else {
+      // Aucun template pour ce script → fallback sur les cas spéciaux
+      // qui nécessitent une logique conditionnelle ou des placeholders spécifiques
+      switch (scriptName) {
+        case 'decouverte': {
+          // Détecter si un README a déjà été généré via la demande
+          const hasReadme = demande.includes('readme')
+          if (!hasReadme) {
+            lines.push(`  ── Documentation ──`)
+            lines.push(`  → génère un readme pour le projet ${proj} — Documenter l\'architecture`)
+          }
+          lines.push(`  ── Navigation ──`)
+          lines.push(`  → continue sur le projet ${proj} — Voir la prochaine tâche`)
+          break
+        }
+
+        case 'list':
+          lines.push(`  ── Navigation ──`)
+          if (hasProject) {
+            lines.push(`  → menu "${projectName}" — Menu de navigation du projet`)
+          }
+          lines.push(`  ── Création ──`)
+          lines.push('  → crée un projet "<nom>" — Nouveau projet')
+          break
+
+        case 'create':
+          if (hasProject) {
+            lines.push(`  ── Navigation ──`)
+            lines.push(`  → menu "${projectName}" — Commencer à utiliser le projet`)
+          }
+          break
+
+        case 'info':
+          if (hasProject) {
+            lines.push(`  ── Navigation ──`)
+            lines.push(`  → menu "${projectName}" — Menu de navigation`)
+            lines.push(`  ── Découverte ──`)
+            lines.push(`  → découvre le projet ${projectName} — Explorer la structure`)
+          }
+          break
+
+        default:
+          // Suggestions génériques si on ne reconnaît pas le script
+          if (hasProject) {
+            lines.push(`  ── Navigation ──`)
+            lines.push(...commonSuggestions)
+          }
+          break
       }
-      break
     }
 
-    case 'edit-task': {
-      // Proposer les autres modifications possibles
-      if (hasProject) {
-        lines.push(`  → renomme la tâche "..." en 'Nouveau titre' au projet ${projectName} — Renommer`)
-        lines.push(`  → déplace la tâche "..." dans <domaine> au projet ${projectName} — Déplacer`)
-        lines.push(`  → modifie la description de la tâche "..." en '...' au projet ${projectName} — Décrire`)
-        lines.push(`  → état "${projectName}" — Voir la progression`)
-      }
-      break
+    // Ajouter les suggestions communes si pas déjà fait (uniquement si aucune suggestion ajoutée)
+    if (lines.length <= 2 && hasProject) {
+      lines.push(`  ── Navigation ──`)
+      lines.push(...commonSuggestions)
     }
-
-    case 'delete-task': {
-      // Proposer les actions après suppression (pas de taskId, la tâche est supprimée)
-      if (hasProject) {
-        lines.push(`  → ajoute une tâche "..." dans <domaine> au projet ${projectName}`)
-        lines.push(`  → état "${projectName}" — Voir la progression mise à jour`)
-      }
-      break
-    }
-
-    case 'block-task': {
-      // Proposer les actions après blocage
-      if (hasProject) {
-        lines.push(`  → renomme la tâche "..." en 'Nouveau titre' au projet ${projectName} — Renommer`)
-        lines.push(`  → déplace la tâche "..." dans <domaine> au projet ${projectName} — Déplacer`)
-        lines.push(`  → modifie la description de la tâche "..." en '...' au projet ${projectName} — Décrire`)
-        lines.push(`  → débloque la tâche "..." au projet ${projectName} — Quand le blocage est résolu`)
-        lines.push(`  → état "${projectName}" — Voir les tâches bloquées`)
-      }
-      break
-    }
-
-    case 'unblock-task': {
-      // Proposer les actions après déblocage
-      if (hasProject) {
-        lines.push(`  → renomme la tâche "..." en 'Nouveau titre' au projet ${projectName} — Renommer`)
-        lines.push(`  → déplace la tâche "..." dans <domaine> au projet ${projectName} — Déplacer`)
-        lines.push(`  → modifie la description de la tâche "..." en '...' au projet ${projectName} — Décrire`)
-        lines.push(`  → continue sur "${projectName}" — Voir la prochaine tâche disponible`)
-        lines.push(`  → état "${projectName}" — Voir la progression mise à jour`)
-      }
-      break
-    }
-
-    case 'list-tasks': {
-      // Proposer les variantes de filtrage et modification
-      // Pour list-tasks, pas de taskId unique — on garde "..."
-      if (hasProject) {
-        lines.push(`  → renomme la tâche "..." en 'Nouveau titre' au projet ${projectName} — Renommer`)
-        lines.push(`  → déplace la tâche "..." dans <domaine> au projet ${projectName} — Déplacer`)
-        lines.push(`  → modifie la description de la tâche "..." en '...' au projet ${projectName} — Décrire`)
-        lines.push(`  → liste les tâches backend du projet ${projectName} — Filtrer par domaine`)
-        lines.push(`  → liste les tâches en cours du projet ${projectName} — Filtrer par statut`)
-        lines.push(`  → liste les tâches terminées du projet ${projectName} — Voir ce qui est fait`)
-        lines.push(`  → état "${projectName}" — Progression détaillée`)
-      }
-      break
-    }
-
-    case 'decouverte': {
-      // Détecter si un README a déjà été généré via la demande
-      const hasReadme = demande.includes('readme')
-      if (!hasReadme) {
-        lines.push(`  → génère un readme pour le projet ${proj} — Documenter l\'architecture`)
-      }
-      lines.push(`  → continue sur le projet ${proj} — Voir la prochaine tâche`)
-      break
-    }
-
-    case 'list':
-      lines.push('  → menu <projet> — Voir le menu d\'un projet')
-      lines.push('  → crée un projet "<nom>" — Nouveau projet')
-      break
-
-    case 'create':
-      if (hasProject) {
-        lines.push(`  → menu "${projectName}" — Commencer à utiliser le projet`)
-      }
-      break
-
-    case 'info':
-      if (hasProject) {
-        lines.push(`  → menu "${projectName}" — Menu de navigation`)
-        lines.push(`  → découvre le projet ${projectName} — Explorer la structure`)
-      }
-      break
-
-    default:
-      // Suggestions génériques si on ne reconnaît pas le script
-      if (hasProject) {
-        lines.push(...commonSuggestions)
-      }
-      break
-  }
-
-  // Ajouter les suggestions communes si pas déjà fait
-  if (lines.length <= 2 && hasProject) {
-    lines.push(...commonSuggestions)
-  }
+  } // Fin du bloc !isProjectEmpty
 
   // Toujours proposer l'aide en dernier
+  lines.push(`  ── Système ──`)
   lines.push('  → liste les projets — Voir tous les projets')
 
   // ── Filtrage dynamique selon le statut réel de la tâche ──
   if (taskStatus && lines.length > 1) {
     // Si la tâche est BLOQUÉE : ajouter une suggestion de déblocage si absente
+    const systemIdx = lines.findIndex(l => l.includes('── Système ──'))
     if (taskStatus === 'blocked' && !lines.some(l => l.includes('débloque'))) {
-      lines.splice(lines.length - 1, 0, `  → débloque la tâche "..." au projet ${proj} — Le blocage est résolu ?`)
+      const insertAt = systemIdx >= 0 ? systemIdx : lines.length - 1
+      lines.splice(insertAt, 0, `  ── Blocage ──`, `  → débloque la tâche "..." au projet ${proj} — Le blocage est résolu ?`)
     }
     // Si la tâche N'EST PAS bloquée : retirer les suggestions de déblocage
     if (taskStatus !== 'blocked') {
@@ -691,6 +721,39 @@ function getFollowUpSuggestions(
     result = lines.map(line => line.replace('"..."', idLabel)).join('\n')
   }
 
+  // Remplacer tous les placeholders avec leurs valeurs réelles
+  // Ne remplace que si la valeur réelle est disponible (non vide).
+  // Si le placeholder est absent du paramètre, on le conserve tel quel
+  // pour servir d'indication à l'utilisateur (ex: "menu <projet>" quand
+  // aucun projet n'est encore sélectionné).
+  if (params) {
+    const realProject = params.project || (projectName || '')
+    const realArea = params.area || ''
+    const realName = params.name || ''
+    const realTitle = params.title || ''
+
+    if (realProject) {
+      result = result
+        .replace(/<projet>/g, realProject)
+        .replace(/\{project\}/g, realProject)
+    }
+    if (realArea) {
+      result = result
+        .replace(/<domaine>/g, realArea)
+        .replace(/\{area\}/g, realArea)
+    }
+    if (realName) {
+      result = result
+        .replace(/<nom>/g, realName)
+        .replace(/\{name\}/g, realName)
+    }
+    if (realTitle) {
+      result = result
+        .replace(/<titre>/g, realTitle)
+        .replace(/\{title\}/g, realTitle)
+    }
+  }
+
   return result
 }
 
@@ -699,7 +762,7 @@ function getFollowUpSuggestions(
  * Si un pattern match, exécute le script et notifie le résultat.
  * Retourne true si un script a été exécuté, false sinon (fallback LLM).
  */
-function tryScriptRunner(msg: IntercomMessage): boolean {
+async function tryScriptRunner(msg: IntercomMessage): Promise<boolean> {
   const demande = typeof msg.payload.demande === 'string'
     ? msg.payload.demande
     : JSON.stringify(msg.payload)
@@ -710,10 +773,35 @@ function tryScriptRunner(msg: IntercomMessage): boolean {
     extraEnv.SCRIPT_PROJECT = msg.payload.project
   }
 
-  const result = matchAndExecute(demande, msg.subject, extraEnv)
+  // Étape 1 : Regex strict via script-runner
+  let result = matchAndExecute(demande, msg.subject, extraEnv)
 
+  // Étape 2 : Fuzzy matching si le regex n'a pas matché
   if (!result.matched) {
-    return false // Aucun script trouvé → fallback LLM
+    const fuzzyResult = await fuzzyMatch(demande, msg.subject)
+
+    if (fuzzyResult.matched && fuzzyResult.entry) {
+      console.log(`[Daemon] Fuzzy match: ${fuzzyResult.entry.script} (similarité: ${(fuzzyResult.similarity * 100).toFixed(0)}%)`)
+
+      // Exécuter le script trouvé par fuzzy matching
+      const execResult = executeScript(fuzzyResult.entry.script, extraEnv)
+
+      result = {
+        matched: true,
+        script: fuzzyResult.entry.script,
+        pattern: fuzzyResult.entry.pattern,
+        subject: fuzzyResult.entry.subject,
+        stdout: execResult.stdout,
+        stderr: execResult.stderr,
+        exitCode: execResult.exitCode,
+        durationMs: execResult.durationMs,
+        params: fuzzyResult.params,
+      }
+    } else {
+      // Aucun match trouvé — logger pour suggestion auto
+      checkAndSuggestPattern(demande, msg.subject)
+      return false // Fallback LLM
+    }
   }
 
   const ts = new Date().toISOString().slice(11, 19)
@@ -735,13 +823,28 @@ function tryScriptRunner(msg: IntercomMessage): boolean {
     const projectName = result.params?.project ?? extraEnv.SCRIPT_PROJECT ?? ''
     const taskId = extractTaskIdFromStdout(result.stdout ?? '')
     const taskStatus = taskId ? readTaskStatus(projectName, taskId) : null
-    const suggestionsText = getFollowUpSuggestions(result.script, projectName, demande, taskId ?? undefined, taskStatus ?? undefined)
+
+    // Si pas de projectName connu, essayer de l'extraire du stdout du script
+    // (utile pour les scripts comme 'list' qui affichent les projets sans en cibler un)
+    let detectedProject = projectName
+    if (!detectedProject && result.stdout) {
+      const projectMatch = result.stdout.match(/●\s+(\S+)/)
+      if (projectMatch) {
+        detectedProject = projectMatch[1]
+        console.log(`[Daemon] Projet détecté depuis stdout: ${detectedProject}`)
+      }
+    }
+
+    const suggestionsText = getFollowUpSuggestions(result.script, detectedProject, demande, taskId ?? undefined, taskStatus ?? undefined, result.params)
     if (suggestionsText) {
       message += `\n${suggestionsText}`
       // Écrire les suggestions structurées pour le menu interactif
       const structured = parseSuggestionsFromOutput(suggestionsText)
       if (structured.length > 0) {
-        writeSuggestions(structured)
+        // Trier par fréquence d'utilisation avant d'écrire (apprentissage)
+        // Utilise les stats du projet courant si disponible
+        const sorted = sortSuggestionsByFrequency(structured, projectName)
+        writeSuggestions(sorted)
       }
     }
   }
@@ -786,16 +889,90 @@ function getKnownAgents(): Set<string> {
   return new Set(ids)
 }
 
+// ── Auto-suggestion de patterns ───────────────────────
+
+const AUTO_SUGGEST_THRESHOLD = 3 // Nombre d'échecs similaires pour déclencher une suggestion
+const PATTERN_SUGGESTIONS_FILE = join(cwd, 'telecom', 'pattern-suggestions.json')
+
+/**
+ * Vérifie si un pattern a déjà été suggéré pour une demande similaire,
+ * pour éviter les suggestions en double.
+ */
+function isAlreadySuggested(demande: string): boolean {
+  try {
+    if (!existsSync(PATTERN_SUGGESTIONS_FILE)) return false
+    const raw = readFileSync(PATTERN_SUGGESTIONS_FILE, 'utf-8')
+    const suggestions = JSON.parse(raw) as Array<{ demande: string }>
+    const normalize = (s: string) =>
+      s.toLowerCase().replace(/[?,.!;:]/g, '').replace(/\s+/g, ' ').trim()
+    const target = normalize(demande)
+    return suggestions.some(s => normalize(s.demande) === target)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Compte les échecs récurrents de matching pour une demande donnée,
+ * et si le seuil est atteint, génère automatiquement une suggestion de pattern
+ * via analyze-patterns.js --suggest.
+ *
+ * Appelée après chaque échec de fuzzy matching dans tryScriptRunner().
+ * Non-bloquante : les erreurs sont ignorées silencieusement.
+ */
+function checkAndSuggestPattern(demande: string, subject: string): void {
+  try {
+    // Vérifier si une suggestion similaire existe déjà
+    if (isAlreadySuggested(demande)) return
+
+    // Compter les échecs récents similaires
+    const count = countRejectedDemandes(demande, AUTO_SUGGEST_THRESHOLD, 60)
+
+    if (count >= AUTO_SUGGEST_THRESHOLD) {
+      const ts = new Date().toISOString().slice(11, 19)
+      console.log(`[${ts}] Auto-suggestion: ${count} échecs similaires pour "${demande.slice(0, 40)}"`)
+
+      // Lancer analyze-patterns.js --suggest pour générer et sauvegarder la suggestion
+      const scriptPath = join(cwd, 'scripts', 'telecom', 'analyze-patterns.js')
+      if (!existsSync(scriptPath)) {
+        console.log(`[${ts}] analyze-patterns.js introuvable: ${scriptPath}`)
+        return
+      }
+
+      // Appel synchrone — rapide car ne fait que des regex + écriture fichier
+      execSync(
+        `node "${scriptPath}" --suggest "${demande.replace(/"/g, '\\"')}"`,
+        { encoding: 'utf8', timeout: 10000, windowsHide: true },
+      )
+
+      console.log(`[${ts}] ✅ Suggestion sauvegardée`)
+
+      // Notifier l'utilisateur discrètement
+      pushNotification(
+        'pattern-suggester',
+        `💡 Suggestion de pattern pour "${demande.slice(0, 60)}" — disponible via 402 /suggestions`,
+        'info',
+      )
+    }
+  } catch {
+    // Non-bloquant : les erreurs sont ignorées
+  }
+}
+
 // ── Configuration anti-boucle ──────────────────────────
 
 interface TelecomAntiLoopConfig {
   maxSpawnsPerAgent: number
   spawnWindowMs: number
+  maxScriptLogs: number
+  maxWatcherFiles: number
 }
 
 const DEFAULT_CONFIG: TelecomAntiLoopConfig = {
   maxSpawnsPerAgent: 3,
   spawnWindowMs: 5 * 60 * 1000, // 5 minutes
+  maxScriptLogs: 20,
+  maxWatcherFiles: 3,
 }
 
 /**
@@ -821,7 +998,17 @@ export function loadTelecomConfig(): TelecomAntiLoopConfig {
         ? antiLoop.spawnWindowMs
         : DEFAULT_CONFIG.spawnWindowMs
 
-    return { maxSpawnsPerAgent, spawnWindowMs }
+    const maxScriptLogs =
+      typeof antiLoop.maxScriptLogs === 'number' && Number.isInteger(antiLoop.maxScriptLogs) && antiLoop.maxScriptLogs > 0
+        ? antiLoop.maxScriptLogs
+        : DEFAULT_CONFIG.maxScriptLogs
+
+    const maxWatcherFiles =
+      typeof antiLoop.maxWatcherFiles === 'number' && Number.isInteger(antiLoop.maxWatcherFiles) && antiLoop.maxWatcherFiles > 0
+        ? antiLoop.maxWatcherFiles
+        : DEFAULT_CONFIG.maxWatcherFiles
+
+    return { maxSpawnsPerAgent, spawnWindowMs, maxScriptLogs, maxWatcherFiles }
   } catch {
     return { ...DEFAULT_CONFIG }
   }
@@ -830,6 +1017,8 @@ export function loadTelecomConfig(): TelecomAntiLoopConfig {
 const _config = loadTelecomConfig()
 export const MAX_SPAWNS_PER_AGENT = _config.maxSpawnsPerAgent
 export const SPAWN_WINDOW_MS = _config.spawnWindowMs
+export const MAX_SCRIPT_LOGS = _config.maxScriptLogs
+export const MAX_WATCHER_FILES = _config.maxWatcherFiles
 
 /**
  * Valide et affiche la configuration anti-boucle au démarrage.
@@ -872,6 +1061,26 @@ export function logTelecomConfig(): void {
       } else {
         console.log(`[Daemon]   ⚠ spawnWindowMs invalide (${JSON.stringify(rawWindow)}) → défaut (${DEFAULT_CONFIG.spawnWindowMs}ms)`)
       }
+
+      const rawScriptLogs = antiLoop.maxScriptLogs
+
+      if (rawScriptLogs === undefined) {
+        console.log(`[Daemon]   ⚠ maxScriptLogs non défini → défaut (${DEFAULT_CONFIG.maxScriptLogs})`)
+      } else if (typeof rawScriptLogs === 'number' && Number.isInteger(rawScriptLogs) && rawScriptLogs > 0) {
+        console.log(`[Daemon]   ✓ maxScriptLogs = ${MAX_SCRIPT_LOGS}`)
+      } else {
+        console.log(`[Daemon]   ⚠ maxScriptLogs invalide (${JSON.stringify(rawScriptLogs)}) → défaut (${DEFAULT_CONFIG.maxScriptLogs})`)
+      }
+
+      const rawWatcherFiles = antiLoop.maxWatcherFiles
+
+      if (rawWatcherFiles === undefined) {
+        console.log(`[Daemon]   ⚠ maxWatcherFiles non défini → défaut (${DEFAULT_CONFIG.maxWatcherFiles})`)
+      } else if (typeof rawWatcherFiles === 'number' && Number.isInteger(rawWatcherFiles) && rawWatcherFiles > 0) {
+        console.log(`[Daemon]   ✓ maxWatcherFiles = ${MAX_WATCHER_FILES}`)
+      } else {
+        console.log(`[Daemon]   ⚠ maxWatcherFiles invalide (${JSON.stringify(rawWatcherFiles)}) → défaut (${DEFAULT_CONFIG.maxWatcherFiles})`)
+      }
     } catch (err) {
       console.log(`[Daemon]   ✗ Erreur de lecture: ${(err as Error).message} — valeurs par défaut utilisées`)
     }
@@ -879,7 +1088,7 @@ export function logTelecomConfig(): void {
 
   // Résumé des valeurs effectives
   const minutes = Math.round((SPAWN_WINDOW_MS / 60000) * 10) / 10
-  console.log(`[Daemon]   → Effectif : max ${MAX_SPAWNS_PER_AGENT} spawns / ${minutes} min`)
+  console.log(`[Daemon]   → Effectif : max ${MAX_SPAWNS_PER_AGENT} spawns / ${minutes} min, purge scripts: ${MAX_SCRIPT_LOGS}, watcher: ${MAX_WATCHER_FILES}`)
 }
 
 // ── Statut du daemon ──────────────────────────────────
@@ -1519,9 +1728,11 @@ export function showHelp(): void {
   console.log(`    Config    : ${configPath}  ${configFound ? '(present)' : '(absent — defaut)'}`)
   console.log(`    PID       : ${PID_FILE}`)
   console.log('')
-  console.log(`  CONFIGURATION ANTI-BOUCLE (telecom/config.json)`) 
+  console.log(`  CONFIGURATION ANTI-BOUCLE (telecom/config.json)`)
   console.log(`    maxSpawnsPerAgent : ${MAX_SPAWNS_PER_AGENT}`)
   console.log(`    spawnWindowMs     : ${SPAWN_WINDOW_MS}ms  (${minutes} min)`)
+  console.log(`    maxScriptLogs     : ${MAX_SCRIPT_LOGS}`)
+  console.log(`    maxWatcherFiles   : ${MAX_WATCHER_FILES}`)
   console.log('')
   console.log(`  COMMANDES`)
   console.log(`    node dist/telecom/service/telecom-daemon.js`)
@@ -1667,7 +1878,7 @@ function main(): void {
           const now = Date.now()
           if (now - lastWatchProcess > WATCH_DEBOUNCE_MS) {
             lastWatchProcess = now
-            processMessages()
+            processMessages() // fire-and-forget pour le watcher
           }
         }
       })
@@ -1679,7 +1890,7 @@ function main(): void {
     }
   }
 
-  function tick(): void {
+  async function tick(): Promise<void> {
     try {
       checkResetSignal()
 
@@ -1688,19 +1899,21 @@ function main(): void {
       let triggerHandled = false
       if (existsSync(TRIGGER_FILE)) {
         try { unlinkSync(TRIGGER_FILE) } catch { /* ignoré */ }
-        processMessages()
+        await processMessages()
         triggerHandled = true
       }
 
       if (!triggerHandled) {
-        const processed = processMessages()
+        const processed = await processMessages()
         if (!once && processed > 0) {
           loopCount++
         }
       }
-      // Nettoyage périodique de la mémoire vive (toutes les ~300 itérations ≈ 10 min)
+      // Nettoyage périodique (toutes les ~300 itérations ≈ 10 min)
       if (!once && loopCount > 0 && loopCount % CLEANUP_INTERVAL === 0) {
         cleanMemoireVive()
+        purgeScriptLogs()
+        purgeWatcherData()
       }
     } catch (err) {
       console.error(`[Daemon] Erreur: ${(err as Error).message}`)

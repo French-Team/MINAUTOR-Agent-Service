@@ -2,11 +2,12 @@ import { createInterface } from 'readline/promises'
 import { stdin, stdout, exit } from 'process'
 import { readFileSync, existsSync, unlinkSync, readdirSync, writeFileSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
-import { fork, ChildProcess } from 'child_process'
+import { fork, execSync, ChildProcess } from 'child_process'
 
 const backgroundAgents = new Map<string, ChildProcess>()
 import { loadSkill } from './skills.js'
-import { popAllNotifications, setNotificationFilter, getNotificationFilter, levelIcon, listLevels, countPendingNotifications, removeNotification, loadNotificationHistory, cleanNotificationArchive, type NotificationLevel, type Notification } from './notify.js'
+import { popAllNotifications, setNotificationFilter, getNotificationFilter, levelIcon, listLevels, countPendingNotifications, loadNotificationHistory, cleanNotificationArchive, removeNotification, type NotificationLevel, type Notification } from './notify.js'
+import { showSuggestionMenu, showSuggestionMenuRaw, getSuggestionPrefs, clearSuggestions, hasSuggestions } from './cli-suggestions.js'
 import { emitKeypressEvents } from 'readline'
 import { createEngine, type Engine } from './engine.js'
 import { listLocalAgents, readLocalAgent, scaffoldAgent } from './agents.js'
@@ -27,7 +28,7 @@ if (stdin.isTTY) {
 }
 
 import {
-  RESET, CYAN, GREEN, YELLOW, RED, GRAY, BOLD, LIME,
+  RESET, CYAN, GREEN, YELLOW, RED, GRAY, BOLD,
 } from './constants.js'
 
 import { showSessions, showInfo, handleStartSession } from './cli-sessions.js'
@@ -37,7 +38,7 @@ import { handleEditAgent } from './cli-edit.js'
 import { handleProviders } from './cli-providers-advanced.js'
 import { handleListAgents, handleUseAgent } from './cli-agents.js'
 import { handleSkillsMenu, showSkillsList } from './cli-skills.js'
-import { showMenu, showHelp } from './cli-menu.js'
+import { showMenu, showHelp, handleTestSubmenu, handleSuggestionsMenu } from './cli-menu.js'
 import { showBanner } from './cli-banner.js'
 import { loadUserProfile, getDisplayName, editUserProfile } from './cli-user.js'
 import { logSkillLoaded, logDaemonStarted, logWelcomeMessage } from './cli-startup.js'
@@ -46,8 +47,7 @@ import { DEFAULT_AGENT, getAgent, loadAgentFromFile } from './cli-utils.js'
 import { handleCommandPicker } from './cli-selector.js'
 import { handleShellLine } from './cli-runner.js'
 import { tryRouteIntercom, getCurrentProject } from './cli-intercom-router.js'
-import { showSuggestionMenu, showSuggestionMenuRaw, clearSuggestions } from './cli-suggestions.js'
-import { runContextTest } from './cli-context-test.js'
+
 import { getFeuRougeClient, resetFeuRougeClient } from './feurouge/feurouge-client.js'
 import { handlePermissionsCommand } from './feurouge/permissions-cli.js'
 import { getPermissionsConfig, listRegistrations } from './feurouge/permissions.js'
@@ -63,29 +63,91 @@ function startTelecomDaemon(): void {
     telecomDaemon = fork(daemonPath, [], { stdio: ['pipe', 'pipe', 'pipe', 'ipc'] })
     backgroundAgents.set('telecom-daemon', telecomDaemon)
 
-    // Recevoir les notifications en temps réel via IPC
-    // Les notifications ne sont PLUS affichées dans le CLI — elles sont
-    // visibles dans la fenêtre dédiée (telecom-notification-viewer).
-    // Seul le menu interactif des suggestions (Actions rapides) est conservé.
-    telecomDaemon.on('message', (msg: unknown) => {
-      const data = msg as { type?: string; id?: string; from?: string; message?: string; level?: string }
-      if (data?.type === 'notification' && data.id) {
-        // Consommer la notification (la retirer du fichier) pour éviter
-        // qu'elle ne s'accumule — la fenêtre dédiée la lit directement
-        const wasPending = removeNotification(data.id)
-        if (wasPending) {
-          // Afficher le menu interactif des suggestions en direct
-          // Si le daemon a ecrit suggestions.json, on propose un choix clavier
-          // immediatement, sans attendre le prochain tour de boucle.
-          showSuggestionMenuRaw().then(cmd => {
-            if (cmd !== null) {
-              const routeResult = tryRouteIntercom(cmd)
-              if (routeResult) {
-                process.stdout.write(`\n${GREEN}> Routé : ${routeResult.subject}${RESET}\n`)
+    // Affichage temps réel des notifications via IPC (process.stdout.write évite
+    // le conflit avec readline). La notification est supprimée du fichier pour
+    // éviter le double affichage par popAllNotifications() au prochain tour.
+    // Debounce pour showSuggestionMenuRaw : éviter la cascade de popups
+    // quand le daemon envoie plusieurs notifications à la suite.
+    // On ne montre le menu que pour les notifications 'conclusion' (action terminée),
+    // et au maximum une fois toutes les 5 secondes.
+    let lastSuggestionMenuTime = 0
+    const SUGGESTION_DEBOUNCE_MS = 5000
+
+    telecomDaemon.on('message', (data: Notification) => {
+      if (data && data.id && data.message && data.level && data.from) {
+        const icon = levelIcon(data.level)
+        process.stdout.write(`\n${icon} ${BOLD}${data.from}${RESET}\n`)
+        const lines = data.message.split('\n')
+        process.stdout.write(`  ${lines[0]}\n`)
+        for (let i = 1; i < Math.min(lines.length, 5); i++) {
+          process.stdout.write(`  ${lines[i]}\n`)
+        }
+        if (lines.length > 5) process.stdout.write(`  ${GRAY}...${RESET}\n`)
+        process.stdout.write('\n')
+        removeNotification(data.id)
+
+        // Afficher le menu interactif UNIQUEMENT pour les notifications
+        // de type 'conclusion' (action terminée), et pas plus d'une fois
+        // toutes les 5 secondes. Les notifications 'info' (routage,
+        // progression) ne déclenchent PAS le menu pour éviter la cascade.
+        const now = Date.now()
+        if (data.level === 'conclusion' && now - lastSuggestionMenuTime > SUGGESTION_DEBOUNCE_MS) {
+          lastSuggestionMenuTime = now
+          // Générer les suggestions contextuelles MAINTENANT — le daemon
+          // a fini de traiter la demande (la route intercom est terminée).
+          // On les génère ici (pas dans la boucle principale après routage)
+          // pour éviter que le menu apparaisse AVANT le résultat.
+          triggerSuggestions()
+          // showSuggestionMenuRaw utilise le mode raw stdin, pas rl.question,
+          // donc pas de conflit avec le prompt readline en cours.
+          showSuggestionMenuRaw(getCurrentProject()).then((cmd) => {
+            if (cmd === null) return
+            try {
+              if (cmd.startsWith('!suggestions')) {
+                triggerSuggestions()
+                process.stdout.write(`\n${GREEN}✓ Suggestions régénérées — elles apparaîtront au prochain prompt.${RESET}\n\n`)
+              } else if (cmd.startsWith('!project')) {
+                dispatchProjectCommand(cmd.slice(9).trim())
+              } else if (cmd.startsWith('!tasks')) {
+                dispatchProjectCommand(`tasks ${cmd.slice(7).trim()}`)
+              } else if (cmd.startsWith('!agents') || cmd.startsWith('!agentes')) {
+                handleListAgents(currentEngine!)
+              } else if (cmd.startsWith('/help') || cmd.startsWith('aide')) {
+                showHelp(currentEngine!)
+              } else if (cmd.startsWith('/menu')) {
+                showMenu(currentEngine!)
+              } else if (cmd.startsWith('/skills')) {
+                showSkillsList()
+              } else if (cmd.startsWith('/status') || cmd.startsWith('/state')) {
+                showIntercomStatus()
+              } else if (cmd.startsWith('/notifications')) {
+                const pending = popAllNotifications()
+                for (const n of pending) {
+                  if (n.level === 'conclusion' || n.level === 'urgent' || n.level === 'avertissement') {
+                    const icon = levelIcon(n.level)
+                    process.stdout.write(`\n${icon} ${n.from}\n`)
+                    process.stdout.write(`  ${n.message.split('\n')[0]}\n\n`)
+                  }
+                }
+                if (pending.length === 0) {
+                  process.stdout.write(`\n${GRAY}Aucune notification en attente.${RESET}\n\n`)
+                }
+              } else if (cmd.startsWith('!') || cmd.startsWith('/')) {
+                // Autres commandes CLI non gérées — informer l'utilisateur
+                process.stdout.write(`\n${YELLOW}→ Tape "${cmd}" au prompt pour exécuter cette commande.${RESET}\n\n`)
+              } else {
+                // Commandes shell (cat, node, ls, etc.)
+                execSync(cmd, {
+                  cwd: process.cwd(),
+                  timeout: 15000,
+                  stdio: 'inherit',
+                })
               }
+            } catch {
+              process.stdout.write(`\n${YELLOW}⚠ Commande non exécutable depuis ce contexte — tape-la au prompt.${RESET}\n\n`)
             }
           }).catch(() => {
-            // ignore - le menu raw est non-bloquant
+            // Non-bloquant — ignore les erreurs
           })
         }
       }
@@ -98,6 +160,239 @@ function startTelecomDaemon(): void {
     logDaemonStarted()
   } else {
     console.log(`${YELLOW}⚠ Daemon telecom introuvable (compile d'abord)${RESET}`)
+  }
+}
+
+/**
+ * Affiche les messages intercom avec filtrage par subject.
+ * Section dédiée [402] — permet de parcourir les messages sans polluer
+ * le flux temps réel.
+ *
+ * @param filterSubject - Filtre optionnel par subject (ex: 'project-request')
+ */
+function showIntercomMessages(filterSubject?: string): void {
+  const intercomDir = join(process.cwd(), 'telecom', 'intercom')
+
+  if (!existsSync(intercomDir)) {
+    console.log(`\n${YELLOW}Aucun dossier intercom.${RESET}\n`)
+    return
+  }
+
+  const files = readdirSync(intercomDir).filter(f => f.endsWith('.json')).sort()
+  if (files.length === 0) {
+    console.log(`\n${GRAY}Aucun message intercom.${RESET}\n`)
+    return
+  }
+
+  // Parser tous les messages
+  const messages: Array<{
+    file: string
+    status: string
+    from: string
+    to: string
+    subject: string
+    type: string
+    demande: string
+    timestamp: string
+  }> = []
+
+  for (const f of files) {
+    try {
+      const content = readFileSync(join(intercomDir, f), 'utf-8')
+      const msg = JSON.parse(content) as {
+        status: string
+        from: string
+        to: string
+        subject: string
+        type: string
+        payload?: Record<string, string>
+        timestamp: string
+      }
+      messages.push({
+        file: f,
+        status: msg.status ?? 'unknown',
+        from: msg.from,
+        to: msg.to,
+        subject: msg.subject,
+        type: msg.type ?? 'request',
+        demande: msg.payload?.demande ?? '',
+        timestamp: msg.timestamp,
+      })
+    } catch { /* skip malformed */ }
+  }
+
+  if (messages.length === 0) {
+    console.log(`\n${GRAY}Aucun message valide.${RESET}\n`)
+    return
+  }
+
+  // Statistiques (calculées avant filtrage pour avoir la vue d'ensemble)
+  const subjects = new Map<string, number>()
+  let pending = 0
+  let read = 0
+  let processed = 0
+  for (const m of messages) {
+    subjects.set(m.subject, (subjects.get(m.subject) ?? 0) + 1)
+    if (m.status === 'pending') pending++
+    else if (m.status === 'read') read++
+    else if (m.status === 'processed') processed++
+  }
+  const sortedSubjects = [...subjects.entries()].sort((a, b) => b[1] - a[1])
+
+  // Cas spécial : lister les subjects disponibles
+  if (filterSubject === '__subjects__') {
+    console.log(`\n${BOLD}${CYAN}Subjects disponibles :${RESET}`)
+    for (const [subj, count] of sortedSubjects) {
+      console.log(`  ${CYAN}${subj}${RESET}  ${GRAY}(${count} message(s))${RESET}`)
+    }
+    console.log()
+    return
+  }
+
+  // Appliquer le filtre par subject si spécifié
+  const filtered = filterSubject
+    ? messages.filter(m => m.subject === filterSubject)
+    : messages
+
+  if (filtered.length === 0) {
+    console.log(`\n${YELLOW}Aucun message pour le subject "${filterSubject}".${RESET}\n`)
+    return
+  }
+
+  const filtreLabel = filterSubject
+    ? `${YELLOW} (filtre: ${filterSubject})${RESET}`
+    : ''
+
+  console.log(`\n${BOLD}${CYAN}┌─ Messages intercom${filtreLabel}${RESET}`)
+  console.log(`${BOLD}${CYAN}║${RESET}`)
+  console.log(`${BOLD}${CYAN}║  ${RESET}Total: ${GREEN}${messages.length}${RESET}  En attente: ${pending > 0 ? `${YELLOW}${pending}${RESET}` : `${GRAY}0${RESET}`}  Lus: ${read}  Traités: ${processed}`)
+
+  // Répartition par subject
+  console.log(`${BOLD}${CYAN}║  ${GRAY}Répartition par subject :${RESET}`)
+  for (const [subj, count] of sortedSubjects) {
+    const highlight = filterSubject && subj === filterSubject ? `${GREEN}◉${RESET}` : `${GRAY}·${RESET}`
+    console.log(`${BOLD}${CYAN}║  ${RESET}  ${highlight} ${subj.padEnd(25)} ${count}`)
+  }
+  console.log(`${BOLD}${CYAN}║${RESET}`)
+
+  if (filtered.length > 20) {
+    console.log(`${BOLD}${CYAN}║${RESET}  ${GRAY}Affichage des 20 plus récents (${filtered.length} total)${RESET}`)
+  }
+
+  // Afficher les messages (max 20)
+  const display = filtered.slice(-20).reverse()
+  for (const m of display) {
+    const statusIcon = m.status === 'pending' ? '⏳' : m.status === 'read' ? '📖' : '✅'
+    const time = m.timestamp.slice(11, 19)
+    const preview = m.demande.slice(0, 80)
+    const label = preview ? ` «${preview}»` : ''
+    console.log(`${BOLD}${CYAN}║  ${RESET}${statusIcon} ${GRAY}${time}${RESET} ${m.from}→${m.to} ${CYAN}[${m.subject}]${RESET}${label}`)
+  }
+
+  console.log(`${BOLD}${CYAN}║${RESET}`)
+  console.log(`${BOLD}${CYAN}║  ${GRAY}Filtrage : ${RESET}`)
+  console.log(`${BOLD}${CYAN}║  ${RESET}  ${CYAN}402 <subject>${RESET} — Filtrer par subject (ex: 402 project-request)`)
+  console.log(`${BOLD}${CYAN}║  ${RESET}  ${CYAN}402 /subjects${RESET} — Liste des subjects disponibles`)
+  console.log(`${BOLD}${CYAN}╚${RESET}\n`)
+}
+
+/**
+ * Exécute le script d'analyse des patterns avec les arguments donnés.
+ * Affiche la sortie du script directement dans le CLI.
+ */
+function runAnalyzePatterns(args: string[] = []): void {
+  const scriptPath = join(process.cwd(), 'scripts', 'telecom', 'analyze-patterns.js')
+  if (!existsSync(scriptPath)) {
+    console.log(`\n${YELLOW}Script d'analyse introuvable : ${scriptPath}${RESET}\n`)
+    return
+  }
+
+  try {
+    const output = execSync(`node "${scriptPath}" ${args.join(' ')}`, {
+      cwd: process.cwd(),
+      encoding: 'utf-8',
+      timeout: 15000,
+      env: { ...process.env },
+    })
+    process.stdout.write(output)
+  } catch (err) {
+    const msg = (err as Error).message
+    console.log(`${RED}Erreur analyse : ${msg.slice(0, 200)}${RESET}\n`)
+  }
+}
+
+/**
+ * Génère des suggestions contextuelles en arrière-plan (fire-and-forget).
+ * Exécute handle.js avec le projet courant, sans bloquer le CLI.
+ * Les suggestions sont écrites dans telecom/suggestions.json et seront
+ * proposées automatiquement au prochain tour de boucle (via showSuggestionMenu).
+ */
+function triggerSuggestions(): void {
+  const currentProject = getCurrentProject()
+  const projectFlag = currentProject ? ` --project "${encodeURIComponent(currentProject)}"` : ''
+  try {
+    execSync(`node scripts/suggestions/handle.js${projectFlag}`, {
+      cwd: process.cwd(),
+      encoding: 'utf-8',
+      timeout: 10000,
+      stdio: 'ignore',
+    })
+  } catch {
+    // Silencieux — les suggestions sont un bonus non bloquant
+  }
+}
+
+/**
+ * Affiche les suggestions de patterns sauvegardées (pattern-suggestions.json).
+ * Générées par analyze-patterns.js --suggest.
+ */
+function showPatternSuggestions(): void {
+  const suggestionsFile = join(process.cwd(), 'telecom', 'pattern-suggestions.json')
+
+  if (!existsSync(suggestionsFile)) {
+    console.log(`\n${GRAY}Aucune suggestion de pattern enregistrée.${RESET}`)
+    console.log(`  ${GRAY}Utilise ${RESET}402 /suggest <demande>${GRAY} pour en générer.${RESET}\n`)
+    return
+  }
+
+  try {
+    const raw = readFileSync(suggestionsFile, 'utf-8').trim()
+    if (!raw) {
+      console.log(`\n${GRAY}Aucune suggestion de pattern enregistrée.${RESET}\n`)
+      return
+    }
+
+    const suggestions = JSON.parse(raw) as Array<{
+      demande: string
+      suggestedPattern: string
+      subject: string
+      script: string
+      rationale: string
+      count: number
+      timestamp: string
+    }>
+
+    if (!Array.isArray(suggestions) || suggestions.length === 0) {
+      console.log(`\n${GRAY}Aucune suggestion de pattern enregistrée.${RESET}\n`)
+      return
+    }
+
+    console.log(`\n${BOLD}${CYAN}┌─ Suggestions de patterns (${suggestions.length}) ─────────────┐${RESET}`)
+    console.log(`${BOLD}${CYAN}║${RESET}`)
+
+    for (const s of suggestions) {
+      const date = s.timestamp.slice(0, 10)
+      const repeats = s.count > 1 ? ` ${YELLOW}(×${s.count})${RESET}` : ''
+      console.log(`${BOLD}${CYAN}║  ${RESET}${GRAY}[${date}]${RESET} "${s.demande.slice(0, 50)}"${repeats}`)
+      console.log(`${BOLD}${CYAN}║  ${RESET}  ${GRAY}Pattern:${RESET} "${s.suggestedPattern}"`)
+      console.log(`${BOLD}${CYAN}║  ${RESET}  ${GRAY}Subject:${RESET} ${s.subject}  ${GRAY}Script:${RESET} ${s.script.split('/').pop()}`)
+      console.log(`${BOLD}${CYAN}║${RESET}`)
+    }
+
+    console.log(`${BOLD}${CYAN}║  ${GRAY}Pour ajouter une suggestion : ${RESET}402 /suggest "<demande>"`)
+    console.log(`${BOLD}${CYAN}╚${RESET}\n`)
+  } catch {
+    console.log(`\n${RED}Fichier de suggestions corrompu.${RESET}\n`)
   }
 }
 
@@ -243,7 +538,7 @@ export async function main() {
     'sessions', 'session', 'new', 'info', 'status',
     'notifications', 'notifications filter', 'notifications history',
     'permissions', 'permissions show', 'permissions edit', 'permissions reload',
-    'exit', 'quit',
+    'exit', 'quit', 'test',
   ]
 
   const completer = (line: string): [string[], string] => {
@@ -299,29 +594,64 @@ export async function main() {
 
   // ── Menu principal (liste numérotée) ──
   showMenu(currentEngine!)
+  clearSuggestions()
 
   while (true) {
     try {
-    // Les notifications ne sont PLUS affichées dans le CLI.
-    // Elles sont visibles dans la fenêtre dédiée (telecom-notification-viewer).
-    // On consomme juste les notifications pour éviter l'accumulation.
-    popAllNotifications()
+    // Afficher les notifications en attente (non encore vues via IPC)
+    const pendingNotifs = popAllNotifications()
+    for (const n of pendingNotifs) {
+      if (n.level === 'conclusion' || n.level === 'urgent' || n.level === 'avertissement') {
+        const icon = levelIcon(n.level)
+        const lines = n.message.split('\n')
+        console.log(`\n${icon} ${BOLD}${n.from}${RESET}`)
+        console.log(`  ${lines[0]}`)
+        for (let i = 1; i < Math.min(lines.length, 8); i++) {
+          console.log(`  ${lines[i]}`)
+        }
+        if (lines.length > 8) console.log(`  ${GRAY}...${RESET}`)
+        console.log()
+      }
+    }
 
     // ── Menu interactif des suggestions ──────────────────
-    // Après une notification contenant des suggestions (→ commande — Label),
-    // on affiche un menu numéroté pour exécuter la commande d'un simple chiffre.
-    const suggestionCmd = await showSuggestionMenu(rl)
-    let line: string
-    if (suggestionCmd !== null) {
-      // L'utilisateur a choisi une suggestion → on exécute cette commande
-      line = suggestionCmd
-      console.log(`${GREEN}→${RESET} ${suggestionCmd}\n`)
-    } else {
-      // Vider les suggestions périmées (si le fichier traîne)
-      clearSuggestions()
-      // Prompt normal
+    // Après l'exécution d'un script, le daemon écrit les suggestions
+    // dans telecom/suggestions.json. On affiche le menu interactif
+    // si des suggestions sont disponibles.
+    // L'affichage automatique respecte la préférence utilisateur (autoShow).
+    const currentProject = getCurrentProject()
+    const prefs = getSuggestionPrefs()
+    let line: string | null = null
+    // Ne montrer le menu des suggestions QUE si des suggestions existent.
+    // Évite la boucle infinie : showSuggestionMenu retourne null à la fois
+    // quand il n'y a PAS de suggestions ET quand l'utilisateur tape "0".
+    if (prefs.autoShow && hasSuggestions()) {
+      const suggestionCmd = await showSuggestionMenu(rl, currentProject)
+      if (suggestionCmd !== null) {
+        // L'utilisateur a choisi une suggestion → injecter dans le flux
+        // CLI direct (!project, /help, etc.). Ne pas router via Intercom
+        // (qui ne reconnaît que des mots-clés comme "projet" ou "liste").
+        line = suggestionCmd
+        // Normaliser les commandes shell brutes (cat, node, ls) sans préfixe
+        // pour qu'elles passent par handleShellLine au lieu d'aller au LLM
+        if (!line.startsWith('/') && !line.startsWith('!')) {
+          line = '!' + line
+        }
+        console.log(`\n${GREEN}→ ${line}${RESET}\n`)
+      } else {
+        // L'utilisateur a ignoré les suggestions (tape "0") :
+        // 1. Les suggestions sont déjà supprimées par showSuggestionMenu
+        // 2. Réafficher le menu pour que l'utilisateur voie les options
+        // 3. Retourner au début de la boucle (les suggestions ne réapparaîtront
+        //    pas car clearSuggestions a été appelé dans showSuggestionMenu)
+        showMenu(currentEngine!)
+        continue
+      }
+    }
+
+    // Prompt normal (si aucune suggestion sélectionnée)
+    if (line === null) {
       const displayName = getDisplayName(loadUserProfile())
-      const currentProject = getCurrentProject()
       const projectBadge = currentProject ? ` ${CYAN}◈${currentProject}${RESET}` : ''
       const prefix = GRAY + displayName + projectBadge + RESET
       const pending = countPendingNotifications()
@@ -341,29 +671,29 @@ export async function main() {
       }
     }
 
-    // ── Configuration ──
-    if (line === '1') {
+    // ── Configuration (100) ──
+    if (line === '101') {
       await handleManageProvidersMenu(rl)
       showMenu(currentEngine!)
       continue
     }
-    if (line === '2') { await editUserProfile(rl); continue }
+    if (line === '102') { await editUserProfile(rl); continue }
 
-    // ── Agents ──
-    if (line === '3') { await handleCreate(rl); continue }
-    if (line === '4') { handleListAgents(currentEngine!); continue }
-    if (line === '5') { const newEngine = await handleEditAgent(rl, currentEngine!); if (newEngine) currentEngine = newEngine; showMenu(currentEngine!); continue }
+    // ── Agents (200) ──
+    if (line === '201') { await handleCreate(rl); continue }
+    if (line === '202') { handleListAgents(currentEngine!); continue }
+    if (line === '203') { const newEngine = await handleEditAgent(rl, currentEngine!); if (newEngine) currentEngine = newEngine; showMenu(currentEngine!); continue }
 
-    // ── Skills & prompts ──
-    if (line === '6') {
+    // ── Skills & prompts (204) ──
+    if (line === '204') {
       await handleSkillsMenu(rl)
       showMenu(currentEngine!)
       continue
     }
 
-    // ── Sessions ──
-    if (line === '7') { const newEngine = await handleStartSession(rl, currentEngine!); if (newEngine) currentEngine = newEngine; continue }
-    if (line === '8') {
+    // ── Sessions (300) ──
+    if (line === '301') { const newEngine = await handleStartSession(rl, currentEngine!); if (newEngine) currentEngine = newEngine; continue }
+    if (line === '302') {
       showSessions(currentEngine!)
       // Afficher aussi les infos de la session active
       console.log()
@@ -372,23 +702,171 @@ export async function main() {
       continue
     }
 
-    // ── Monitoring ──
-    if (line === '9') {
+    // ── Monitoring (400) ──
+    if (line === '401') {
       showIntercomStatus()
       continue
     }
 
-    // ── Aide ──
-    if (line === '10') { showHelp(currentEngine!); continue }
+    if (line === '402' || line.startsWith('402 ')) {
+      const rest = line === '402' ? '' : line.slice(4).trim()
 
-    // ── Tests de contexte ──
-    if (['11','12','13','14','15','16','17','18','19','20','21','22','23'].includes(line)) {
-      runContextTest(line)
+      // 402 /analyse → rapport complet d'analyse des patterns
+      if (rest === '/analyse') {
+        runAnalyzePatterns()
+        continue
+      }
+
+      // 402 /rejected → analyse des échecs de matching
+      if (rest === '/rejected' || rest === '/echecs' || rest === '/échecs') {
+        runAnalyzePatterns(['--rejected'])
+        continue
+      }
+
+      // 402 /coverage → couverture des patterns
+      if (rest === '/coverage' || rest === '/couverture') {
+        runAnalyzePatterns(['--coverage'])
+        continue
+      }
+
+      // 402 /suggest <demande> → suggère un pattern pour une demande
+      if (rest.startsWith('/suggest ') || rest.startsWith('/suggere ')) {
+        const suggestDemande = rest.replace(/^\/sugg(?:est|ere) /, '').trim()
+        if (suggestDemande) {
+          runAnalyzePatterns(['--suggest', `"${suggestDemande.replace(/"/g, '\\"')}"`])
+        } else {
+          console.log(`${YELLOW}Usage: 402 /suggest "<demande>"${RESET}\n`)
+        }
+        continue
+      }
+
+      // 402 /suggestions → afficher les suggestions sauvegardées
+      if (rest === '/suggestions') {
+        showPatternSuggestions()
+        continue
+      }
+
+      // 402 /rebuild → reconstruire le cache des embeddings
+      if (rest === '/rebuild') {
+        console.log(`${YELLOW}Reconstruction du cache des embeddings...${RESET}`)
+        try {
+          const { rebuildCache } = await import('./fuzzy-matcher.js')
+          const ok = await rebuildCache()
+          if (ok) {
+            console.log(`${GREEN}✓ Cache reconstruit avec succès.${RESET}\n`)
+          } else {
+            console.log(`${RED}✗ Échec de la reconstruction (LM Studio indisponible ?).${RESET}\n`)
+          }
+        } catch (err) {
+          console.log(`${RED}Erreur : ${(err as Error).message}${RESET}\n`)
+        }
+        continue
+      }
+
+      // 402 /help → aide des commandes 402
+      if (rest === '/help' || rest === 'help') {
+        console.log(`\n${BOLD}${CYAN}┌─ Commandes 402 — Messages intercom ───────────┐${RESET}`)
+        console.log(`${BOLD}${CYAN}║${RESET}`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}402${RESET}                      Tous les messages`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}402 <subject>${RESET}           Filtrer par subject`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}402 /subjects${RESET}           Liste des subjects`)
+        console.log(`${BOLD}${CYAN}║${RESET}`)
+        console.log(`${BOLD}${CYAN}║  ${GRAY}── Analyse des patterns ──${RESET}`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}402 /analyse${RESET}            Rapport complet`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}402 /rejected${RESET}           Échecs de matching`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}402 /coverage${RESET}           Couverture des patterns`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}402 /suggest <demande>${RESET}  Suggérer un pattern`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}402 /suggestions${RESET}        Suggestions sauvegardées`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}402 /rebuild${RESET}            Reconstruire le cache`)
+        console.log(`${BOLD}${CYAN}║${RESET}`)
+        console.log(`${BOLD}${CYAN}╚${RESET}\n`)
+        continue
+      }
+
+      // Sinon, traiter comme un filtre par subject
+      if (rest) {
+        const filter = rest === '/subjects' ? '__subjects__' : rest
+        showIntercomMessages(filter)
+      } else {
+        showIntercomMessages()
+      }
       continue
     }
 
+    // ── Analyse des patterns (403) ──
+    if (line === '403') {
+      runAnalyzePatterns()
+      continue
+    }
+    if (line.startsWith('403 ')) {
+      const rest = line.slice(4).trim()
+
+      if (rest === '/rejected' || rest === '/echecs') {
+        runAnalyzePatterns(['--rejected'])
+      } else if (rest === '/coverage' || rest === '/couverture') {
+        runAnalyzePatterns(['--coverage'])
+      } else if (rest.startsWith('/suggest ') || rest.startsWith('/suggere ')) {
+        const suggestDemande = rest.replace(/^\/sugg(?:est|ere) /, '').trim()
+        if (suggestDemande) {
+          runAnalyzePatterns(['--suggest', `"${suggestDemande.replace(/"/g, '\\"')}"`])
+        }
+      } else if (rest === '/suggestions') {
+        showPatternSuggestions()
+      } else if (rest === '/rebuild') {
+        console.log(`${YELLOW}Reconstruction du cache des embeddings...${RESET}`)
+        try {
+          const { rebuildCache } = await import('./fuzzy-matcher.js')
+          const ok = await rebuildCache()
+          if (ok) {
+            console.log(`${GREEN}✓ Cache reconstruit avec succès.${RESET}\n`)
+          } else {
+            console.log(`${RED}✗ Échec de la reconstruction.${RESET}\n`)
+          }
+        } catch (err) {
+          console.log(`${RED}Erreur : ${(err as Error).message}${RESET}\n`)
+        }
+      } else if (rest === '/help') {
+        console.log(`\n${BOLD}${CYAN}┌─ Commandes 403 — Analyse des patterns ────────┐${RESET}`)
+        console.log(`${BOLD}${CYAN}║${RESET}`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}403${RESET}                      Rapport complet`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}403 /rejected${RESET}           Échecs de matching`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}403 /coverage${RESET}           Couverture des patterns`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}403 /suggest <demande>${RESET}  Suggérer un pattern`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}403 /suggestions${RESET}        Suggestions sauvegardées`)
+        console.log(`${BOLD}${CYAN}║  ${RESET}${CYAN}403 /rebuild${RESET}            Reconstruire le cache`)
+        console.log(`${BOLD}${CYAN}╚${RESET}\n`)
+      } else {
+        console.log(`${YELLOW}Usage: 403 /analyse, 403 /rejected, 403 /coverage, 403 /suggest <demande>${RESET}\n`)
+      }
+      continue
+    }
+
+    // ── Banc de tests (500) ──
+    if (line === '501') {
+      await handleTestSubmenu(rl)
+      showMenu(currentEngine!)
+      continue
+    }
+
+    // ── Suggestions (600) ──
+    if (line === '601' || line === '602' || line === '603' || line === '604' || line === '605') {
+      await handleSuggestionsMenu(rl)
+      showMenu(currentEngine!)
+      continue
+    }
+
+    // ── /suggestions ──
+    if (line === '/suggestions') {
+      await handleSuggestionsMenu(rl)
+      showMenu(currentEngine!)
+      continue
+    }
+
+    // ── Aide ──
+    if (line === 'aide' || line === 'Aide' || line === 'AIDE') { showHelp(currentEngine!); continue }
+
     // ── Quitter ──
-    if (line === '0') { stopFeuRougeDaemon(); stopTelecomDaemon(); console.log(`${GRAY}Bye.${RESET}`); rl.close(); exit(0) }
+    if (line === 'fin' || line === 'Fin' || line === 'FIN') { stopFeuRougeDaemon(); stopTelecomDaemon(); console.log(`${GRAY}Bye.${RESET}`); rl.close(); exit(0) }
 
     if (line.startsWith('/')) {
       const [cmd, ...args] = line.slice(1).split(/\s+/)
@@ -594,6 +1072,11 @@ export async function main() {
           }
           break
         }
+        case 'test': {
+          await handleTestSubmenu(rl)
+          showMenu(currentEngine!)
+          break
+        }
         case 'exit':
         case 'quit': {
           stopFeuRougeDaemon()
@@ -603,7 +1086,7 @@ export async function main() {
           exit(0)
         }
         default: {
-          console.log(`${YELLOW}Commande inconnue : /${cmd}. Tapez /menu, /?, ou 0-9.${RESET}`)
+          console.log(`${YELLOW}Commande inconnue : /${cmd}. Tapez /menu, /? ou un numéro du menu.${RESET}`)
         }
       }
       continue
@@ -632,6 +1115,30 @@ export async function main() {
       await handlePermissionsCommand(args)
       continue
     }
+    if (line.startsWith('!agents')) {
+      handleListAgents(currentEngine!)
+      continue
+    }
+    if (line.startsWith('!suggestions')) {
+      // Étape 1 : Générer des suggestions fraîches via handle.js
+      const currentProject = getCurrentProject()
+      const projectFlag = currentProject ? ` --project "${encodeURIComponent(currentProject)}"` : ''
+      try {
+        execSync(`node scripts/suggestions/handle.js${projectFlag}`, {
+          cwd: process.cwd(),
+          encoding: 'utf-8',
+          timeout: 15000,
+        })
+        console.log(`${GREEN}✓ Suggestions générées.${RESET}`)
+      } catch (err) {
+        const msg = (err as Error).message
+        console.log(`${RED}Erreur suggestions : ${msg.slice(0, 200)}${RESET}\n`)
+      }
+      // Étape 2 : Ouvrir le sous-menu interactif des suggestions
+      await handleSuggestionsMenu(rl)
+      showMenu(currentEngine!)
+      continue
+    }
 
     const isCommand = line.startsWith('!')
     const isAssistantMsg = line.startsWith('@')
@@ -647,17 +1154,13 @@ export async function main() {
     if (routeResult) {
       console.log(`\n${GREEN}✓ Routé vers agent-telecom [${routeResult.subject}]${RESET}`)
       console.log(`\n${CYAN}${routeResult.response}${RESET}`)
+      console.log()
 
-      // Afficher un indicateur de traitement en arrière-plan
-      const daemonAlive = telecomDaemon !== null && telecomDaemon.exitCode === null
-      if (daemonAlive) {
-        const pendingAfter = countPendingNotifications()
-        const badge = pendingAfter > 0 ? ` ${YELLOW}[${pendingAfter} notification(s)]${RESET}` : ''
-        console.log(`${GRAY}⏳ Traitement en cours dans le daemon telecom...${badge}${RESET}`)
-        console.log(`   Les notifications arrivent en temps réel ci-dessous.${RESET}\n`)
-      } else {
-        console.log(`${YELLOW}⚠ Daemon telecom pas actif — le message sera traité au prochain démarrage.${RESET}\n`)
-      }
+      // Les suggestions sont générées PLUS TARD, quand le daemon
+      // envoie une notification IPC de type 'conclusion' (travail terminé).
+      // On évite ainsi que le menu apparaisse IMMÉDIATEMENT après le
+      // routage, avant même que le daemon n'ait eu le temps de traiter
+      // la demande (l'utilisateur doit voir le résultat d'abord).
       continue
     }
 
@@ -721,6 +1224,10 @@ export async function main() {
       const plainResponse = llmResponse.replace(/\x1b\[[0-9;]*m/g, '')
       eng.addMessage('assistant', plainResponse)
       console.log(`\n${llmResponse}\n`)
+
+      // Auto-générer les suggestions contextuelles après une réponse LLM
+      // pour que le prochain tour de boucle propose des actions pertinentes
+      triggerSuggestions()
     } catch (err) {
       process.stdout.write(`\r${RED}✗${RESET}\n`)
       const msg = (err as Error).message
