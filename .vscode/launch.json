@@ -1,0 +1,79 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Run tsc",
+            "runtimeExecutable": "tsc",
+            "cwd": "${workspaceFolder}",
+            "args": []
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch Program",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}\\dist\\engine.js"
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Tests",
+            "program": "${workspaceFolder}\\dist\\test\\test.js",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": [
+                "<node_internals>/**"
+            ]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Validate Agent",
+            "program": "${workspaceFolder}\\dist\\validate-agent.js",
+            "args": ["${input:agentId}"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": [
+                "<node_internals>/**"
+            ]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Spawn Agent",
+            "program": "${workspaceFolder}\\dist\\spawn-agent.js",
+            "args": ["${input:spawnAgentId}", "${input:spawnAgentInstruction}"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": [
+                "<node_internals>/**"
+            ]
+        }
+    ],
+    "inputs": [
+        {
+            "id": "agentId",
+            "type": "promptString",
+            "description": "Enter the agent ID to validate:"
+        },
+        {
+            "id": "spawnAgentId",
+            "type": "promptString",
+            "description": "Enter the agent ID to spawn:"
+        },
+        {
+            "id": "spawnAgentInstruction",
+            "type": "promptString",
+            "description": "Enter the instruction for the spawned agent:"
+        }
+    ]
+}

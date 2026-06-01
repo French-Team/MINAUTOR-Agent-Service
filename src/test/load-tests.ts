@@ -13,6 +13,8 @@ import { top15, safeExit } from '../constants.js'
 import { createEngine } from '../engine.js'
 import { createRunner } from '../engine-runner.js'
 import type { AgentDefinition } from '../types/agent-definition.js'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import {
   resolveProviderForModel,
   getNextApiKey,
@@ -21,6 +23,7 @@ import {
   removeProvider,
   listProviders,
   getProviderConfigPath,
+  setProviderConfigPath,
 } from '../providers.js'
 import {
   sanitizeNotificationMessage,
@@ -1282,6 +1285,9 @@ async function main() {
     }
   }
 
+  const TEST_PROVIDERS_FILE = join(tmpdir(), `minautor-loadtest-providers-${Date.now()}.json`)
+  setProviderConfigPath(TEST_PROVIDERS_FILE)
+
   const startTime = Date.now()
 
   await loadTestTop15()
@@ -1346,6 +1352,9 @@ async function main() {
   }
 
   process.stdout.write(`\n${BOLD}${CYAN}\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557${RESET}\n\n`)
+  // Nettoyage du fichier providers temporaire
+  try { await import('fs').then(fs => fs.unlinkSync(TEST_PROVIDERS_FILE)) } catch {}
+
   safeExit(failed > 0 ? 1 : 0)
 }
 

@@ -212,6 +212,13 @@ export function matchScript(
       continue
     }
 
+    // En l'absence de subject (appel CLI direct), ignorer les patterns catch-all .*
+    // Ces patterns sont des fallbacks par catégorie, utiles uniquement quand
+    // un subject est explicitement demandé (ex: depuis Alice ou un daemon).
+    if (!subject && entry.pattern === '.*') {
+      continue
+    }
+
     try {
       const regex = new RegExp(entry.pattern, 'i')
       const match = lowerDemande.match(regex)

@@ -13,7 +13,7 @@ import { safeExit } from '../constants.js'
 import { createEngine } from '../engine.js'
 import {
   addProvider, listProviders, removeProvider, resolveProviderForModel,
-  fetchModels, getProvider, isApiKeyUsed,
+  fetchModels, getProvider, isApiKeyUsed, setProviderConfigPath,
 } from '../providers.js'
 
 const RESET = '\x1b[0m'
@@ -24,7 +24,9 @@ const YELLOW = '\x1b[33m'
 const BOLD = '\x1b[1m'
 
 const CWD = process.cwd()
-const PROVIDERS_FILE = join(CWD, 'providers.json')
+// Use a temp file for providers.json — never touch the real one
+const TEST_PROVIDERS_FILE = join(tmpdir(), `minautor-e2e-providers-${Date.now()}.json`)
+setProviderConfigPath(TEST_PROVIDERS_FILE)
 
 // Dossier temporaire isolé pour les agents de test — jamais de conflit avec .agents/ du projet
 const TEST_DIR = join(tmpdir(), `minautor-e2e-${Date.now()}`)
@@ -93,10 +95,9 @@ async function main() {
   console.log(`${BOLD}${CYAN}  Dossier test : ${TEST_DIR}${RESET}`)
   console.log(`${BOLD}${CYAN}═══════════════════════════════════════════${RESET}\n`)
 
-  // ── Setup : créer dossier temporaire + nettoyer providers ──
+  // ── Setup : créer dossier temporaire ──
   console.log(`${BOLD}── 1. NETTOYAGE${RESET}`)
   if (!existsSync(TEST_DIR)) mkdirSync(TEST_DIR, { recursive: true })
-  if (existsSync(PROVIDERS_FILE)) unlinkSync(PROVIDERS_FILE)
 
   // ── Création des agents ──
   console.log(`\n${BOLD}── 2. CRÉATION D'AGENTS${RESET}`)
@@ -321,12 +322,12 @@ async function main() {
     console.log(`     /providers key "Kilo Gateway" ta-clef`)
     console.log(`  2. Si le modèle n'est pas trouvé : vérifie que le nom est exact`)
     console.log(`  3. Si la résolution échoue : vérifie que le provider est "enabled"`)
-    console.log(`  4. Fichier providers.json : ${PROVIDERS_FILE}\n`)
+    console.log(`  4. Fichier providers.json : ${TEST_PROVIDERS_FILE}\n`)    
   }
 
   // Nettoyage du dossier temporaire
   if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true, force: true })
-  if (existsSync(PROVIDERS_FILE)) unlinkSync(PROVIDERS_FILE)
+  if (existsSync(TEST_PROVIDERS_FILE)) unlinkSync(TEST_PROVIDERS_FILE)   
 
   safeExit(failed > 0 ? 1 : 0)
 }

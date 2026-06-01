@@ -74,6 +74,46 @@
       "minMatch": 2,
       "subject": "agent-list-request",
       "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P10",
+      "name": "alice-greeting",
+      "keywords": ["bonjour", "salut", "hello", "bonsoir", "coucou", "salutations", "bienvenue", "hey", "hi"],
+      "minMatch": 1,
+      "subject": "alice-greeting",
+      "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P11",
+      "name": "alice-presentation",
+      "keywords": ["présente-toi", "qui es-tu", "pour faire quoi", "à quoi tu sers"],
+      "minMatch": 1,
+      "subject": "alice-presentation",
+      "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P12",
+      "name": "system-status-request",
+      "keywords": ["status", "état", "résumé", "summary", "santé", "diagnostic", "bilan"],
+      "minMatch": 1,
+      "subject": "system-status-request",
+      "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P13",
+      "name": "system-maintenance-request",
+      "keywords": ["maintenance", "analyse pattern", "analyse les patterns", "nettoyage", "optimise", "suggère pattern", "suggère un pattern", "registre"],
+      "minMatch": 1,
+      "subject": "system-maintenance-request",
+      "response": "Je transmets ta demande au service compétent."
+    },
+    {
+      "id": "P14",
+      "name": "parades-command",
+      "keywords": ["explore", "déploie", "deploie", "déploiement", "deploiement", "git", "profile", "commande"],
+      "minMatch": 2,
+      "subject": "parades-command",
+      "response": "Je transmets la commande au service compétent."
     }
   ]
 }

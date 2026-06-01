@@ -47,6 +47,7 @@ import { DEFAULT_AGENT, getAgent, loadAgentFromFile } from './cli-utils.js'
 import { handleCommandPicker } from './cli-selector.js'
 import { handleShellLine } from './cli-runner.js'
 import { tryRouteIntercom, getCurrentProject } from './cli-intercom-router.js'
+import { matchAndExecute } from './script-runner.js'
 
 import { getFeuRougeClient, resetFeuRougeClient } from './feurouge/feurouge-client.js'
 import { handlePermissionsCommand } from './feurouge/permissions-cli.js'
@@ -1229,16 +1230,32 @@ export async function main() {
       if (handled) continue
     }
 
+    // Script-runner : matching pattern direct (avant Intercom)
+    // Permet d'exécuter les scripts sans passer par le LLM ni l'intercom.
+    const scriptResult = matchAndExecute(line)
+    if (scriptResult.matched) {
+      if (scriptResult.stdout) {
+        console.log(`\n${scriptResult.stdout}\n`)
+      }
+      if (scriptResult.stderr) {
+        console.error(`${RED}${scriptResult.stderr}${RESET}\n`)
+      }
+      writeLastContext({ action: 'route', demande: line })
+      continue
+    }
+
     // Routeur intercom automatique (sans LLM) : détection par mots-clés
+    // Uniquement si le script-runner n'a pas trouvé de pattern.
     const routeResult = tryRouteIntercom(line)
     if (routeResult) {
       console.log(`\n${GREEN}✓ Routé vers agent-telecom [${routeResult.subject}]${RESET}`)
       console.log(`\n${CYAN}${routeResult.response}${RESET}`)
-      console.log()      // Sauvegarder le contexte de routage pour le handler IPC
-          // qui déclenchera triggerParades() à la notification 'conclusion'.
-          writeLastContext({ action: 'route', demande: line })
-          continue
-        }
+      console.log()
+      // Sauvegarder le contexte de routage pour le handler IPC
+      // qui déclenchera triggerParades() à la notification 'conclusion'.
+      writeLastContext({ action: 'route', demande: line })
+      continue
+    }
 
         // plain text → call the LLM
     const eng = currentEngine!

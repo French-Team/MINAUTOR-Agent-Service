@@ -73,13 +73,13 @@ function main(): void {
     const r2 = tryRouteIntercom('regarde [THRESHOLD] ce truc')
     assertRoute('"regarde ça" — analysis-request (1/2) → null', r2, null)
 
-    // P4 create-request : "fais le ménage" → seulement "fais" (1/12)
+    // P4 create-request : "fais le ménage" → "fais" (1/12) — P4 a minMatch=1, donc 1 seul mot-clé suffit
     const r3 = tryRouteIntercom('fais [THRESHOLD] le ménage')
-    assertRoute('"fais le ménage" — create-request (1/12) → null', r3, null)
+    assertRoute('"fais le ménage" — create-request (1/12, minMatch=1) → create-request', r3, 'create-request')
 
-    // P4 create-request : "code la vie" → seulement "code" (1/12)
+    // P4 create-request : "code la vie" → "code" (1/12) — P4 a minMatch=1
     const r4 = tryRouteIntercom('code [THRESHOLD] la vie en python')
-    assertRoute('"code la vie" — create-request (1/12) → null', r4, null)
+    assertRoute('"code la vie" — create-request (1/12, minMatch=1) → create-request', r4, 'create-request')
 
     // P6 advice-request : "j'ai une idée" → seulement "idée" (1/6)
     const r5 = tryRouteIntercom("j'ai une [THRESHOLD] idée pour le weekend")
@@ -194,8 +194,9 @@ function main(): void {
     // ════════════════════════════════════════════════════════
     console.log(`${BOLD}── PHASE 4 : AUCUN MATCH (messages sans mot-clé)${RESET}\n`)
 
+    // P10 alice-greeting : "bonjour" → 1 mot-clé (minMatch=1)
     const r26 = tryRouteIntercom('bonjour [THRESHOLD] tout le monde')
-    assertRoute('"bonjour tout le monde" → null', r26, null)
+    assertRoute('"bonjour tout le monde" — alice-greeting (1/9) → alice-greeting', r26, 'alice-greeting')
 
     const r27 = tryRouteIntercom('[THRESHOLD] quel temps fait-il aujourd hui')
     assertRoute('"quel temps fait-il" → null', r27, null)
@@ -231,6 +232,60 @@ function main(): void {
     // P3 atteint minMatch=1 avec "qualité" → review-request
     const r32 = tryRouteIntercom("[THRESHOLD] j'ai une idée pour améliorer la qualité du projet")
     assertRoute('"idée améliorer qualité projet" — P3 premier match → review-request', r32, 'review-request')
+
+    console.log('')
+
+    // ════════════════════════════════════════════════════════
+    // PHASE 6 : NOUVEAUX PATTERNS P10-P14 — vrais positifs
+    // Vérifie que les 5 nouveaux patterns intercom fonctionnent
+    // ════════════════════════════════════════════════════════
+    console.log(`${BOLD}── PHASE 6 : NOUVEAUX PATTERNS (P10-P14 — vrais positifs)${RESET}`)
+    console.log(`  ${GRAY}Vérifie que les 5 nouveaux patterns routent correctement${RESET}\n`)
+
+    // P10 alice-greeting (minMatch=1): "salut" → 1/9 ✅
+    const r33 = tryRouteIntercom('[THRESHOLD] salut à tous')
+    assertRoute('"salut" — alice-greeting (1/9) → alice-greeting', r33, 'alice-greeting')
+
+    // P11 alice-presentation (minMatch=1): "qui es-tu" → 1/4 ✅
+    const r34 = tryRouteIntercom('[THRESHOLD] qui es-tu alice')
+    assertRoute('"qui es-tu" — alice-presentation (1/4) → alice-presentation', r34, 'alice-presentation')
+
+    // P11 alice-presentation: "à quoi tu sers" → 1/4 ✅
+    const r35 = tryRouteIntercom('[THRESHOLD] à quoi tu sers exactement')
+    assertRoute('"à quoi tu sers" — alice-presentation (1/4) → alice-presentation', r35, 'alice-presentation')
+
+    // P12 system-status-request (minMatch=1): "état du système" → "état" 1/7 ✅
+    const r36 = tryRouteIntercom('[THRESHOLD] état du système')
+    assertRoute('"état du système" — system-status (1/7) → system-status-request', r36, 'system-status-request')
+
+    // P12 system-status-request: "bilan général" → "bilan" 1/7 ✅
+    const r37 = tryRouteIntercom('[THRESHOLD] bilan général du projet')
+    assertRoute('"bilan général" — system-status (1/7) → system-status-request', r37, 'system-status-request')
+
+    // P13 system-maintenance-request (minMatch=1): "nettoyage" → 1/8 ✅
+    const r38 = tryRouteIntercom('[THRESHOLD] nettoyage du dossier intercom')
+    assertRoute('"nettoyage" — system-maintenance (1/8) → system-maintenance-request', r38, 'system-maintenance-request')
+
+    // P13 system-maintenance-request: "analyse les patterns" → "analyse les patterns" 1/8 ✅
+    const r39 = tryRouteIntercom('[THRESHOLD] analyse les patterns du registre')
+    assertRoute('"analyse les patterns" — system-maintenance (1/8) → system-maintenance-request', r39, 'system-maintenance-request')
+
+    // P13 system-maintenance-request: "suggère un pattern" → "suggère un pattern" 1/8 ✅
+    const r40 = tryRouteIntercom('[THRESHOLD] suggère un pattern pour les greetings')
+    assertRoute('"suggère un pattern" — system-maintenance (1/8) → system-maintenance-request', r40, 'system-maintenance-request')
+
+    // P14 parades-command (minMatch=2): "explore avec git" → "explore"+"git" 2/8 ✅
+    const r41 = tryRouteIntercom('[THRESHOLD] explore ce projet avec git')
+    assertRoute('"explore avec git" — parades-command (2/8) → parades-command', r41, 'parades-command')
+
+    // P14 parades-command: "git profile" → "git"+"profile" 2/8 ✅
+    const r42 = tryRouteIntercom('[THRESHOLD] git profile mon projet')
+    assertRoute('"git profile" — parades-command (2/8) → parades-command', r42, 'parades-command')
+
+    // P14 parades-command: 1 seul mot-clé → ne doit PAS router (minMatch=2)
+    // Attention : "explore ma base de code" contient "code" → match P4 create-request !
+    const r43 = tryRouteIntercom('[THRESHOLD] explore mon répertoire')
+    assertRoute('"explore" seul — parades-command (1/8) → null', r43, null)
 
     console.log('')
 

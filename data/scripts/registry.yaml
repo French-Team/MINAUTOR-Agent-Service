@@ -40,6 +40,37 @@ scripts:
     script: "scripts/projects/list.js"
     description: "Liste tous les projets (variante : mes/tous/tes)"
 
+  # ── Nouvelles formulations naturelles ────────────────
+  - pattern: "donne(?:\s*-?\s*moi)\s+la\s+liste\s+des\s+projets?"
+    subject: "project-request"
+    script: "scripts/projects/list.js"
+    description: "Liste les projets (variante : donne-moi la liste des projets)"
+
+  - pattern: "quels\s+sont\s+(?:mes|les|tous\s+les)\s+projets?"
+    subject: "project-request"
+    script: "scripts/projects/list.js"
+    description: "Liste les projets (variante : quels sont mes/les projets)"
+
+  - pattern: "(?:j'aimerais|je\s+voudrais|je\s+veux)\s+(?:voir|afficher)\s+(?:mes|les|la\s+liste\s+des)\s+projets?"
+    subject: "project-request"
+    script: "scripts/projects/list.js"
+    description: "Liste les projets (variante : j'aimerais voir mes projets)"
+
+  - pattern: "(?:affiche|montre)\s*(?:-?\s*moi)\s+la\s+liste\s+des\s+projets?"
+    subject: "project-request"
+    script: "scripts/projects/list.js"
+    description: "Liste les projets (variante : affiche-moi la liste)"
+
+  - pattern: "qu'est-ce\s+que\s+j'ai\s+comme\s+projets?"
+    subject: "project-request"
+    script: "scripts/projects/list.js"
+    description: "Liste les projets (variante : qu'est-ce que j'ai comme projets)"
+
+  - pattern: "(?:combien\s+de\s+projets?|r[ée]sum[ée]\s+des\s+projets?)"
+    subject: "project-request"
+    script: "scripts/projects/list.js"
+    description: "Liste les projets (variante : combien de projets / résumé)"
+
   - pattern: "(découvre|découvrir|explore|explorer|analyse|analyser)\s+(le\s+)?(?:projet\s+)?(\S+)"
     subject: "project-request"
     script: "scripts/projects/decouverte.js"
@@ -393,6 +424,37 @@ scripts:
     script: "scripts/projects/list-tasks.js"
     description: "Liste les tâches avec filtres domaine/statut (projet parsé automatiquement)"
 
+  # ── Nouvelles formulations naturelles (tâches) ────────
+  - pattern: "donne(?:\s*-?\s*moi)\s+la\s+liste\s+des\s+t[âa]ches"
+    subject: "project-request"
+    script: "scripts/projects/list-tasks.js"
+    description: "Liste les tâches (variante : donne-moi la liste des tâches)"
+
+  - pattern: "qu'est-ce\s+que\s+j'ai\s+(?:à|a)\s+faire"
+    subject: "project-request"
+    script: "scripts/projects/list-tasks.js"
+    description: "Liste les tâches (variante : qu'est-ce que j'ai à faire)"
+
+  - pattern: "(?:quels?|quelles?)\s+sont\s+(?:mes|les|tous\s+les)\s+t[âa]ches"
+    subject: "project-request"
+    script: "scripts/projects/list-tasks.js"
+    description: "Liste les tâches (variante : quels/quelles sont mes/les tâches)"
+
+  - pattern: "(?:j'aimerais|je\s+voudrais|je\s+veux)\s+(?:voir|afficher|lister)\s+(?:mes|les|la\s+liste\s+des)\s+t[âa]ches"
+    subject: "project-request"
+    script: "scripts/projects/list-tasks.js"
+    description: "Liste les tâches (variante : j'aimerais voir mes tâches)"
+
+  - pattern: "(?:affiche|montre)\s*(?:-?\s*moi)\s+la\s+liste\s+des\s+t[âa]ches"
+    subject: "project-request"
+    script: "scripts/projects/list-tasks.js"
+    description: "Liste les tâches (variante : affiche-moi la liste des tâches)"
+
+  - pattern: "qu'est-ce\s+que\s+j'ai\s+comme\s+t[âa]ches"
+    subject: "project-request"
+    script: "scripts/projects/list-tasks.js"
+    description: "Liste les tâches (variante : qu'est-ce que j'ai comme tâches)"
+
   # ── Marquer tâche terminée ──────────────────────────
   - pattern: "(?:marque|termine)\s+(?:la\s+)?t[âa]che\s+en\s+cours\s+(?:comme\s+)?termin[ée]e\s+(?:dans\s+(?:le\s+)?|au\s+|pour\s+(?:le\s+)?)?(?:projet\s+)?(\S+)"
     subject: "project-request"
@@ -438,6 +500,55 @@ scripts:
       - name: project
         from: 2
 
+  # ── Nouvelles formulations naturelles (création projet) ──
+  # Ordre : patterns avec params (nom du projet) AVANT les génériques sans params (first match wins)
+
+  # Avec nom du projet (via params)
+  - pattern: "(?:j'aimerais|je\s+voudrais|je\s+veux|je\s+souhaite)\s+(?:cr[ée]er|faire|initialiser|lancer|commencer|d[ée]marrer)\s+(?:un\s+)?(?:nouveau\s+)?(?:projet|proj)\s+appel[ée]\s+\"([^\"]+)\""
+    subject: "project-request"
+    script: "scripts/projects/create.js"
+    description: "Crée un projet (variante : j'aimerais créer un projet appelé 'nom')"
+    params:
+      - name: project
+        from: 1
+
+  - pattern: "(?:nouveau\s+)?(?:projet|proj)\s+(?:appel[ée]|nomm[ée]|intitul[ée])\s+\"([^\"]+)\""
+    subject: "project-request"
+    script: "scripts/projects/create.js"
+    description: "Crée un projet (variante : un nouveau projet appelé 'nom')"
+    params:
+      - name: project
+        from: 1
+
+  - pattern: "(?:cr[ée]e\s*(?:-?\s*)?moi|cr[ée]er\s+moi)\s+(?:un\s+)?(?:nouveau\s+)?(?:projet|proj)\s+\"([^\"]+)\""
+    subject: "project-request"
+    script: "scripts/projects/create.js"
+    description: "Crée un projet (variante : crée-moi un projet 'nom')"
+    params:
+      - name: project
+        from: 1
+
+  # Sans nom (génériques)
+  - pattern: "(?:j'aimerais|je\s+voudrais|je\s+veux|je\s+souhaite)\s+(?:cr[ée]er|faire|initialiser|lancer|commencer|d[ée]marrer)\s+(?:un\s+)?(?:nouveau\s+)?(?:projet|proj)"
+    subject: "project-request"
+    script: "scripts/projects/create.js"
+    description: "Crée un projet (variante : j'aimerais créer un projet)"
+
+  - pattern: "(?:initialise|initialiser|init)\s+(?:un\s+)?(?:nouveau\s+)?(?:projet|proj)"
+    subject: "project-request"
+    script: "scripts/projects/create.js"
+    description: "Crée un projet (variante : initialise un projet)"
+
+  - pattern: "(?:cr[ée]e\s*(?:-?\s*)?moi|cr[ée]er\s+moi)\s+(?:un\s+)?(?:nouveau\s+)?(?:projet|proj)"
+    subject: "project-request"
+    script: "scripts/projects/create.js"
+    description: "Crée un projet (variante : crée-moi un projet)"
+
+  - pattern: "(?:je\s+)?(?:veux|voudrais|veut|souhaite)\s+cr[ée]er\s+(?:un\s+)?(?:nouveau\s+)?(?:projet|proj)"
+    subject: "project-request"
+    script: "scripts/projects/create.js"
+    description: "Crée un projet (variante : je veux créer un projet)"
+
   # ── Agents ─────────────────────────────────────────
   - pattern: "(?:montre|affiche|voir?)\s+(?:moi\s+)?(?:les|mes|tous?)?\s*agents?"
     subject: "agent-list-request"
@@ -456,6 +567,52 @@ scripts:
     params:
       - name: agent
         from: 2
+
+  # ── Nouvelles formulations naturelles (agents) ────────
+  - pattern: "donne(?:\s*-?\s*moi)\s+la\s+liste\s+(?:des|de\s+tous\s+les)\s+agents?"
+    subject: "agent-list-request"
+    script: "scripts/agents/list.js"
+    description: "Liste les agents (variante : donne-moi la liste des agents)"
+
+  - pattern: "(?:quels?|quelles?)\s+(?:sont\s+)?(?:les|mes|tous\s+les)?\s*agents?\s+(?:sont\s+)?(?:disponibles?|accessibles?)?"
+    subject: "agent-list-request"
+    script: "scripts/agents/list.js"
+    description: "Liste les agents (variante : quels agents sont disponibles)"
+
+  - pattern: "qui\s+(?:sont\s+)?(?:les|mes|tous\s+les)?\s*(?:agents?|assistants?|aides?)\s+(?:sont\s+)?(?:disponibles?)?"
+    subject: "agent-list-request"
+    script: "scripts/agents/list.js"
+    description: "Liste les agents (variante : qui sont les agents disponibles)"
+
+  - pattern: "(?:j'aimerais|je\s+voudrais|je\s+veux)\s+(?:voir|afficher|lister|savoir)\s+(?:la\s+liste\s+des|les|mes)\s+agents?"
+    subject: "agent-list-request"
+    script: "scripts/agents/list.js"
+    description: "Liste les agents (variante : j'aimerais voir les agents)"
+
+  - pattern: "qu'est-ce\s+que\s+(?:j'ai|tu\s+as)\s+comme\s+agents?"
+    subject: "agent-list-request"
+    script: "scripts/agents/list.js"
+    description: "Liste les agents (variante : qu'est-ce que j'ai comme agents)"
+
+  - pattern: "(?:affiche|montre)\s*(?:-?\s*moi)\s+(?:la\s+liste\s+des|les|mes|tous\s+les)?\s*agents?"
+    subject: "agent-list-request"
+    script: "scripts/agents/list.js"
+    description: "Liste les agents (variante : affiche-moi les agents)"
+
+  - pattern: "(?:combien\s+(?:d'|d\s*|de)\s*|r[ée]sum[ée]\s+(?:des|de\s+tous\s+les)\s+)agents?"
+    subject: "agent-list-request"
+    script: "scripts/agents/list.js"
+    description: "Liste les agents (variante : combien d'agents / résumé des agents)"
+
+  - pattern: "(?:dis\s*-?\s*moi|tu\s+peux\s+me\s+(?:dire|montrer|afficher|lister))\s+(?:quels\s+sont\s+)?(?:les|mes)?\s*agents?"
+    subject: "agent-list-request"
+    script: "scripts/agents/list.js"
+    description: "Liste les agents (variante : dis-moi quels sont les agents)"
+
+  - pattern: "qui\s+(?:peut|pourrait)\s+m['a]ider"
+    subject: "agent-list-request"
+    script: "scripts/agents/list.js"
+    description: "Liste les agents (variante : qui peut m'aider)"
 
   # ── Aide générale ──────────────────────────────────
   - pattern: "(aide|help|commands?|commandes)"
@@ -511,6 +668,83 @@ scripts:
     subject: "help-request"
     script: "scripts/help/show.js"
     description: "Demande polie d'aide (pourrais-tu, peux-tu)"
+
+  # ── Nouvelles formulations naturelles (aide) ─────────
+  - pattern: "je\s+(?:n(?:e|'y)\s+)?comprends\s+(?:rien|pas|mal)"
+    subject: "help-request"
+    script: "scripts/help/show.js"
+    description: "Aide (variante : je comprends rien/pas/mal)"
+
+  - pattern: "(?:explique|explique-moi|explique\s+moi)\s+(?:comment\s+)?(?:ça\s+)?(?:marche|fonctionne|faire|utiliser|utilise)"
+    subject: "help-request"
+    script: "scripts/help/show.js"
+    description: "Aide (variante : explique-moi comment ça marche)"
+
+  - pattern: "(?:je\s+suis|jsuis|j'suis)\s+(?:perdu|paum[ée]|largu[ée]|perdue)"
+    subject: "help-request"
+    script: "scripts/help/show.js"
+    description: "Aide (variante : je suis perdu/paumé)"
+
+  - pattern: "(?:comment\s+)?(?:ça\s+)?(?:marche|fonctionne)\s+(?:ce\s+(?:truc|syst[èe]me|truc\s+)|ton\s+(?:syst[èe]me|truc)|tout\s+ça)"
+    subject: "help-request"
+    script: "scripts/help/show.js"
+    description: "Aide (variante : comment ça marche ce truc/système)"
+
+  - pattern: "j'ai\s+(?:du\s+)?mal\s+[àa]\s+(?:comprendre|suivre|capter)"
+    subject: "help-request"
+    script: "scripts/help/show.js"
+    description: "Aide (variante : j'ai du mal à comprendre)"
+
+  - pattern: "[àa]\s+quoi\s+(?:ça|ce\s+truc|tout\s+ça)\s+(?:sert|sert\s+tout\s+ça)"
+    subject: "help-request"
+    script: "scripts/help/show.js"
+    description: "Aide (variante : à quoi ça sert)"
+
+  - pattern: "(?:je\s+)?(?:débute|commence)(?:\s+(?:tout\s+)?juste)?"
+    subject: "help-request"
+    script: "scripts/help/show.js"
+    description: "Aide (variante : je débute / je découvre juste)"
+
+  # ── Nouvelles formulations naturelles (conseils/suggestions) ──
+  - pattern: "(?:des\s+)?id[ée]es?\s+(?:pour\s+)?(?:am[ée]liorer|optimiser|progresser|avancer)"
+    subject: "advice-request"
+    script: "scripts/advice/triage.js"
+    description: "Conseil (variante : des idées pour améliorer)"
+
+  - pattern: "(?:qu'est-ce\s+que|que)\s+tu\s+(?:me\s+)?(?:conseilles?|sugg[èe]res?|recommandes?|proposes?)\s*(?:de\s+faire)?"
+    subject: "advice-request"
+    script: "scripts/advice/triage.js"
+    description: "Conseil (variante : qu'est-ce que tu me conseilles)"
+
+  - pattern: "(?:tu\s+)?(?:aurais|as)\s+(?:des\s+)?(?:id[ée]es?|suggestions?|conseils?|pistes?|recommandations?|propositions?)\s*(?:[àa]\s+(?:m[']|nous)\s*)?(?:am[ée]liorer|faire|progresser)?"
+    subject: "advice-request"
+    script: "scripts/advice/triage.js"
+    description: "Conseil (variante : tu aurais des idées / suggestions)"
+
+  - pattern: "(?:j'aimerais|je\s+voudrais|je\s+veux)\s+(?:(?:avoir|obtenir|recevoir)\s+)?(?:des\s+)?(?:id[ée]es?|conseils?|suggestions?|avis?|recommandations?)\s*(?:sur|pour|concernant)?"
+    subject: "advice-request"
+    script: "scripts/advice/triage.js"
+    description: "Conseil (variante : j'aimerais avoir des conseils)"
+
+  - pattern: "(?:donne|donne-moi|donne\s+moi)\s+(?:des|quelques|un|une)\s+(?:id[ée]es?|conseils?|suggestions?|avis?|pistes?|recommandations?)\s*(?:pour|sur|de)?"
+    subject: "advice-request"
+    script: "scripts/advice/triage.js"
+    description: "Conseil (variante : donne-moi des idées / conseils)"
+
+  - pattern: "(?:as-tu|tu\s+as)\s+(?:des\s+)?(?:id[ée]es?|suggestions?|conseils?|pistes?|recommandations?)\s*(?:pour|sur|concernant)?"
+    subject: "advice-request"
+    script: "scripts/advice/triage.js"
+    description: "Conseil (variante : as-tu des idées / suggestions)"
+
+  - pattern: "(?:[àa]\s+(?:ta\s+)?place|[àa]\s+ton\s+avis)\s*(?:,?\s*)?(?:que\s+)?(?:ferais-tu|feriez-vous|pourrais-tu|pourriez-vous)\s*(?:faire)?"
+    subject: "advice-request"
+    script: "scripts/advice/triage.js"
+    description: "Conseil (variante : à ta place / à ton avis, que ferais-tu)"
+
+  - pattern: "(?:comment\s+)?(?:puis-je|pourrais-je|je\s+peux)\s+(?:am[ée]liorer|optimiser|progresser|avancer)\s*(?:sur|dans|avec)?"
+    subject: "advice-request"
+    script: "scripts/advice/triage.js"
+    description: "Conseil (variante : comment puis-je améliorer)"
 
   # ── Explore (sans projet d'abord) ──────────────────
   - pattern: "!explore\s+--(?:recent|path\s+.+)"
@@ -621,6 +855,85 @@ scripts:
         from: 1
       - name: query
         from: 2
+
+  # ── Review (patterns spécifiques AVANT le catch-all) ──
+  - pattern: "relis\s+(?:mon|ce|cette|le|la|les|moi)\s+\S+"
+    subject: "review-request"
+    script: "scripts/review/triage.js"
+    description: "Demande de revue (relis mon/ce code)"
+
+  - pattern: "corrige\s+(?:mon|ce|cette|le|la|les|moi)\s+\S+"
+    subject: "review-request"
+    script: "scripts/review/triage.js"
+    description: "Demande de revue (corrige mon/ce code)"
+
+  - pattern: "(?:review|revue|relecture|audit)\s+(?:de\s+)?(?:mon|ce|cette|le|la|les?|code|qualit[ée])\s+\S+"
+    subject: "review-request"
+    script: "scripts/review/triage.js"
+    description: "Demande de revue (review/revue/audit de)"
+
+  - pattern: "(?:fais?\s+une|faire\s+une)\s+(?:review|revue|relecture|audit|v[ée]rification)\s+(?:de\s+)?\S+"
+    subject: "review-request"
+    script: "scripts/review/triage.js"
+    description: "Demande de revue (fais une review/audit)"
+
+  - pattern: "(?:am[ée]liore?|am[ée]liorer)\s+(?:mon|ce|cette|le|la|les?|la\s+qualit[ée]\s+de)\s+\S+"
+    subject: "review-request"
+    script: "scripts/review/triage.js"
+    description: "Demande d'amélioration (améliore mon/ce code)"
+
+  - pattern: "v[ée]rifie?\s+(?:la\s+)?qualit[ée]\s+(?:de\s+)?\S+"
+    subject: "review-request"
+    script: "scripts/review/triage.js"
+    description: "Demande de vérification qualité"
+
+  # ── Analysis (patterns spécifiques AVANT le catch-all) ──
+  - pattern: "(?:v[ée]rifie?|inspecte?|examine?|regarde|diagnostique?)\s+(?:ce|cette|cet|ces|le|la|les?|mon|ma|mes)\s+\S+"
+    subject: "analysis-request"
+    script: "scripts/analysis/triage.js"
+    description: "Demande d'analyse (vérifie/inspecte/examine/regarde)"
+
+  - pattern: "(?:fais?\s+(?:une|moi\s+une))\s+(?:analyse|v[ée]rification|inspection|examen|diagnostic)\s+(?:de\s+)?\S+"
+    subject: "analysis-request"
+    script: "scripts/analysis/triage.js"
+    description: "Demande d'analyse (fais une analyse/vérification)"
+
+  - pattern: "(?:j'ai\s+besoin\s+d'une?\s+|j'aimerais\s+une?\s+|je\s+voudrais\s+une?\s+)(?:analyse|v[ée]rification|inspection|examen|diagnostic)\s+(?:de\s+)?\S+"
+    subject: "analysis-request"
+    script: "scripts/analysis/triage.js"
+    description: "Demande d'analyse (j'ai besoin d'une analyse)"
+
+  # ── Create (patterns spécifiques AVANT le catch-all) ──
+  - pattern: "(?:cr[ée]e|cr[ée]er|d[ée]veloppe|d[ée]velopper|impl[ée]mente|impl[ée]menter|construis|construire|fabrique|fabriquer|g[ée]n[èe]re|g[ée]n[ée]rer|[ée]cris|[ée]crire)\s+(?:une\s+)?(?:fonctionnalit[ée]|module|composant|service|API|script|algorithme|outil|utilitaire|biblioth[èe]que|librairie|classe|fonction|interface|page|écran|formulaire|base\s+de\s+donn[ée]es)\s+\S+"
+    subject: "create-request"
+    script: "scripts/create/triage.js"
+    description: "Demande de création (crée/développe une fonctionnalité)"
+
+  - pattern: "(?:cr[ée]e|cr[ée]er|d[ée]veloppe|d[ée]velopper|impl[ée]mente|impl[ée]menter|construis|construire|fabrique|fabriquer|g[ée]n[èe]re|g[ée]n[ée]rer|[ée]cris|[ée]crire)\s+(?:un[e]\s+)?\S+\s+(?:pour|dans|sur|avec)\s+\S+"
+    subject: "create-request"
+    script: "scripts/create/triage.js"
+    description: "Demande de création (crée/développe X pour Y)"
+
+  - pattern: "(?:j'ai\s+besoin\s+(?:que\s+tu\s+)?(?:d'un|d'une|de)\s+|j'aimerais\s+(?:que\s+tu\s+)?|je\s+voudrais\s+(?:que\s+tu\s+)?)(?:cr[ée]es|cr[ée]r|d[ée]veloppes|d[ée]velopper|impl[ée]mentes|impl[ée]menter|construises|fabriques|g[ée]n[èe]res|[ée]crives)\s+\S+"
+    subject: "create-request"
+    script: "scripts/create/triage.js"
+    description: "Demande de création (j'ai besoin que tu crées/développes)"
+
+  - pattern: "fais\s+(?:moi\s+)?(?:un[e]\s+)?(?:petit\s+)?(?:script|outil|utilitaire|programme|fonctionnalit[ée]|module|composant|service|API|page|écran)\s+(?:pour|qui|de)\s+\S+"
+    subject: "create-request"
+    script: "scripts/create/triage.js"
+    description: "Demande de création (fais-moi un script/outil)"
+
+  # ── Deploy (patterns spécifiques AVANT le catch-all) ──
+  - pattern: "(?:configure|installe|d[ée]ploie|setup|d[ée]marre|lance)\s+(?:(?:le|la|les?|un|une|mon|ma|mes)\s+)?\S+"
+    subject: "deploy-request"
+    script: "scripts/deploy/triage.js"
+    description: "Demande de déploiement (configure/installe/déploie)"
+
+  - pattern: "(?:j'ai\s+besoin\s+(?:de\s+)?|j'aimerais\s+|je\s+voudrais\s+|peux-tu\s+|pourrais-tu\s+)(?:configurer|installer|d[ée]ployer|lancer|d[ée]marrer|mettre\s+en\s+place)\s+\S+"
+    subject: "deploy-request"
+    script: "scripts/deploy/triage.js"
+    description: "Demande de déploiement (j'ai besoin de configurer/installer)"
 
   # ── Fallback génériques par sujet ──────────────────
   - pattern: ".*"

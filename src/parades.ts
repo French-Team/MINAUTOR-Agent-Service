@@ -540,7 +540,13 @@ function buildAgentPrompt(
     cleanMetadata.learningStats = metadata.learningStats
   }
 
-  const contextJson = JSON.stringify(cleanMetadata, null, 2)
+  // Troncature de sécurité : le contexte JSON + system prompt ne doit pas dépasser
+  // la fenêtre du modèle (Qwen 3.5 9B ~32K tokens, mais LM Studio peut être configuré
+  // plus bas). On limite le JSON à 4000 caractères max.
+  // On supprime les champs les moins importants progressivement pour garder
+  // un JSON valide (pas de slice brutal qui coupe en milieu de structure).
+  const MAX_CONTEXT_CHARS = 4000
+  const truncatedJson = truncateContextJson(cleanMetadata, MAX_CONTEXT_CHARS)
 
   const parts: string[] = [
     `Tu es l'Agent Parades du système Minautor Agents.`,
@@ -581,13 +587,92 @@ function buildAgentPrompt(
     `6. Si le projet est vide ou nouveau, proposer des actions de démarrage.`,
     ``,
     `## Contexte JSON reçu`,
-    contextJson,
+    truncatedJson,
     ``,
     `## Random seed (anti-répétition)`,
     `${Date.now()}`,
   ]
 
   return parts.join('\n')
+}
+
+/**
+ * Troncature progressive du JSON de contexte : supprime les champs les moins
+ * importants jusqu'à ce que le JSON tienne dans la limite, garantissant
+ * un JSON valide à chaque étape (pas de slice en milieu de structure).
+ *
+ * Ordre de suppression (du moins important au plus important) :
+ *   1. learningStats (stats d'apprentissage — Phase 3 uniquement)
+ *   2. logbook + notifications (log secondaires)
+ *   3. tasks (garder seulement le count, supprimer les détails)
+ *   4. recentParades réduit à 3 entrées
+ *   5. recentParades réduit à 0 entrées
+ *   6. Dernier recours : tronquer les chaînes longues dans demande
+ */
+function truncateContextJson(
+  data: Record<string, unknown>,
+  maxChars: number,
+): string {
+  const json = JSON.stringify(data, null, 2)
+  if (json.length <= maxChars) return json
+
+  // Étape 1 : supprimer learningStats
+  const step1: Record<string, unknown> = { ...data, learningStats: undefined }
+  let str = JSON.stringify(step1, null, 2)
+  if (str.length <= maxChars) return str
+
+  // Étape 2 : supprimer logbook et notifications
+  const step2: Record<string, unknown> = { ...step1, logbook: undefined, notifications: undefined }
+  str = JSON.stringify(step2, null, 2)
+  if (str.length <= maxChars) return str
+
+  // Étape 3 : réduire tasks (garder seulement un compteur)
+  const step3: Record<string, unknown> = { ...step2 }
+  const tasksVal = step3.tasks
+  if (tasksVal && typeof tasksVal === 'object') {
+    const tasks = tasksVal as Record<string, unknown>
+    const taskCount = Array.isArray(tasks.tasks)
+      ? tasks.tasks.length
+      : Array.isArray(tasks)
+        ? tasks.length
+        : 0
+    step3.tasks = { count: taskCount, truncated: true }
+  }
+  str = JSON.stringify(step3, null, 2)
+  if (str.length <= maxChars) return str
+
+  // Étape 4 : réduire recentParades à 3 entrées
+  const step4: Record<string, unknown> = { ...step3 }
+  const parades = step4.recentParades
+  if (Array.isArray(parades) && parades.length > 3) {
+    step4.recentParades = parades.slice(-3)
+  }
+  str = JSON.stringify(step4, null, 2)
+  if (str.length <= maxChars) return str
+
+  // Étape 5 : supprimer recentParades
+  const step5: Record<string, unknown> = { ...step4, recentParades: undefined }
+  str = JSON.stringify(step5, null, 2)
+  if (str.length <= maxChars) return str
+
+  // Dernier recours : métadonnées minimales seulement
+  const demande = typeof data.demande === 'string'
+    ? (data.demande as string).length > 200
+      ? (data.demande as string).slice(0, 200) + '…'
+      : data.demande
+    : data.demande
+
+  const minimal: Record<string, unknown> = {
+    evolutionPhase: data.evolutionPhase,
+    phaseLabel: data.phaseLabel,
+    projectsCount: data.projectsCount,
+    projectName: data.projectName,
+    action: data.action,
+    demande,
+    evolution: data.evolution,
+    truncated: true,
+  }
+  return JSON.stringify(minimal, null, 2)
 }
 
 // ── Spinner ──────────────────────────────────────────────

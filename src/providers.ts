@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs'
-import { join } from 'path'
+import { join, isAbsolute } from 'path'
 
 export interface ApiKeyEntry {
   id: string
@@ -24,7 +24,22 @@ interface ProvidersFile {
   providers: ProviderConfig[]
 }
 
-const CONFIG_PATH = join(process.cwd(), 'providers.json')
+let configPath = join(process.cwd(), 'providers.json')
+
+/**
+ * Override the providers.json path (for tests to use a temp file).
+ * Pass undefined/null to reset to default.
+ */
+export function setProviderConfigPath(path?: string): void {
+  if (path && (isAbsolute(path) || /^[a-zA-Z]:\\/.test(path) || /^[a-zA-Z]:\//.test(path))) {
+    configPath = path
+  } else if (path) {
+    configPath = join(process.cwd(), path)
+  } else {
+    configPath = join(process.cwd(), 'providers.json')
+  }
+}
+
 
 const DEFAULT_PROVIDERS: ProvidersFile = {
   providers: [
@@ -99,15 +114,15 @@ function cloneDefaults(): ProvidersFile {
 }
 
 /** Backup a corrupted file before repairing */
-const BACKUP_PATH = CONFIG_PATH + '.corrupted'
+function backupPath(): string { return configPath + '.corrupted' }
 
 function loadProviders(): ProvidersFile {
-  if (!existsSync(CONFIG_PATH)) {
-    writeFileSync(CONFIG_PATH, JSON.stringify(cloneDefaults(), null, 2), 'utf-8')
+  if (!existsSync(configPath)) {
+    writeFileSync(configPath, JSON.stringify(cloneDefaults(), null, 2), 'utf-8')
     return cloneDefaults()
   }
   try {
-    const content = readFileSync(CONFIG_PATH, 'utf-8')
+    const content = readFileSync(configPath, 'utf-8')
     const data = JSON.parse(content) as ProvidersFile
     // Résilience : providers[] doit être un tableau ; filtrer les entrées null/malformées
     if (!Array.isArray(data.providers)) {
@@ -149,31 +164,31 @@ function loadProviders(): ProvidersFile {
 
 /** Try to read the raw file content (best-effort) */
 function tryReadRaw(): string {
-  try { return readFileSync(CONFIG_PATH, 'utf-8') } catch { return '(unreadable)' }
+  try { return readFileSync(configPath, 'utf-8') } catch { return '(unreadable)' }
 }
 
 /** Rename corrupted file → .corrupted, then write fresh defaults */
 function backupAndRepair(corruptedContent: string, reason: string): void {
   try {
     // Rename corrupted file to .corrupted (with timestamp suffix if already exists)
-    let backupPath = BACKUP_PATH
-    if (existsSync(backupPath)) {
-      backupPath = CONFIG_PATH + '.corrupted.' + Date.now()
+    let bp = backupPath()
+    if (existsSync(bp)) {
+      bp = configPath + '.corrupted.' + Date.now()
     }
     // Copy content to backup then write defaults
-    writeFileSync(backupPath, corruptedContent, 'utf-8')
-    writeFileSync(CONFIG_PATH, JSON.stringify(cloneDefaults(), null, 2), 'utf-8')
+    writeFileSync(bp, corruptedContent, 'utf-8')
+    writeFileSync(configPath, JSON.stringify(cloneDefaults(), null, 2), 'utf-8')
     console.error(`[providers] ⚠ Fichier providers.json corrompu (${reason})`)
-    console.error(`[providers]   → Sauvegardé dans ${backupPath.replace(process.cwd() + '/', '')}`)
+    console.error(`[providers]   → Sauvegardé dans ${backupPath().replace(process.cwd() + '/', '')}`)
     console.error(`[providers]   → Fichier réinitialisé avec la configuration par défaut`)
   } catch {
     // Échec du backup — on force l'écriture des defaults au moins
-    try { writeFileSync(CONFIG_PATH, JSON.stringify(cloneDefaults(), null, 2), 'utf-8') } catch { /* dernier recours */ }
+    try { writeFileSync(configPath, JSON.stringify(cloneDefaults(), null, 2), 'utf-8') } catch { /* dernier recours */ }
   }
 }
 
 function saveProviders(data: ProvidersFile): void {
-  writeFileSync(CONFIG_PATH, JSON.stringify(data, null, 2), 'utf-8')
+  writeFileSync(configPath, JSON.stringify(data, null, 2), 'utf-8')
 }
 
 // ── In-memory rate-limit cooldown ────────────────────────
@@ -277,7 +292,7 @@ export function setProviderDefaultModel(name: string, model: string): boolean {
 }
 
 export function getProviderConfigPath(): string {
-  return CONFIG_PATH
+  return configPath
 }
 
 // ── Multi-key helpers ────────────────────────────────────
@@ -547,9 +562,35 @@ export function getKeyIdByKey(key: string): string {
   return key
 }
 
-// ── Model fetching (unchanged) ───────────────────────────
+// ── Provider types requiring a valid API key ─────────────
+const KEY_REQUIRED = ['google', 'openrouter', 'opencode-zen', 'custom', 'ollama-cloud']
+
+/**
+ * Minimal API key format validation per provider.
+ * Catches obviously invalid/fake keys (e.g. 'test-key') before making HTTP calls.
+ * Returns true if the key passes basic format checks, false if clearly invalid.
+ */
+function isValidApiKeyFormat(providerType: string, apiKey: string): boolean {
+  // Empty key is valid for optional-key providers (checked in fetchModels)
+  if (!apiKey) return !KEY_REQUIRED.includes(providerType)
+  // Providers with optional keys: any non-empty key passes
+  if (!KEY_REQUIRED.includes(providerType)) return true
+  // Required-key providers: key must be at least 10 chars
+  return apiKey.length >= 10
+}
+
+// ── Model fetching ───────────────────────────────────────
 
 export async function fetchModels(providerType: string, apiKey: string, baseUrl: string): Promise<string[]> {
+  // ── Pre-check : valide le format de la clé AVANT tout appel réseau ──
+  // Évite les throw HTTP distrayants dans le debugger (ex: 'test-key' → Google 400)
+  if (!isValidApiKeyFormat(providerType, apiKey)) {
+    const body = JSON.stringify({ error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT' } })
+    throw Object.assign(
+      new Error(`HTTP 400 — ${body.slice(0, 200)}`),
+      { httpStatus: 400, responseBody: body },
+    )
+  }
   const slimUrl = baseUrl.replace(/\/+$/, '')
   const timeout = 15000
 

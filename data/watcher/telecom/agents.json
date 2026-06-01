@@ -1,9 +1,9 @@
 {
-  "updatedAt": "2026-06-01T05:28:02.087Z",
+  "updatedAt": "2026-06-01T07:15:30.690Z",
   "totalAgents": 11,
   "actifs": 0,
   "totalErreurs": 0,
-  "totalLivrables": 1,
+  "totalLivrables": 0,
   "agents": [
     {
       "id": "agent-debugger",
@@ -25,9 +25,9 @@
     },
     {
       "id": "agent-parades",
-      "livrables": 1,
+      "livrables": 0,
       "erreurs": 0,
-      "dernierLivrable": "2026-06-01T05-25",
+      "dernierLivrable": null,
       "actif": false,
       "actifDepuis": null,
       "sujetActif": null

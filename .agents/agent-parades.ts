@@ -95,15 +95,15 @@ Consulte-la avant chaque génération pour éviter les répétitions.
 Ne propose JAMAIS une parade déjà rejetée.`,
   spawnerPrompt: 'Génère des propositions d\'action intelligentes pour l\'utilisateur en analysant le contexte du projet. Écrit dans telecom/suggestions.json.',
   toolConfig: {
-    parallelTools: true,
-    toolTimeoutMs: 60000,
-    maxParallel: 4,
-  },
+      "parallelTools": true,
+      "toolTimeoutMs": 30000,
+      "maxParallel": 4
+    },
   selfCorrection: {
-    enabled: true,
-    retryOnFailure: true,
-    maxRetries: 2,
-    validateOutput: true,
+    enabled: false,
+    retryOnFailure: false,
+    maxRetries: 0,
+    validateOutput: false,
   },
   guardian: {
     enabled: true,
