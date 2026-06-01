@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-05-31T19:24:21.172Z",
-  "totalAgents": 10,
+  "updatedAt": "2026-06-01T05:18:42.683Z",
+  "totalAgents": 11,
   "actifs": 0,
   "totalErreurs": 0,
   "totalLivrables": 0,
@@ -16,6 +16,15 @@
     },
     {
       "id": "agent-manager",
+      "livrables": 0,
+      "erreurs": 0,
+      "dernierLivrable": null,
+      "actif": false,
+      "actifDepuis": null,
+      "sujetActif": null
+    },
+    {
+      "id": "agent-parades",
       "livrables": 0,
       "erreurs": 0,
       "dernierLivrable": null,

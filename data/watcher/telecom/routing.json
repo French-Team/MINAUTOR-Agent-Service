@@ -1,20 +1,13 @@
 {
-  "updatedAt": "2026-05-31T19:24:21.170Z",
+  "updatedAt": "2026-06-01T05:18:42.681Z",
   "stats": {
-    "pid": 18912,
-    "uptimeSec": 19,
-    "totalMessagesRouted": 1,
+    "pid": null,
+    "uptimeSec": 0,
+    "totalMessagesRouted": 0,
     "totalSpawns": 0,
     "totalBlocks": 0,
-    "agentCount": 11,
+    "agentCount": 0,
     "activeSpawns": []
   },
-  "routages": [
-    {
-      "timestamp": "2026-05-31T18:45:58.229Z",
-      "from": "alice",
-      "to": "agent-telecom",
-      "subject": "project-request"
-    }
-  ]
+  "routages": []
 }

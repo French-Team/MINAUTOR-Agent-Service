@@ -1,17 +1,8 @@
 {
-  "updatedAt": "2026-05-31T19:24:21.168Z",
-  "total": 1,
+  "updatedAt": "2026-06-01T05:18:42.673Z",
+  "total": 0,
   "pending": 0,
-  "read": 1,
+  "read": 0,
   "processed": 0,
-  "messages": [
-    {
-      "timestamp": "2026-05-31T18:45:58.229Z",
-      "from": "alice",
-      "to": "agent-telecom",
-      "subject": "project-request",
-      "status": "read",
-      "demande": "liste les projets"
-    }
-  ]
+  "messages": []
 }

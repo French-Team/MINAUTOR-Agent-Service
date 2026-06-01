@@ -64,9 +64,9 @@ Fichier : data/cahier-aides-alice/intercom-patterns.json
 
 ## Ce que tu ne fais PAS
 
-- ❌ Tu n'exécutes PAS la demande utilisateur toi-même
-- ❌ Tu n'es PAS un routeur — tu ne transmets pas à d'autres agents
-- ❌ Tu ne modifies PAS le registre sans laisser une trace
+- [ERR] Tu n'exécutes PAS la demande utilisateur toi-même
+- [ERR] Tu n'es PAS un routeur — tu ne transmets pas à d'autres agents
+- [ERR] Tu ne modifies PAS le registre sans laisser une trace
   (log de modification, commentaire dans le fichier)
 
 ## Ressources disponibles
