@@ -920,13 +920,13 @@ function isAlreadySuggested(demande: string): boolean {
  * Appelée après chaque échec de fuzzy matching dans tryScriptRunner().
  * Non-bloquante : les erreurs sont ignorées silencieusement.
  */
-function checkAndSuggestPattern(demande: string, subject: string): void {
+function checkAndSuggestPattern(demande: string, _subject: string): void {
   try {
     // Vérifier si une suggestion similaire existe déjà
     if (isAlreadySuggested(demande)) return
 
     // Compter les échecs récents similaires
-    const count = countRejectedDemandes(demande, AUTO_SUGGEST_THRESHOLD, 60)
+    const count = countRejectedDemandes(demande, 60)
 
     if (count >= AUTO_SUGGEST_THRESHOLD) {
       const ts = new Date().toISOString().slice(11, 19)

@@ -13,8 +13,6 @@
  *   4. AUCUN MATCH → messages neutres → null
  */
 
-import { existsSync, unlinkSync, readdirSync, readFileSync, writeFileSync } from 'fs'
-import { join } from 'path'
 import { tryRouteIntercom, setCurrentProject } from '../cli-intercom-router.js'
 
 // ── Constants ──────────────────────────────────────────
@@ -23,7 +21,6 @@ const RESET = '\x1b[0m'
 const GREEN = '\x1b[32m'
 const RED = '\x1b[31m'
 const CYAN = '\x1b[36m'
-const YELLOW = '\x1b[33m'
 const GRAY = '\x1b[90m'
 const BOLD = '\x1b[1m'
 
@@ -31,8 +28,6 @@ const PASS = `${GREEN}✓${RESET}`
 const FAIL = `${RED}✗${RESET}`
 let passed = 0
 let failed = 0
-
-const INTERCOM_DIR = join(process.cwd(), 'telecom', 'intercom')
 
 function assert(label: string, ok: boolean, detail?: string): void {
   if (ok) {
@@ -49,22 +44,6 @@ function assertRoute(label: string, result: ReturnType<typeof tryRouteIntercom>,
   const ok = actualSubject === expectedSubject
   const detail = message || `attendu: ${expectedSubject ?? 'null'}, obtenu: ${actualSubject ?? 'null'}`
   assert(label, ok, detail)
-}
-
-// ── Nettoyage des fichiers intercom créés par le test ──
-
-function cleanupIntercomFiles(): void {
-  if (!existsSync(INTERCOM_DIR)) return
-  const files = readdirSync(INTERCOM_DIR).filter(f => f.endsWith('.json'))
-  for (const f of files) {
-    try {
-      const content = readFileSync(join(INTERCOM_DIR, f), 'utf-8')
-      const msg = JSON.parse(content) as { payload?: { demande?: string }; subject?: string }
-      if (msg.payload?.demande?.includes('[THRESHOLD]')) {
-        unlinkSync(join(INTERCOM_DIR, f))
-      }
-    } catch { /* fichier verrouillé ou supprimé */ }
-  }
 }
 
 // ── Main ───────────────────────────────────────────────

@@ -11,7 +11,7 @@
 
 import { matchAndExecute, matchScript } from '../script-runner.js'
 import { fuzzyMatch, checkLmStudio, getCoverage, clearEmbeddingCache, rebuildCache } from '../fuzzy-matcher.js'
-import { existsSync, unlinkSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 // ── Constants ──────────────────────────────────────────

@@ -70,6 +70,27 @@ jobs:
       - name: 📚 Historien pipeline
         run: npx tsx src/test/test-historien.ts
 
+  lint-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🧪 ESLint rules tests
+        run: npm run test:eslint-rules
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 3
@@ -100,6 +121,7 @@ jobs:
   windows:
     runs-on: windows-latest
     timeout-minutes: 15
+    needs: [lint-rules]
 
     strategy:
       matrix:
@@ -157,7 +179,7 @@ jobs:
   performance:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [test, lint]
+    needs: [test, lint, lint-rules]
 
 
     steps:

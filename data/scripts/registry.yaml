@@ -512,6 +512,116 @@ scripts:
     script: "scripts/help/show.js"
     description: "Demande polie d'aide (pourrais-tu, peux-tu)"
 
+  # ── Explore (sans projet d'abord) ──────────────────
+  - pattern: "!explore\s+--(?:recent|path\s+.+)"
+    subject: "parades-command"
+    script: "scripts/parades/explore.js"
+    description: "Explore le projet actif (dérive du contexte)"
+
+  - pattern: "!explore\s+(\S+)(?:\s+--(?:recent|path\s+.+))?"
+    subject: "parades-command"
+    script: "scripts/parades/explore.js"
+    description: "Explore la structure d'un projet (fichiers, git, dépendances)"
+    params:
+      - name: project
+        from: 1
+
+  # ── Deploy (sans projet d'abord) ────────────────────
+  - pattern: "!deploy(?:\s+--dry-run)?"
+    subject: "parades-command"
+    script: "scripts/parades/deploy.js"
+    description: "Prépare un déploiement du projet actif"
+
+  - pattern: "!deploy\s+(\S+)(?:\s+--dry-run)?"
+    subject: "parades-command"
+    script: "scripts/parades/deploy.js"
+    description: "Prépare un déploiement de projet (dry-run supporté)"
+    params:
+      - name: project
+        from: 1
+
+  # ── Doc ────────────────────────────────────────────
+  - pattern: "!doc\s+create\s+README\s+(\S+)"
+    subject: "parades-command"
+    script: "scripts/parades/doc.js"
+    description: "Génère un README.md pour un projet"
+    params:
+      - name: project
+        from: 1
+
+  - pattern: "!doc\s+(check|update)\s+(\S+)"
+    subject: "parades-command"
+    script: "scripts/parades/doc.js"
+    description: "Vérifie ou met à jour la documentation d'un projet"
+    params:
+      - name: action
+        from: 1
+      - name: project
+        from: 2
+
+  - pattern: "!doc\s+create\s+README"
+    subject: "parades-command"
+    script: "scripts/parades/doc.js"
+    description: "Génère un README.md (projet actif)"
+
+  # ── Git ────────────────────────────────────────────
+  - pattern: "!git\s+(status|log|diff|branches?|config)\s+(\S+)"
+    subject: "parades-command"
+    script: "scripts/parades/git.js"
+    description: "Opérations git sur un projet spécifique"
+    params:
+      - name: action
+        from: 1
+      - name: project
+        from: 2
+
+  - pattern: "!git\s+(status|log|diff|branches?|config)"
+    subject: "parades-command"
+    script: "scripts/parades/git.js"
+    description: "Opérations git (projet auto-détecté)"
+    params:
+      - name: action
+        from: 1
+
+  - pattern: "!git\s+tag\s+(\S+)(?:\s+(\S+))?"
+    subject: "parades-command"
+    script: "scripts/parades/git.js"
+    description: "Liste ou crée un tag git"
+    params:
+      - name: tag
+        from: 1
+      - name: project
+        from: 2
+
+  # ── Profiles ───────────────────────────────────────
+  - pattern: "!profiles\s+(list|categories?|cats)\s+(agents|bots|daemons)"
+    subject: "parades-command"
+    script: "scripts/parades/profiles.js"
+    description: "Liste les profils d'une catégorie spécifique"
+    params:
+      - name: action
+        from: 1
+      - name: category
+        from: 2
+
+  - pattern: "!profiles\s+(list|categories?|cats)"
+    subject: "parades-command"
+    script: "scripts/parades/profiles.js"
+    description: "Liste toutes les catégories de profils"
+    params:
+      - name: action
+        from: 1
+
+  - pattern: "!profiles\s+(info|search)\s+(.+)"
+    subject: "parades-command"
+    script: "scripts/parades/profiles.js"
+    description: "Recherche ou affiche les détails d'un profil"
+    params:
+      - name: action
+        from: 1
+      - name: query
+        from: 2
+
   # ── Fallback génériques par sujet ──────────────────
   - pattern: ".*"
     subject: "analysis-request"

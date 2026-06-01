@@ -112,7 +112,7 @@ function patternToPhrases(pattern: string, description: string): string[] {
   }
 
   // Nettoyer le pattern regex en phrase lisible
-  let cleaned = pattern
+  const cleaned = pattern
     // Enlever les ancres
     .replace(/^\^/, '')
     .replace(/\$$/, '')
@@ -504,7 +504,6 @@ export async function fuzzyMatch(
  */
 export function countRejectedDemandes(
   demande: string,
-  minCount: number = 3,
   windowMinutes: number = 60,
 ): number {
   if (!demande || !demande.trim()) return 0

@@ -66,7 +66,7 @@ function levelIcon(level: string): string {
 }
 
 // ── État ──
-let knownIds = new Set<string>()
+const knownIds = new Set<string>()
 let shutdownScheduled = false
 
 // ── Cache mtime des archives (évite de relire les fichiers inchangés) ──

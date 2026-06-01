@@ -16,6 +16,8 @@ import {
   RESET, CYAN, GREEN, YELLOW, GRAY, BOLD, RED,
 } from './constants.js'
 
+import { tracker } from './learning.js'
+
 export interface Suggestion {
   /** Texte court affiché dans le menu (ex: "Renommer") */
   label: string
@@ -54,9 +56,23 @@ interface SuggestionStats {
   totalChoices: number
 }
 
-const DEFAULT_STATS: SuggestionStats = {
+const DEFAULT_STATS: Readonly<SuggestionStats> = {
   counts: {},
   totalChoices: 0,
+}
+
+/**
+ * Retourne une copie PROFONDE de DEFAULT_STATS avec des objets/tableaux NEUFS.
+ * Nécessaire car le spread `{ ...DEFAULT_STATS }` ne copie que les références
+ * (shallow copy). `counts: {}` est partagé entre toutes les instances — si
+ * incrementSuggestionStats() mute `counts`, la mutation persiste dans
+ * DEFAULT_STATS pour les appels suivants.
+ */
+function freshSuggestionStats(): SuggestionStats {
+  return {
+    counts: {},
+    totalChoices: 0,
+  }
 }
 
 /**
@@ -71,18 +87,18 @@ export function loadSuggestionStats(projectName?: string): SuggestionStats {
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
       writeFileSync(path, JSON.stringify(DEFAULT_STATS, null, 2), 'utf-8')
     } catch { /* ignoré — non bloquant */ }
-    return { ...DEFAULT_STATS }
+    return freshSuggestionStats()
   }
   try {
     const raw = readFileSync(path, 'utf-8').trim()
-    if (!raw) return { ...DEFAULT_STATS }
+    if (!raw) return freshSuggestionStats()
     const parsed = JSON.parse(raw)
     return {
       counts: typeof parsed?.counts === 'object' && parsed.counts !== null ? parsed.counts : {},
       totalChoices: typeof parsed?.totalChoices === 'number' ? parsed.totalChoices : 0,
     }
   } catch {
-    return { ...DEFAULT_STATS }
+    return freshSuggestionStats()
   }
 }
 
@@ -295,21 +311,42 @@ export function resetSuggestionStats(projectName?: string): void {
   }
 }
 
-/** Lit les suggestions depuis le fichier JSON */
+/**
+ * Lit les suggestions depuis le fichier JSON.
+ *
+ * Accepte deux formats :
+ *   - Array :  [{ label, description, command, group? }, ...]
+ *   - Objet :  { menu: "Actions rapides", items: [{ label, description, command }, ...] }
+ *
+ * Le format objet est celui produit par l'agent-parades (spec Section 6).
+ * Le format tableau est celui des scripts legacy.
+ */
 export function loadSuggestions(): Suggestion[] {
   if (!existsSync(SUGGESTIONS_PATH)) return []
   try {
     const raw = readFileSync(SUGGESTIONS_PATH, 'utf-8').trim()
     if (!raw) return []
     const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter(
-      (s: unknown): s is Suggestion =>
-        s !== null &&
-        typeof s === 'object' &&
-        typeof (s as Record<string, unknown>).label === 'string' &&
-        typeof (s as Record<string, unknown>).command === 'string',
-    )
+
+    // Type guard partagé pour les deux formats
+    const isValidSuggestion = (s: unknown): s is Suggestion =>
+      s !== null &&
+      typeof s === 'object' &&
+      typeof (s as Record<string, unknown>).label === 'string' &&
+      typeof (s as Record<string, unknown>).command === 'string'
+
+    // Format objet : { menu, items }
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      if (!Array.isArray(parsed.items)) return []
+      return (parsed.items as unknown[]).filter(isValidSuggestion)
+    }
+
+    // Format tableau : [Suggestion, ...]
+    if (Array.isArray(parsed)) {
+      return parsed.filter(isValidSuggestion)
+    }
+
+    return []
   } catch {
     return []
   }
@@ -448,8 +485,9 @@ export async function showSuggestionMenuRaw(projectName?: string): Promise<strin
           resolve(null)
           return
         }
-        // Enregistrer le choix dans les statistiques d'apprentissage (par projet)
+        // Enregistrer le choix dans les deux systèmes de tracking
         incrementSuggestionStats(suggestions[num - 1].command, projectName)
+        tracker.recordChoice(suggestions[num - 1].command)
         resolve(suggestions[num - 1].command)
       }
       process.stdin.on('keypress', handler)
@@ -490,8 +528,9 @@ export async function showSuggestionMenu(rl: Interface, projectName?: string): P
   const num = parseInt(answer, 10)
   if (isNaN(num) || num < 1 || num > suggestions.length) return null
 
-  // Enregistrer le choix dans les statistiques d'apprentissage (par projet)
+  // Enregistrer le choix dans les deux systèmes de tracking
   incrementSuggestionStats(suggestions[num - 1].command, projectName)
+  tracker.recordChoice(suggestions[num - 1].command)
 
   return suggestions[num - 1].command
 }

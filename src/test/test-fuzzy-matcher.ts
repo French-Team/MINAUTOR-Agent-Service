@@ -52,7 +52,7 @@ async function main(): Promise<void> {
   try {
     mod.clearEmbeddingCache()
     assert('clear sans fichier ne lance pas', true)
-  } catch (e) {
+  } catch {
     assert('clear sans fichier ne lance pas', false)
   }
 

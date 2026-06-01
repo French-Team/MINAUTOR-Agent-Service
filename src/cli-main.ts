@@ -7,7 +7,7 @@ import { fork, execSync, ChildProcess } from 'child_process'
 const backgroundAgents = new Map<string, ChildProcess>()
 import { loadSkill } from './skills.js'
 import { popAllNotifications, setNotificationFilter, getNotificationFilter, levelIcon, listLevels, countPendingNotifications, loadNotificationHistory, cleanNotificationArchive, removeNotification, type NotificationLevel, type Notification } from './notify.js'
-import { showSuggestionMenu, showSuggestionMenuRaw, getSuggestionPrefs, clearSuggestions, hasSuggestions } from './cli-suggestions.js'
+import { showSuggestionMenu, getSuggestionPrefs, clearSuggestions, hasSuggestions } from './cli-suggestions.js'
 import { emitKeypressEvents } from 'readline'
 import { createEngine, type Engine } from './engine.js'
 import { listLocalAgents, readLocalAgent, scaffoldAgent } from './agents.js'
@@ -53,6 +53,7 @@ import { handlePermissionsCommand } from './feurouge/permissions-cli.js'
 import { getPermissionsConfig, listRegistrations } from './feurouge/permissions.js'
 import { dispatchProjectCommand, handleProjectMenu } from './project/workspace-cli.js'
 import { ensureSandbox } from './project/sandbox.js'
+import { triggerParades, writeLastContext, readLastContext, clearLastContext } from './parades.js'
 
 let currentEngine: Engine | null = null
 let telecomDaemon: ChildProcess | null = null
@@ -93,62 +94,21 @@ function startTelecomDaemon(): void {
         const now = Date.now()
         if (data.level === 'conclusion' && now - lastSuggestionMenuTime > SUGGESTION_DEBOUNCE_MS) {
           lastSuggestionMenuTime = now
-          // Générer les suggestions contextuelles MAINTENANT — le daemon
-          // a fini de traiter la demande (la route intercom est terminée).
-          // On les génère ici (pas dans la boucle principale après routage)
-          // pour éviter que le menu apparaisse AVANT le résultat.
-          triggerSuggestions()
-          // showSuggestionMenuRaw utilise le mode raw stdin, pas rl.question,
-          // donc pas de conflit avec le prompt readline en cours.
-          showSuggestionMenuRaw(getCurrentProject()).then((cmd) => {
-            if (cmd === null) return
-            try {
-              if (cmd.startsWith('!suggestions')) {
-                triggerSuggestions()
-                process.stdout.write(`\n${GREEN}✓ Suggestions régénérées — elles apparaîtront au prochain prompt.${RESET}\n\n`)
-              } else if (cmd.startsWith('!project')) {
-                dispatchProjectCommand(cmd.slice(9).trim())
-              } else if (cmd.startsWith('!tasks')) {
-                dispatchProjectCommand(`tasks ${cmd.slice(7).trim()}`)
-              } else if (cmd.startsWith('!agents') || cmd.startsWith('!agentes')) {
-                handleListAgents(currentEngine!)
-              } else if (cmd.startsWith('/help') || cmd.startsWith('aide')) {
-                showHelp(currentEngine!)
-              } else if (cmd.startsWith('/menu')) {
-                showMenu(currentEngine!)
-              } else if (cmd.startsWith('/skills')) {
-                showSkillsList()
-              } else if (cmd.startsWith('/status') || cmd.startsWith('/state')) {
-                showIntercomStatus()
-              } else if (cmd.startsWith('/notifications')) {
-                const pending = popAllNotifications()
-                for (const n of pending) {
-                  if (n.level === 'conclusion' || n.level === 'urgent' || n.level === 'avertissement') {
-                    const icon = levelIcon(n.level)
-                    process.stdout.write(`\n${icon} ${n.from}\n`)
-                    process.stdout.write(`  ${n.message.split('\n')[0]}\n\n`)
-                  }
-                }
-                if (pending.length === 0) {
-                  process.stdout.write(`\n${GRAY}Aucune notification en attente.${RESET}\n\n`)
-                }
-              } else if (cmd.startsWith('!') || cmd.startsWith('/')) {
-                // Autres commandes CLI non gérées — informer l'utilisateur
-                process.stdout.write(`\n${YELLOW}→ Tape "${cmd}" au prompt pour exécuter cette commande.${RESET}\n\n`)
-              } else {
-                // Commandes shell (cat, node, ls, etc.)
-                execSync(cmd, {
-                  cwd: process.cwd(),
-                  timeout: 15000,
-                  stdio: 'inherit',
-                })
-              }
-            } catch {
-              process.stdout.write(`\n${YELLOW}⚠ Commande non exécutable depuis ce contexte — tape-la au prompt.${RESET}\n\n`)
-            }
-          }).catch(() => {
-            // Non-bloquant — ignore les erreurs
-          })
+
+          // Lire le contexte sauvegardé par l'action qui a déclenché le daemon
+          // (writeLastContext a été appelé au moment du routage ou de la réponse LLM).
+          // Ce contexte contient l'action, la demande, et éventuellement la réponse LLM.
+          const lastContext = readLastContext()
+          if (lastContext) {
+            triggerParades(lastContext, handleSuggestionCommand)
+            clearLastContext()
+          } else {
+            // Fallback si aucun contexte n'est disponible
+            triggerParades({ action: 'route' }, handleSuggestionCommand)
+          }
+
+          // Le menu interactif est géré par le polling dans triggerParades.
+          // Il apparaîtra automatiquement quand les parades seront générées.
         }
       }
     })
@@ -322,23 +282,111 @@ function runAnalyzePatterns(args: string[] = []): void {
 }
 
 /**
- * Génère des suggestions contextuelles en arrière-plan (fire-and-forget).
- * Exécute handle.js avec le projet courant, sans bloquer le CLI.
- * Les suggestions sont écrites dans telecom/suggestions.json et seront
- * proposées automatiquement au prochain tour de boucle (via showSuggestionMenu).
+ * Exécute un script de parade (explore, deploy, doc, git, profiles).
+ * Les scripts acceptent des paramètres passés via SCRIPT_PARAM_* dans l'environnement.
  */
-function triggerSuggestions(): void {
-  const currentProject = getCurrentProject()
-  const projectFlag = currentProject ? ` --project "${encodeURIComponent(currentProject)}"` : ''
+function runParadesScript(scriptName: string, args: string[]): void {
+  const scriptPath = join(process.cwd(), 'scripts', 'parades', `${scriptName}.js`)
+  if (!existsSync(scriptPath)) {
+    process.stdout.write(`\n${YELLOW}Script ${scriptName} introuvable — vérifie scripts/parades/${scriptName}.js${RESET}\n\n`)
+    return
+  }
   try {
-    execSync(`node scripts/suggestions/handle.js${projectFlag}`, {
+    const output = execSync(`node "${scriptPath}" ${args.join(' ')}`, {
       cwd: process.cwd(),
       encoding: 'utf-8',
-      timeout: 10000,
-      stdio: 'ignore',
+      timeout: 15000,
+      env: { ...process.env },
     })
+    process.stdout.write(output)
+  } catch (err) {
+    const msg = (err as Error).message
+    process.stdout.write(`\n${RED}Erreur ${scriptName} : ${msg.slice(0, 300)}${RESET}\n\n`)
+  }
+}
+
+/**
+ * Dispatch la commande choisie par l'utilisateur depuis le menu interactif
+ * des suggestions (showSuggestionMenuRaw). Appelé par le callback onCommand
+ * de triggerParades() quand le polling détecte les parades générées.
+ */
+function handleSuggestionCommand(cmd: string): void {
+  if (cmd === null) return
+  try {
+    if (cmd.startsWith('!explore')) {
+      const rest = cmd.slice(9).trim()
+      if (rest) {
+        runParadesScript('explore', [rest])
+      } else {
+        process.stdout.write(`\n${YELLOW}Usage: !explore <projet> [--path <dossier>]${RESET}\n\n`)
+      }
+    } else if (cmd.startsWith('!deploy')) {
+      const rest = cmd.slice(8).trim()
+      if (rest) {
+        runParadesScript('deploy', rest.split(/\s+/))
+      } else {
+        process.stdout.write(`\n${YELLOW}Usage: !deploy <projet> [--dry-run]${RESET}\n\n`)
+      }
+    } else if (cmd.startsWith('!git')) {
+      const rest = cmd.slice(5).trim()
+      if (rest) {
+        runParadesScript('git', rest.split(/\s+/))
+      } else {
+        process.stdout.write(`\n${YELLOW}Usage: !git <action> <projet>${RESET}\n\n`)
+      }
+    } else if (cmd.startsWith('!profiles')) {
+      const rest = cmd.slice(10).trim()
+      if (rest) {
+        runParadesScript('profiles', rest.split(/\s+/))
+      } else {
+        runParadesScript('profiles', ['list'])
+      }
+    } else if (cmd.startsWith('!doc')) {
+      const rest = cmd.slice(5).trim()
+      if (rest) {
+        runParadesScript('doc', rest.split(/\s+/))
+      } else {
+        process.stdout.write(`\n${YELLOW}Usage: !doc <action> <type> [projet]${RESET}\n\n`)
+      }
+    } else if (cmd.startsWith('!project')) {
+      dispatchProjectCommand(cmd.slice(9).trim())
+    } else if (cmd.startsWith('!tasks')) {
+      dispatchProjectCommand(`tasks ${cmd.slice(7).trim()}`)
+    } else if (cmd.startsWith('!agents') || cmd.startsWith('!agentes')) {
+      handleListAgents(currentEngine!)
+    } else if (cmd.startsWith('/help') || cmd.startsWith('aide')) {
+      showHelp(currentEngine!)
+    } else if (cmd.startsWith('/menu')) {
+      showMenu(currentEngine!)
+    } else if (cmd.startsWith('/skills')) {
+      showSkillsList()
+    } else if (cmd.startsWith('/status') || cmd.startsWith('/state')) {
+      showIntercomStatus()
+    } else if (cmd.startsWith('/notifications')) {
+      const pending = popAllNotifications()
+      for (const n of pending) {
+        if (n.level === 'conclusion' || n.level === 'urgent' || n.level === 'avertissement') {
+          const icon = levelIcon(n.level)
+          process.stdout.write(`\n${icon} ${n.from}\n`)
+          process.stdout.write(`  ${n.message.split('\n')[0]}\n\n`)
+        }
+      }
+      if (pending.length === 0) {
+        process.stdout.write(`\n${GRAY}Aucune notification en attente.${RESET}\n\n`)
+      }
+    } else if (cmd.startsWith('!') || cmd.startsWith('/')) {
+      // Autres commandes CLI non gérées — informer l'utilisateur
+      process.stdout.write(`\n${YELLOW}→ Tape "${cmd}" au prompt pour exécuter cette commande.${RESET}\n\n`)
+    } else {
+      // Commandes shell (cat, node, ls, etc.) — exécuter en direct
+      execSync(cmd, {
+        cwd: process.cwd(),
+        timeout: 15000,
+        stdio: 'inherit',
+      })
+    }
   } catch {
-    // Silencieux — les suggestions sont un bonus non bloquant
+    process.stdout.write(`\n${YELLOW}⚠ Commande non exécutable depuis ce contexte — tape-la au prompt.${RESET}\n\n`)
   }
 }
 
@@ -1100,6 +1148,51 @@ export async function main() {
     }
 
     // ── Commandes internes ! ────────────────────────────
+    if (line.startsWith('!explore')) {
+      const rest = line.slice(9).trim()
+      if (rest) {
+        runParadesScript('explore', [rest])
+      } else {
+        console.log(`${YELLOW}Usage: !explore <projet> [--path <dossier>]${RESET}\n`)
+      }
+      continue
+    }
+    if (line.startsWith('!deploy')) {
+      const rest = line.slice(8).trim()
+      if (rest) {
+        runParadesScript('deploy', rest.split(/\s+/))
+      } else {
+        console.log(`${YELLOW}Usage: !deploy <projet> [--dry-run]${RESET}\n`)
+      }
+      continue
+    }
+    if (line.startsWith('!git')) {
+      const rest = line.slice(5).trim()
+      if (rest) {
+        runParadesScript('git', rest.split(/\s+/))
+      } else {
+        console.log(`${YELLOW}Usage: !git <action> <projet>${RESET}\n`)
+      }
+      continue
+    }
+    if (line.startsWith('!profiles')) {
+      const rest = line.slice(10).trim()
+      if (rest) {
+        runParadesScript('profiles', rest.split(/\s+/))
+      } else {
+        runParadesScript('profiles', ['list'])
+      }
+      continue
+    }
+    if (line.startsWith('!doc')) {
+      const rest = line.slice(5).trim()
+      if (rest) {
+        runParadesScript('doc', rest.split(/\s+/))
+      } else {
+        console.log(`${YELLOW}Usage: !doc <action> <type> [projet]${RESET}\n`)
+      }
+      continue
+    }
     if (line.startsWith('!project')) {
       const rest = line.slice(9).trim()
       dispatchProjectCommand(rest || 'help')
@@ -1120,23 +1213,10 @@ export async function main() {
       continue
     }
     if (line.startsWith('!suggestions')) {
-      // Étape 1 : Générer des suggestions fraîches via handle.js
-      const currentProject = getCurrentProject()
-      const projectFlag = currentProject ? ` --project "${encodeURIComponent(currentProject)}"` : ''
-      try {
-        execSync(`node scripts/suggestions/handle.js${projectFlag}`, {
-          cwd: process.cwd(),
-          encoding: 'utf-8',
-          timeout: 15000,
-        })
-        console.log(`${GREEN}✓ Suggestions générées.${RESET}`)
-      } catch (err) {
-        const msg = (err as Error).message
-        console.log(`${RED}Erreur suggestions : ${msg.slice(0, 200)}${RESET}\n`)
-      }
-      // Étape 2 : Ouvrir le sous-menu interactif des suggestions
-      await handleSuggestionsMenu(rl)
-      showMenu(currentEngine!)
+      // Déclencher l'agent-parades qui écrit dans suggestions.json
+      // Le polling + menu interactif est géré en interne par triggerParades.
+      writeLastContext({ action: 'route', demande: '!suggestions: ' + line.slice(12).trim() })
+      triggerParades({ action: 'route', demande: '!suggestions: ' + line.slice(12).trim() }, handleSuggestionCommand)
       continue
     }
 
@@ -1154,17 +1234,13 @@ export async function main() {
     if (routeResult) {
       console.log(`\n${GREEN}✓ Routé vers agent-telecom [${routeResult.subject}]${RESET}`)
       console.log(`\n${CYAN}${routeResult.response}${RESET}`)
-      console.log()
+      console.log()      // Sauvegarder le contexte de routage pour le handler IPC
+          // qui déclenchera triggerParades() à la notification 'conclusion'.
+          writeLastContext({ action: 'route', demande: line })
+          continue
+        }
 
-      // Les suggestions sont générées PLUS TARD, quand le daemon
-      // envoie une notification IPC de type 'conclusion' (travail terminé).
-      // On évite ainsi que le menu apparaisse IMMÉDIATEMENT après le
-      // routage, avant même que le daemon n'ait eu le temps de traiter
-      // la demande (l'utilisateur doit voir le résultat d'abord).
-      continue
-    }
-
-    // plain text → call the LLM
+        // plain text → call the LLM
     const eng = currentEngine!
     const resolved = resolveProviderForModel(eng.agent.model, eng.agent.provider)
     if (!resolved) {
@@ -1223,12 +1299,12 @@ export async function main() {
       // pour éviter de polluer le contexte LLM au prochain appel
       const plainResponse = llmResponse.replace(/\x1b\[[0-9;]*m/g, '')
       eng.addMessage('assistant', plainResponse)
-      console.log(`\n${llmResponse}\n`)
-
-      // Auto-générer les suggestions contextuelles après une réponse LLM
-      // pour que le prochain tour de boucle propose des actions pertinentes
-      triggerSuggestions()
-    } catch (err) {
+      console.log(`\n${llmResponse}\n`)      // Sauvegarder le contexte et déclencher les parades après une réponse LLM
+          // Le contexte est écrit pour que le handler IPC puisse le lire si
+          // le daemon intercom intervient après la réponse.
+          writeLastContext({ action: 'llm-response', demande: line, llmResponse: plainResponse })
+          triggerParades({ action: 'llm-response', demande: line, llmResponse: plainResponse }, handleSuggestionCommand)
+        } catch (err) {
       process.stdout.write(`\r${RED}✗${RESET}\n`)
       const msg = (err as Error).message
       console.log(`\n${RED}Erreur LLM :${RESET} ${msg.slice(0, 200)}\n`)

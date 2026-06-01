@@ -13,7 +13,8 @@
         "types": ["node"]
     },
     "include": [
-        "src"
+        "src",
+        "eslint-rules"
     ],
     "exclude": [
         "node_modules",

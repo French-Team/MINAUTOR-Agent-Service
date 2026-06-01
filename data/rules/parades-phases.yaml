@@ -1,0 +1,136 @@
+# Règles de phase pour l'Agent Parades
+# Lues par src/parades.ts pour déterminer evolutionPhase avant de spawner l'agent.
+# Ordre : la première phase dont TOUTES les conditions sont remplies est sélectionnée.
+# Si aucune condition n'est remplie, la phase par défaut est 1 (Métadonnées).
+#
+# Syntaxe des conditions :
+#   key: chemins avec notation pointée (ex: projects.count, evolution.paradesGenerated)
+#   operator: "==" | ">" | ">=" | "<" | "<=" | "!=" | "exists"
+#   value: valeur numérique ou chaîne
+
+phases:
+
+  # ── Phase 0 : Démarrage ──────────────────────────────────────────
+  # Aucun projet existant → proposer uniquement des actions de découverte
+  - phase: 0
+    label: "Démarrage"
+    description: >
+      Aucun projet existant. L'utilisateur découvre le système.
+      Proposer des actions de découverte, création et aide.
+    conditions:
+      - key: "projects.count"
+        operator: "=="
+        value: 0
+    instructions: |
+      Aucun projet existant. Proposer uniquement :
+      - Créer un premier projet
+      - Explorer les profils disponibles (!profiles)
+      - Voir l'aide du système (/help)
+      - Découvrir les agents disponibles (!agents)
+      - Consulter les skills disponibles (/skills)
+      Interdire : !explore, !deploy, !project, !git, !doc (aucun projet).
+    maxParades: 3
+
+  # ── Phase 3 : Apprentissage (override manuel) ────────────────────
+  # Vérifiée en SECOND (après Phase 0) car c'est un override manuel.
+  # Si phase.override >= 3 est défini, cette phase prime sur 1 et 2.
+  - phase: 3
+    label: "Apprentissage"
+    description: >
+      Parades adaptatives. Apprentissage des préférences utilisateur.
+      Déclenchée manuellement par phase.override (planification humaine).
+    conditions:
+      - key: "phase.override"
+        operator: ">="
+        value: 3
+    instructions: |
+      Adapter les parades aux stats d'apprentissage :
+      - Privilégier les catégories populaires (les plus choisies)
+      - Espacer (voire supprimer) les catégories ignorées (misses récurrents)
+      - Détecter les changements de comportement :
+        * Si l'utilisateur choisit soudainement une catégorie
+          qu'il ignorait avant → proposer plus de variantes de cette catégorie
+        * Si l'utilisateur ignore soudainement sa catégorie préférée
+          → réduire la fréquence, proposer des alternatives
+      - Anti-répétition renforcée : ne JAMAIS proposer une parade
+        qui a été rejetée (rejected) ou choisie (certified) dans le passé.
+      - Utiliser learningStats.preferred et learningStats.avoided
+        fournis dans le contexte JSON pour guider les choix.
+    maxParades: 5
+
+  # ── Phase 1 : Métadonnées ────────────────────────────────────────
+  # Projet(s) existant(s), agent encore immature (< 10 générations).
+  # Parades basées uniquement sur les données structurées (tâches, notifs, logbook).
+  - phase: 1
+    label: "Métadonnées"
+    description: >
+      Projet(s) existant(s), l'agent apprend le contexte.
+      Parades basées sur les données structurées uniquement.
+      Pas d'exploration de fichiers. Fiche de suivi active.
+    conditions:
+      - key: "projects.count"
+        operator: ">"
+        value: 0
+      - key: "evolution.paradesGenerated"
+        operator: "<"
+        value: 10
+    instructions: |
+      Métadonnées uniquement. Baser les parades sur :
+      - Tâches : statuts (in_progress, blocked, done), domaines, progression (%)
+      - Notifications : urgentes en premier, puis avertissements
+      - Logbook : dernières actions des agents
+      - Projets disponibles (si plusieurs, proposer des switchs)
+      - Agents et skills disponibles (si récemment ajoutés)
+      Ne PAS explorer les fichiers (pas de run_terminal_command).
+      Consulter la fiche de suivi (telecom/agents/agent-parades/suivi.json)
+      pour éviter de répéter les 5 dernières parades.
+    maxParades: 4
+
+  # ── Phase 2 : Exploration fichiers ───────────────────────────────
+  # Agent mature (≥ 10 générations). Peut explorer les fichiers projet.
+  # Les parades sont validées par agent-reviewer avant publication.
+  - phase: 2
+    label: "Exploration fichiers"
+    description: >
+      Agent mature. Exploration fichiers autorisée.
+      Reviewer actif pour valider chaque parade.
+      Stats tracking activé.
+    conditions:
+      - key: "evolution.paradesGenerated"
+        operator: ">="
+        value: 10
+    instructions: |
+      Exploration fichiers autorisée. Utiliser run_terminal_command pour :
+      - ls -la workspaces/<projet>/          (structure)
+      - cat workspaces/<projet>/README.md    (documentation)
+      - cat workspaces/<projet>/package.json (dépendances, scripts npm)
+      - git -C workspaces/<projet> log --oneline -10 (commits récents)
+      - git -C workspaces/<projet> diff --stat HEAD~5 (modifications)
+      Analyser les résultats et baser les parades sur le code réel.
+      Exemples de bonnes parades en Phase 2 :
+      - "Refactorer le module X (fichier le plus modifié)"
+      - "Documenter la fonction Y (README incomplet)"
+      - "Ajouter des tests pour le module Z (0 tests trouvés)"
+      - "Mettre à jour les dépendances (package.json obsolète)"
+      Validation : les parades sont d'abord écrites avec status 'proposed'
+      dans suivi.json, puis agent-reviewer les valide ou rejette.
+    maxParades: 5
+
+# ── Configuration globale ──────────────────────────────────────────
+
+defaultPhase: 1  # Phase par défaut si aucune condition n'est remplie
+
+contextKeys:
+  # Clés de contexte nécessaires pour évaluer les conditions
+  # Remplies automatiquement par src/parades.ts avant l'appel
+  required:
+    - "projects.count"
+  optional:
+    - "evolution.paradesGenerated"
+    - "phase.override"
+
+# Métadonnées pour validation et documentation
+meta:
+  version: "1.0"
+  agent: "agent-parades"
+  lastUpdated: "2026-05-31"
