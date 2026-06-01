@@ -1,13 +1,32 @@
 {
-  "updatedAt": "2026-06-01T05:18:42.681Z",
+  "updatedAt": "2026-06-01T05:28:02.083Z",
   "stats": {
-    "pid": null,
-    "uptimeSec": 0,
-    "totalMessagesRouted": 0,
+    "pid": 16312,
+    "uptimeSec": 1030,
+    "totalMessagesRouted": 3,
     "totalSpawns": 0,
     "totalBlocks": 0,
-    "agentCount": 0,
+    "agentCount": 12,
     "activeSpawns": []
   },
-  "routages": []
+  "routages": [
+    {
+      "timestamp": "2026-06-01T05:24:14.360Z",
+      "from": "alice",
+      "to": "agent-telecom",
+      "subject": "debug-request"
+    },
+    {
+      "timestamp": "2026-06-01T05:25:02.764Z",
+      "from": "alice",
+      "to": "agent-telecom",
+      "subject": "debug-request"
+    },
+    {
+      "timestamp": "2026-06-01T05:25:41.794Z",
+      "from": "alice",
+      "to": "agent-telecom",
+      "subject": "debug-request"
+    }
+  ]
 }

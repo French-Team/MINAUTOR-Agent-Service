@@ -1,5 +1,102 @@
 {
-  "updatedAt": "2026-06-01T05:18:42.684Z",
-  "total": 0,
-  "entries": []
+  "updatedAt": "2026-06-01T05:28:02.089Z",
+  "total": 16,
+  "entries": [
+    {
+      "timestamp": "2026-06-01 05:24:39",
+      "source": "agent-parades",
+      "message": "Génère les parades. Utilise run_terminal_command pour lire ce fichier: R:\\minautor-agents-service\\te",
+      "type": "logbook"
+    },
+    {
+      "timestamp": "2026-06-01 05:25:13",
+      "source": "agent-parades",
+      "message": "Génère les parades. Utilise run_terminal_command pour lire ce fichier: R:\\minautor-agents-service\\te",
+      "type": "logbook"
+    },
+    {
+      "timestamp": "05:24:31",
+      "source": "Agent Parades",
+      "message": "🔄 [Fallback texte] 4 outil(s) détectés",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:24:31",
+      "source": "Agent Parades",
+      "message": "🔄 [1/10] 4 outil(s): dir /b /o-d telecom\\routed\\, dir /b .agents\\, cat telecom/agent-logbook.md, cat \"R:\\minautor-agents-service\\telecom\\",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:24:31",
+      "source": "Agent Parades",
+      "message": "▶ dir /b /o-d telecom\\routed\\",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:24:31",
+      "source": "Agent Parades",
+      "message": "▶ dir /b .agents\\",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:24:31",
+      "source": "Agent Parades",
+      "message": "▶ cat telecom/agent-logbook.md",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:24:31",
+      "source": "Agent Parades",
+      "message": "▶ cat \"R:\\minautor-agents-service\\telecom\\",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:24:39",
+      "source": "Agent Parades",
+      "message": "✅ \u001b[36m╔\u001b[1m══ cat .parades-context.json\u001b[0m \u001b[90m(cat .parades-context.json)\u001b[0m",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:25:07",
+      "source": "Agent Parades",
+      "message": "🔄 [Fallback texte] 4 outil(s) détectés",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:25:07",
+      "source": "Agent Parades",
+      "message": "🔄 [1/10] 4 outil(s): dir /b /o-d telecom\\routed\\, dir /b .agents\\, cat telecom/agent-logbook.md, cat \\\"R:\\\\minautor-agents-service\\\\telec",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:25:07",
+      "source": "Agent Parades",
+      "message": "▶ dir /b /o-d telecom\\routed\\",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:25:07",
+      "source": "Agent Parades",
+      "message": "▶ dir /b .agents\\",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:25:07",
+      "source": "Agent Parades",
+      "message": "▶ cat telecom/agent-logbook.md",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:25:07",
+      "source": "Agent Parades",
+      "message": "▶ cat \\\"R:\\\\minautor-agents-service\\\\telecom\\\\\"",
+      "type": "notification"
+    },
+    {
+      "timestamp": "05:25:13",
+      "source": "Agent Parades",
+      "message": "✅ (raw) {",
+      "type": "notification"
+    }
+  ]
 }

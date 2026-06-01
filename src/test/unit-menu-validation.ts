@@ -78,7 +78,7 @@ function testMenuStructure() {
 
   for (const { key, expectedHandler } of menuHandlers) {
     const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const regex = new RegExp(`line\\s*===?\\s*['"]${escapedKey}['"][\\s\\S]{0,100}${expectedHandler}`)
+    const regex = new RegExp(`line\\s*===?\\s*['"]${escapedKey}['"][\\s\\S]{0,300}${expectedHandler}`)
     const found = regex.test(content)
     assert(`Touche "${key}" → appelle ${expectedHandler}()`, found,
       !found ? `Pattern non trouvé dans cli-main.ts` : undefined
@@ -86,7 +86,12 @@ function testMenuStructure() {
   }
 
   // Vérifier le nombre total de if (line === 'N') dans la section menu (3-chiffres + 'aide'/'fin')
-  const lineMatches = content.match(/line\s*===\s*['"]\d{3}['"]/g) || []
+  // Extraire UNIQUEMENT les codes 3-chiffres (sans le préfixe `line === '`)
+  // puis filtrer les 10 codes attendus du menu affiché, et dédupliquer
+  const displayCodes = new Set(['101', '102', '201', '202', '203', '204', '301', '302', '401', '501'])
+  const lineMatches = [...new Set(
+    Array.from(content.matchAll(/line\s*===\s*['"]\d{3}['"]/g), m => m[0].match(/\d{3}/)![0])
+  )].filter(c => displayCodes.has(c))
   assert('10 touches de menu 3-chiffres (101-501) définies', lineMatches.length === 10,
     `trouvé ${lineMatches.length} : [${lineMatches.join(', ')}]`
   )

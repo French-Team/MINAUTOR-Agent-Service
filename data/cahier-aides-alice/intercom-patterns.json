@@ -39,7 +39,7 @@
       "id": "P4",
       "name": "create-request",
       "keywords": ["crée", "créé", "fais", "développe", "code", "genere", "génère", "ecris", "écris", "implemente", "implémente", "construit", "fabrique"],
-      "minMatch": 2,
+      "minMatch": 1,
       "subject": "create-request",
       "response": "Je transmets ta demande au service compétent."
     },
